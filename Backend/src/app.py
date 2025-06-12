@@ -6,13 +6,10 @@ from typing import List, Dict, Literal
 import os, datetime, mimetypes
 
 # --- Configuração de Segurança ---
-# Constrói um caminho absoluto para o diretório base de forma segura.
-# Isso garante que a aplicação funcione independentemente de onde for executada.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PATH_BASE_WORKFLOW = os.path.abspath(os.path.join(BASE_DIR, "../../BioComp_UFF"))
 PROJECTS_ROOT = os.path.join(PATH_BASE_WORKFLOW, "projects")
 
-# Verifica se o diretório de projetos existe para evitar erros na inicialização.
 if not os.path.exists(PROJECTS_ROOT) or not os.path.isdir(PROJECTS_ROOT):
     raise RuntimeError(f"O diretório base de projetos não foi encontrado em: {PROJECTS_ROOT}")
 
@@ -28,7 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Modelos Pydantic para Respostas Claras e Validadas ---
 
 class Project(BaseModel):
     name: str = Field(..., description="Nome do projeto.")
@@ -42,7 +38,7 @@ class FileSystemItem(BaseModel):
     last_modified: datetime.datetime = Field(..., description="Data da última modificação.")
 
 
-# --- Endpoints HTTP para Exploração de Arquivos ---
+# --- Endpoints HTTP ---
 
 @app.get("/projects", response_model=List[Project])
 async def get_projects():
@@ -65,18 +61,14 @@ async def browse_path(path: str = Query("", description="O caminho relativo a se
     Lista o conteúdo de um diretório específico dentro da pasta de projetos.
     Por segurança, impede o acesso a diretórios fora da pasta 'PROJECTS_ROOT'.
     """
-    # --- Verificação de Segurança para evitar Path Traversal ---
-    # 1. Constrói o caminho absoluto solicitado pelo cliente.
     requested_path = os.path.abspath(os.path.join(PROJECTS_ROOT, path))
 
-    # 2. Verifica se o caminho solicitado está realmente dentro do diretório de projetos.
     if not requested_path.startswith(PROJECTS_ROOT):
         raise HTTPException(status_code=403, detail="Acesso negado: tentativa de acessar um caminho inválido.")
 
     if not os.path.exists(requested_path) or not os.path.isdir(requested_path):
         raise HTTPException(status_code=404, detail="Caminho não encontrado ou não é um diretório.")
 
-    # --- Listagem do Conteúdo ---
     items = []
     for item_name in sorted(os.listdir(requested_path)):
         full_item_path = os.path.join(requested_path, item_name)
@@ -86,7 +78,7 @@ async def browse_path(path: str = Query("", description="O caminho relativo a se
         
         items.append(FileSystemItem(
             name=item_name,
-            path=relative_item_path.replace("\\", "/"), # Garante barras no estilo unix
+            path=relative_item_path.replace("\\", "/"),
             type=item_type,
             size=os.path.getsize(full_item_path),
             last_modified=datetime.datetime.fromtimestamp(os.path.getmtime(full_item_path))
@@ -99,14 +91,11 @@ async def inputs_data_path(path: str = Query("", description="O caminho relativo
     Lista o conteúdo de um diretório específico dentro da pasta de projetos.
     Por segurança, impede o acesso a diretórios fora da pasta 'PROJECTS_ROOT'.
     """
-    # --- Verificação de Segurança para evitar Path Traversal ---
-    # 1. Constrói o caminho absoluto solicitado pelo cliente.
     requested_path = os.path.abspath(os.path.join(PATH_BASE_WORKFLOW, 'data'))
 
     if not os.path.exists(requested_path) or not os.path.isdir(requested_path):
         raise HTTPException(status_code=404, detail="Caminho não encontrado ou não é um diretório.")
 
-    # --- Listagem do Conteúdo ---
     items = []
     for item_name in sorted(os.listdir(requested_path)):
         full_item_path = os.path.join(requested_path, item_name)
@@ -116,7 +105,7 @@ async def inputs_data_path(path: str = Query("", description="O caminho relativo
         
         items.append(FileSystemItem(
             name=item_name,
-            path=relative_item_path.replace("\\", "/"), # Garante barras no estilo unix
+            path=relative_item_path.replace("\\", "/"), 
             type=item_type,
             size=os.path.getsize(full_item_path),
             last_modified=datetime.datetime.fromtimestamp(os.path.getmtime(full_item_path))

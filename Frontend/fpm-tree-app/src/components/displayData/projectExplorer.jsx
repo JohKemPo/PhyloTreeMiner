@@ -8,9 +8,7 @@ const { Option } = Select;
 
 import TreeViewer from './treeViewer';
 
-// --- Componente Principal da Aplicação ---
-const ProjectExplorer = ({}) => {
-    // --- Estados do Componente ---
+const ProjectExplorer = ({ }) => {
     const [projects, setProjects] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
     const [currentPath, setCurrentPath] = useState('');
@@ -18,7 +16,6 @@ const ProjectExplorer = ({}) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // --- Estados para o Modal de Visualização ---
     const [preview, setPreview] = useState({ visible: false, item: null });
     const [previewContent, setPreviewContent] = useState('');
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -26,14 +23,13 @@ const ProjectExplorer = ({}) => {
 
     const API_BASE_URL = 'http://localhost:8000';
 
-    // --- Funções para buscar dados da API ---
     useEffect(() => {
         const fetchProjects = async () => {
             try {
                 const response = await fetch(`${API_BASE_URL}/projects`);
                 if (!response.ok) throw new Error('Falha ao buscar projetos.');
                 const data = await response.json();
-                setProjects(data);
+                setProjects(data.sort());
             } catch (err) {
                 setError(err.message);
             }
@@ -60,7 +56,6 @@ const ProjectExplorer = ({}) => {
         }
     }, []);
 
-    // --- Efeitos ---
     useEffect(() => {
         if (currentPath) {
             fetchDirectoryContent(currentPath);
@@ -69,13 +64,11 @@ const ProjectExplorer = ({}) => {
         }
     }, [currentPath, fetchDirectoryContent]);
 
-    // Efeito para buscar o conteúdo do arquivo ao abrir o modal
     useEffect(() => {
         if (!preview.visible || !preview.item) return;
 
         const isImage = /\.(jpe?g|png|gif|svg|webp)$/i.test(preview.item.name);
 
-        // Se não for imagem, busca o conteúdo de texto.
         if (!isImage) {
             const fetchContent = async () => {
                 setIsPreviewLoading(true);
@@ -98,7 +91,6 @@ const ProjectExplorer = ({}) => {
         }
     }, [preview]);
 
-    // --- Handlers de Interação ---
     const handleProjectSelect = (projectName) => {
         setSelectedProject(projectName);
         setCurrentPath(projectName || '');
@@ -108,7 +100,6 @@ const ProjectExplorer = ({}) => {
         if (item.type === 'directory') {
             setCurrentPath(item.path);
         } else {
-            // Se for um arquivo, abre o modal de visualização
             setPreview({ visible: true, item: item });
         }
     };
@@ -122,7 +113,6 @@ const ProjectExplorer = ({}) => {
         setPreviewContent('');
     };
 
-    // --- Funções de Renderização Auxiliares ---
     const generateBreadcrumbItems = () => {
         if (!currentPath) return [<Breadcrumb.Item key="home"><HomeOutlined /> Raiz</Breadcrumb.Item>];
         const pathParts = currentPath.split('/');
@@ -165,10 +155,14 @@ const ProjectExplorer = ({}) => {
 
 
     return (
-        <Layout style={{ minHeight: '100vh', backgroundColor: '#F3F8FFFF' }}>
+        <Layout
+            style={{
+                backgroundColor: '#F3F8FF00',
+                minHeight: '80vh'
+            }}>
 
             <Content style={{ padding: '24px 50px' }}>
-                <div style={{ maxWidth: '960px', margin: '0 auto', background: '#fff', padding: 24, borderRadius: 8 }}>
+                <div style={{ maxWidth: '35%', margin: '0 auto', background: '#fff', padding: 24, borderRadius: 8 }}>
                     <header style={{ marginBottom: '32px' }}>
                         <Title level={2}>Explorador de Projetos</Title>
                         <Paragraph type="secondary">Navegue pela estrutura de arquivos dos seus projetos.</Paragraph>
@@ -210,6 +204,9 @@ const ProjectExplorer = ({}) => {
                                         </List.Item>
                                     )}
                                     locale={{ emptyText: 'Esta pasta está vazia.' }}
+                                    style={{
+                                        maxHeight: '30vh', overflow: 'auto'
+                                    }}
                                 />
                             </>
                         )}
@@ -222,7 +219,7 @@ const ProjectExplorer = ({}) => {
                     open={preview.visible}
                     onCancel={handleCloseModal}
                     footer={null}
-                    width="80vw"
+                    width="100vw"
                     destroyOnClose
                 >
                     <div style={{ height: '70vh', overflowY: 'auto', paddingTop: '16px' }}>
