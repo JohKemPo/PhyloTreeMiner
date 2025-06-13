@@ -18,6 +18,10 @@ import TestPage from './pages/testPage';
 
 
 import { colors } from './themes'
+import SystemPerformanceMonitor from './components/displayData/systemPerformancerMonitor';
+import ProjectGallery from './components/displayData/projectsGallery';
+import ProjectDetailView from './components/displayData/projectDetailsView';
+import ProjectPage from './pages/projectsPage';
 
 
 const { Header, Content, Sider, Footer } = Layout;
@@ -26,9 +30,9 @@ const { Title } = Typography;
 const menuItems = [
   { key: '1', icon: <AppstoreOutlined />, label: 'Dashboard' },
   { key: '2', icon: <ExperimentOutlined />, label: 'Pipelines' },
-  { key: '3', icon: <ContainerOutlined />, label: 'Jobs' },
+  { key: '3', icon: <ContainerOutlined />, label: 'Projects' },
   { key: '4', icon: <CodeOutlined />, label: 'Scripts' },
-  { key: '5', icon: <GlobalOutlined />, label: 'Geolocalização' },
+  // { key: '5', icon: <GlobalOutlined />, label: 'Geolocalização' },
   { type: 'divider' },
   { key: '6', icon: <SettingOutlined />, label: 'Configurações' },
 ];
@@ -59,6 +63,7 @@ function App() {
     setCollapsed(!collapsed);
   };
 
+
   const renderContent = () => {
     switch (currentView) {
       case '1':
@@ -67,6 +72,7 @@ function App() {
             {/* <Title level={3}>Dashboard</Title> */}
             {/* {[1].map(i => <ProjectExplorer key={i} index={i} />)} */}
             <PlaceholderContent page="Dashboard" />
+            {/* <ProjectExplorer /> */}
             <TestPage />
           </div>
         );
@@ -74,30 +80,43 @@ function App() {
         return (
           <div>
             {/* <Title level={3}>Pipelines</Title> */}
-            <PlaceholderContent page="Pipelines" />;
+            <PlaceholderContent page="Pipelines" />
+            {/* <SystemPerformanceMonitor /> */}
           </div>
         )
       case '3':
         return (
           <div>
             {/* <Title level={3}>Jobs</Title> */}
-            <PlaceholderContent page="Jobs" />;
+            {/* <PlaceholderContent page="Jobs"/>; */}
+            {/* {selectedProject ? (
+              <ProjectDetailView
+                projectName={selectedProject}
+                onBack={() => handleProjectSelect(null)}
+              />
+            ) : (
+              )} */}
+
+              <ProjectPage/>
+              {/* <ProjectExplorer/> */}
           </div>
         )
       case '4':
         return (
           <div>
             {/* <Title level={3}>Scripts</Title> */}
-            <PlaceholderContent page="Scripts" />;
+            {/* <PlaceholderContent page="Scripts" />; */}
+
+              <SystemPerformanceMonitor/>
           </div>
         )
-      case '5':
-        return (
-          <div>
-            {/* <Title level={3}>Geolocalização</Title> */}
-            <PlaceholderContent page="Geolocalização" />;
-          </div>
-        )
+      // case '5':
+      //   return (
+      //     <div>
+      //       {/* <Title level={3}>Geolocalização</Title> */}
+      //       <PlaceholderContent page="Geolocalização" />;
+      //     </div>
+      //   )
       case '6':
         return (
           <div>
@@ -184,7 +203,6 @@ function App() {
             <Space align="center" size="middle">
               <Button shape="circle" icon={<SearchOutlined />} />
               <Button shape="circle" icon={<BellOutlined />} />
-              {/* <Avatar icon={<UserOutlined />} /> */}
             </Space>
           </Flex>
 
@@ -194,7 +212,6 @@ function App() {
 
         <Content
           style={{
-            // O overflow: 'auto' cria o scroll, apenas para esta área, e o flex: 1 faz ela ocupar o espaço disponível.
             overflow: 'auto',
             flex: '1 1 auto',
             padding: '24px',
