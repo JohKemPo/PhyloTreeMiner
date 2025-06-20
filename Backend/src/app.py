@@ -2,17 +2,22 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Quer
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
-from typing import List, Dict, Literal
-import os, datetime, mimetypes, asyncio, re, psutil
+from typing import List, Dict, Literal, Optional, Any
+import os, datetime, mimetypes, asyncio, re, psutil, json
 import glob
 
-# --- Configuração de Segurança ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PATH_BASE_WORKFLOW = os.path.abspath(os.path.join(BASE_DIR, "../../BioComp_UFF"))
+DATA_ROOT = os.path.join(PATH_BASE_WORKFLOW, "data")
 PROJECTS_ROOT = os.path.join(PATH_BASE_WORKFLOW, "projects")
+
+WORKFLOW_SCRIPT_PATH = os.path.join(PATH_BASE_WORKFLOW, "workflow.py")
 
 if not os.path.exists(PROJECTS_ROOT) or not os.path.isdir(PROJECTS_ROOT):
     raise RuntimeError(f"O diretório base de projetos não foi encontrado em: {PROJECTS_ROOT}")
+
+if not os.path.exists(WORKFLOW_SCRIPT_PATH):
+     raise RuntimeError(f"O script do workflow não foi encontrado em: {WORKFLOW_SCRIPT_PATH}")
 
 
 app = FastAPI()
@@ -27,6 +32,7 @@ app.add_middleware(
 )
 
 
+# --- Modelos Pydantic ---
 class Project(BaseModel):
     name: str = Field(..., description="Nome do projeto.")
     last_modified: datetime.datetime = Field(..., description="Data da última modificação do diretório do projeto.")
@@ -38,8 +44,173 @@ class FileSystemItem(BaseModel):
     size: int = Field(..., description="Tamanho do item em bytes.")
     last_modified: datetime.datetime = Field(..., description="Data da última modificação.")
 
+class ProjectDetails(BaseModel):
+    input_file: Optional[str] = None
+    current_step: Optional[str] = None
+    
+class WorkflowConfig(BaseModel):
+    """Modelo para as configurações do workflow enviadas pelo frontend."""
+    configs: Dict[str, Any] = Field(..., description="Dicionário de configurações para o workflow.")
+
+
+
+# --- WebSocket para Monitoramento de Progresso ---
+class ProgressConnectionManager:
+    """Gerencia as conexões de WebSocket por projeto."""
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+
+    async def connect(self, project_name: str, websocket: WebSocket):
+        await websocket.accept()
+        if project_name not in self.active_connections:
+            self.active_connections[project_name] = []
+        self.active_connections[project_name].append(websocket)
+        print(f"Cliente conectado ao projeto: {project_name}")
+
+    def disconnect(self, project_name: str, websocket: WebSocket):
+        if project_name in self.active_connections:
+            self.active_connections[project_name].remove(websocket)
+            if not self.active_connections[project_name]:
+                del self.active_connections[project_name]
+        print(f"Cliente desconectado do projeto: {project_name}")
+
+    async def broadcast(self, project_name: str, message: dict):
+        """Envia uma mensagem JSON para todos os clientes de um projeto."""
+        if project_name in self.active_connections:
+            # Itera sobre uma cópia para evitar problemas ao remover itens durante a iteração
+            for connection in self.active_connections[project_name][:]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    # Remove a conexão se houver erro ao enviar
+                    self.active_connections[project_name].remove(connection)
+
+manager = ProgressConnectionManager()
+active_watchers: Dict[str, asyncio.Task] = {}
+running_workflows: Dict[str, asyncio.subprocess.Process] = {}
+
+# --- Funções Auxiliares para o Workflow ---
+
+def parse_log_line(line: str) -> dict:
+    """Analisa uma linha de log e a converte em um dicionário estruturado."""
+    match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - (INFO|WARNING|ERROR) - (.*)", line)
+    if match:
+        return {"timestamp": match.group(1), "level": match.group(2), "message": match.group(3).strip()}
+    return {"timestamp": datetime.datetime.now().isoformat(), "level": "RAW", "message": line.strip()}
+
+async def stream_workflow_output(project_name: str, process: asyncio.subprocess.Process):
+    """
+    Lê stdout/stderr de um processo, analisa o progresso do tqdm e transmite via WebSocket.
+    """
+    print(f"Iniciando streaming de saída para o projeto: {project_name}")
+    tqdm_regex = re.compile(r"(\d+)\s*%\s*\|")
+
+    while True:
+        if process.stdout.at_eof() and process.stderr.at_eof():
+            break
+
+        stdout_line = await process.stdout.readline()
+        if stdout_line:
+            line_str = stdout_line.decode('utf-8', errors='ignore').strip()
+            
+            tqdm_match = tqdm_regex.search(line_str)
+            if tqdm_match:
+                percentage = int(tqdm_match.group(1))
+                await manager.broadcast(project_name, {
+                    "type": "tqdm_update",
+                    "payload": {"percentage": percentage, "details": line_str}
+                })
+            else:
+                parsed_line = parse_log_line(line_str)
+                await manager.broadcast(project_name, {
+                    "type": "progress_update",
+                    "payload": parsed_line
+                })
+        
+        stderr_line = await process.stderr.readline()
+        if stderr_line:
+            line_str = stderr_line.decode('utf-8', errors='ignore').strip()
+            await manager.broadcast(project_name, {
+                "type": "progress_update",
+                "payload": {"level": "ERROR", "message": line_str, "timestamp": datetime.datetime.now().isoformat()}
+            })
+
+        await asyncio.sleep(0.1) 
+
+    return_code = await process.wait()
+    print(f"Workflow do projeto {project_name} concluído com código de saída: {return_code}")
+
+    if return_code == 0:
+        await manager.broadcast(project_name, {
+            "type": "workflow_complete",
+            "message": f"Workflow do projeto {project_name} foi concluído com sucesso.",
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+    else:
+         await manager.broadcast(project_name, {
+            "type": "workflow_failed",
+            "message": f"Workflow do projeto {project_name} falhou com código de saída {return_code}.",
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+    
+    if project_name in running_workflows:
+        del running_workflows[project_name]
+
 
 # --- Endpoints HTTP ---
+
+@app.post("/projects/{project_name}/run", status_code=202)
+async def run_workflow(project_name: str, workflow_config: WorkflowConfig):
+    """
+    Inicia a execução do workflow para um projeto específico.
+    """
+    project_path = os.path.abspath(os.path.join(PROJECTS_ROOT, project_name))
+    print(project_path)
+    # if not project_path.startswith(PROJECTS_ROOT) or not os.path.isdir(project_path):
+    #     raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    # if project_name in running_workflows:
+        # raise HTTPException(status_code=409, detail=f"O workflow para o projeto '{project_name}' já está em execução.")
+
+    config_dict = workflow_config.configs
+    data_input_folder = config_dict['tree_config']['input_path']
+    data_input_folder = data_input_folder.split('/')[-1]
+    
+    config_dict['output_log'] = os.path.join(PROJECTS_ROOT,project_name,'out')
+    config_dict['tree_config']['input_path'] = os.path.join(DATA_ROOT,data_input_folder)
+    config_dict['tree_config']['output_path'] = os.path.join(PROJECTS_ROOT,project_name,'out') 
+    config_dict['subtree_config']['input_path'] = os.path.join(PROJECTS_ROOT,project_name,'out','Trees')
+    config_dict['subtree_config']['output_path'] = os.path.join(PROJECTS_ROOT,project_name,'out')
+    config_dict['subtree_config']['subtree_miner_configs']['output_path'] = os.path.join(PROJECTS_ROOT,project_name,'out')
+    
+    config_str = json.dumps(workflow_config.configs)
+    
+    
+    command = [
+        "python3",
+        WORKFLOW_SCRIPT_PATH,
+        "-cw",
+        config_str
+    ]
+
+    print(f"Executando comando para o projeto '{project_name}': {' '.join(command)}")
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=PATH_BASE_WORKFLOW 
+        )
+
+        running_workflows[project_name] = process
+        asyncio.create_task(stream_workflow_output(project_name, process))
+
+        return {"message": f"Workflow para o projeto '{project_name}' iniciado com sucesso."}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Falha ao iniciar o workflow: {e}")
+
 
 @app.get("/projects", response_model=List[Project])
 async def get_projects():
@@ -55,6 +226,22 @@ async def get_projects():
                 last_modified=datetime.datetime.fromtimestamp(os.path.getmtime(full_path))
             ))
     return projects
+
+@app.get("/dataFolders", response_model=List[Project])
+async def get_data_folders():
+    """
+    Retorna uma lista de todos os diretorios de dados disponíveis, ordenados por nome.
+    """
+    data_folders = []
+    for data_folder in sorted(os.listdir(DATA_ROOT)):
+        full_path = os.path.join(DATA_ROOT, data_folder)
+        if os.path.isdir(full_path):
+            data_folders.append(Project(
+                name=data_folder,
+                last_modified=datetime.datetime.fromtimestamp(os.path.getmtime(full_path))
+                
+            ))
+    return data_folders
 
 @app.get("/browse", response_model=List[FileSystemItem])
 async def browse_path(path: str = Query("", description="O caminho relativo a ser explorado. Ex: 'meu_projeto/Trees'")):
@@ -149,74 +336,91 @@ async def get_projects_status():
     """Retorna o status de todos os projetos."""
     statuses = {}
     for project_name in os.listdir(PROJECTS_ROOT):
-        if os.path.isdir(os.path.join(PROJECTS_ROOT, project_name)):
-            if project_name in active_watchers and not active_watchers[project_name].done():
+        project_path = os.path.join(PROJECTS_ROOT, project_name)
+        if os.path.isdir(project_path):
+            if project_name in running_workflows:
                 statuses[project_name] = "running"
-            else:
-                outputs_dir = os.path.join(PROJECTS_ROOT, project_name, "out", "outputs")
-                log_files = glob.glob(os.path.join(outputs_dir, "*.log")) if os.path.exists(outputs_dir) else []
-                if log_files:
-                    latest_log = max(log_files, key=os.path.getmtime)
-                    with open(latest_log, 'r', encoding='utf-8', errors='ignore') as f:
-                        if "Histograma de frequência processado" in f.read():
-                            statuses[project_name] = "completed"
-                        else:
-                            statuses[project_name] = "failed" # Pode ter falhado ou estar aguardando
+                continue 
+
+            outputs_dir = os.path.join(project_path, "out", "outputs")
+            if not os.path.exists(outputs_dir):
+                statuses[project_name] = "idle"
+                continue
+
+            log_files = glob.glob(os.path.join(outputs_dir, "*.log"))
+            if log_files:
+                latest_log = max(log_files, key=os.path.getmtime)
+                with open(latest_log, 'r', encoding='utf-8', errors='ignore') as f:
+                    log_content = f.read()
+
+                if ("Histograma de frequência processado" in log_content):
+                    statuses[project_name] = "completed"
+                elif "ERROR" in log_content:
+                    statuses[project_name] = "failed"
                 else:
                     statuses[project_name] = "idle"
+            else:
+                statuses[project_name] = "idle"
     return statuses
 
-# --- WebSocket para Monitoramento de Progresso ---
-class ProgressConnectionManager:
-    """Gerencia as conexões de WebSocket por projeto."""
-    def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
+@app.post("/projects/details", response_model=Dict[str, ProjectDetails])
+async def get_projects_details(project_names: List[str]):
+    """
+    Para uma lista de projetos, lê o último log de cada um e extrai
+    informações como o arquivo de input e a última etapa registrada.
+    """
+    details = {}
+    for project_name in project_names:
+        project_path = os.path.join(PROJECTS_ROOT, project_name)
+        outputs_dir = os.path.join(project_path, "out", "outputs")
 
-    async def connect(self, project_name: str, websocket: WebSocket):
-        await websocket.accept()
-        if project_name not in self.active_connections:
-            self.active_connections[project_name] = []
-        self.active_connections[project_name].append(websocket)
-        print(f"Cliente conectado ao projeto: {project_name}")
+        input_file = "Não encontrado"
+        current_step = "Não iniciada"
 
-    def disconnect(self, project_name: str, websocket: WebSocket):
-        if project_name in self.active_connections:
-            self.active_connections[project_name].remove(websocket)
-            if not self.active_connections[project_name]:
-                del self.active_connections[project_name]
-        print(f"Cliente desconectado do projeto: {project_name}")
+        if os.path.exists(outputs_dir):
+            log_files = glob.glob(os.path.join(outputs_dir, "*.log"))
+            if log_files:
+                latest_log = max(log_files, key=os.path.getmtime)
+                with open(latest_log, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = reversed(f.readlines())
 
-    async def broadcast(self, project_name: str, message: dict):
-        """Envia uma mensagem JSON para todos os clientes de um projeto."""
-        if project_name in self.active_connections:
-            # Itera sobre uma cópia para evitar problemas ao remover itens durante a iteração
-            for connection in self.active_connections[project_name][:]:
-                try:
-                    await connection.send_json(message)
-                except Exception:
-                    # Remove a conexão se houver erro ao enviar
-                    self.active_connections[project_name].remove(connection)
+                input_file_regex = re.compile(r"Iniciando processamento do arquivo:\s*(.*)")
+                step_regex = re.compile(r"ETAPA:\s*(.*)")
 
-manager = ProgressConnectionManager()
-active_watchers: Dict[str, asyncio.Task] = {}
+                found_input = False
+                found_step = False
 
-def parse_log_line(line: str) -> dict:
-    """Analisa uma linha de log e a converte em um dicionário estruturado."""
-    match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - (INFO|WARNING|ERROR) - (.*)", line)
-    if match:
-        return {"timestamp": match.group(1), "level": match.group(2), "message": match.group(3).strip()}
-    return {"timestamp": datetime.datetime.now().isoformat(), "level": "RAW", "message": line.strip()}
+                for line in lines:
+                    if not found_step:
+                        match = step_regex.search(line)
+                        if match:
+                            current_step = match.group(1).strip()
+                            found_step = True
+
+                    if not found_input:
+                        match = input_file_regex.search(line)
+                        if match:
+                            input_file = os.path.basename(match.group(1).strip())
+                            found_input = True
+                    
+                    if found_input and found_step:
+                        break
+        
+        details[project_name] = ProjectDetails(input_file=input_file, current_step=current_step)
+        
+    return details
+
+# --- WebSocket Endpoints ---
 
 async def log_watcher(project_name: str):
-    """Observa um arquivo de log e transmite novas linhas via WebSocket."""
+    """Observa um arquivo de log e transmite novas linhas via WebSocket. (Para logs antigos)"""
     print(f"Iniciando observador para o projeto: {project_name}")
     
     project_path = os.path.join(PROJECTS_ROOT, project_name)
-    # ... (código para aguardar a criação da pasta mantido) ...
-    
-    log_path = None
     outputs_dir = os.path.join(project_path, "out", "outputs")
-    # ... (código para encontrar o arquivo de log mantido) ...
+    log_path = None
+    
+    # Procura pelo log mais recente
     retries = 10
     while retries > 0:
         if os.path.isdir(outputs_dir):
@@ -233,36 +437,24 @@ async def log_watcher(project_name: str):
 
     try:
         with open(log_path, "r", encoding='utf-8', errors='ignore') as f:
-            print(f"Iniciando leitura do log: {log_path}")
-            
-            # CORREÇÃO: Lógica de leitura unificada em um único loop.
-            # Este loop lê o histórico e continua observando novas linhas.
-            while project_name in manager.active_connections:
-                line = f.readline()
-                if not line:
-                    # Chegou ao final do arquivo, aguarda por novas linhas
-                    await asyncio.sleep(1)
-                    continue
-                
-                # Encontrou uma linha (seja do histórico ou nova), envia para o cliente
+            print(f"Lendo histórico do log: {log_path}")
+            # Envia todo o conteúdo histórico do log de uma vez
+            for line in f:
                 parsed_line = parse_log_line(line)
                 await manager.broadcast(project_name, {
                     "type": "progress_update",
                     "payload": parsed_line
                 })
-
-                # Verifica se o workflow foi concluído
-                if "Histograma de frequência processado" in parsed_line["message"]:
-                    await manager.broadcast(project_name, {
-                        "type": "workflow_complete",
-                        "message": f"Workflow do projeto {project_name} foi concluído.",
-                        "timestamp": datetime.datetime.now().isoformat()
-                    })
-                    break  # Encerra o observador
+            # Informa que o histórico foi enviado
+            await manager.broadcast(project_name, {
+                "type": "history_complete",
+                "message": f"Histórico do log do projeto {project_name} carregado."
+            })
+            # O watcher para de observar ativamente, pois o streaming ao vivo é feito por outra função
     except Exception as e:
         await manager.broadcast(project_name, {"type": "error", "message": f"Erro no observador de log: {e}"})
     finally:
-        print(f"Encerrando observador para o projeto: {project_name}")
+        print(f"Observador de histórico para o projeto {project_name} concluído.")
         if project_name in active_watchers:
             del active_watchers[project_name]
 
@@ -270,7 +462,8 @@ async def log_watcher(project_name: str):
 async def websocket_progress_endpoint(websocket: WebSocket, project_name: str):
     await manager.connect(project_name, websocket)
     
-    if project_name not in active_watchers:
+    # Se um workflow NÃO estiver rodando, inicia o log_watcher para ver o histórico.
+    if project_name not in running_workflows and project_name not in active_watchers:
         task = asyncio.create_task(log_watcher(project_name))
         active_watchers[project_name] = task
 
@@ -280,41 +473,29 @@ async def websocket_progress_endpoint(websocket: WebSocket, project_name: str):
     except WebSocketDisconnect:
         manager.disconnect(project_name, websocket)
 
+
+# --- Performance Watcher (código original mantido) ---
 performance_clients: List[WebSocket] = []
 performance_watcher_task: asyncio.Task = None
 
 async def performance_watcher():
     """Coleta e transmite métricas de performance do sistema."""
-    # last_net_io = psutil.net_io_counters()
-    # Limite hipotético de 1 Gbps para cálculo de porcentagem de rede
     NETWORK_MAX_BPS = 10**9
 
     while True:
         if not performance_clients:
-            break # Encerra se não houver mais clientes
+            break
 
-        # Coleta de métricas
         cpu_usage = psutil.cpu_percent(interval=1)
         memory_info = psutil.virtual_memory()
         disk_info = psutil.disk_usage('/')
         
-        # Cálculo de Rede
-        await asyncio.sleep(1)
-        # current_net_io = psutil.net_io_counters()
-        # bytes_sent = current_net_io.bytes_sent - last_net_io.bytes_sent
-        # bytes_recv = current_net_io.bytes_recv - last_net_io.bytes_recv
-        # total_bytes = bytes_sent + bytes_recv
-        # network_usage = min(100, (total_bytes / NETWORK_MAX_BPS) * 100)
-        # print(network_usage)
-        # last_net_io = current_net_io
-
         message = {
             "cpu": cpu_usage,
             "memory": memory_info.percent,
             "disk": disk_info.percent,
         }
         
-        # Broadcast para todos os clientes de performance
         for client in performance_clients[:]:
             try:
                 await client.send_json(message)
@@ -331,14 +512,13 @@ async def websocket_performance_endpoint(websocket: WebSocket):
     await websocket.accept()
     performance_clients.append(websocket)
 
-    # Inicia o observador se for o primeiro cliente
-    if performance_watcher_task is None:
+    if performance_watcher_task is None or performance_watcher_task.done():
         print("Iniciando observador de performance.")
         performance_watcher_task = asyncio.create_task(performance_watcher())
     
     try:
         while True:
-            await websocket.receive_text() # Apenas para manter a conexão viva
+            await websocket.receive_text()
     except WebSocketDisconnect:
         performance_clients.remove(websocket)
         print("Cliente de performance desconectado.")
