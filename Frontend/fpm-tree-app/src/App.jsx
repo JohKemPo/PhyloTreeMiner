@@ -32,7 +32,7 @@ function App() {
 
 
   const menuItems = [
-    // { key: '/', icon: <HomeOutlined />, label: <Link to="/">Home</Link> },
+    { key: '/', icon: <HomeOutlined />, label: <Link to="/">Home</Link> },
     { key: '/Dashboards', icon: <AppstoreOutlined />, label: <Link to="/Dashboards">Dashboard</Link> },
     { key: '/projects', icon: <ContainerOutlined />, label: <Link to="/projects">Projects</Link> },
     { key: '/pipelines', icon: <PartitionOutlined />, label: <Link to="/pipelines">Pipelines</Link> },

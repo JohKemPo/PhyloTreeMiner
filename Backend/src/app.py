@@ -100,58 +100,76 @@ def parse_log_line(line: str) -> dict:
 
 async def stream_workflow_output(project_name: str, process: asyncio.subprocess.Process):
     """
-    Lê stdout/stderr de um processo, analisa o progresso do tqdm e transmite via WebSocket.
+    Lê stdout/stderr de um processo, analisa o progresso de múltiplos tqdms
+    e transmite um progresso combinado via WebSocket.
     """
     print(f"Iniciando streaming de saída para o projeto: {project_name}")
     tqdm_regex = re.compile(r"(\d+)\s*%\s*\|")
 
-    while True:
-        if process.stdout.at_eof() and process.stderr.at_eof():
-            break
+    current_stage = 1
+    last_percentage = 0
+    total_stages = 2
 
-        stdout_line = await process.stdout.readline()
-        if stdout_line:
-            line_str = stdout_line.decode('utf-8', errors='ignore').strip()
-            
-            tqdm_match = tqdm_regex.search(line_str)
-            if tqdm_match:
-                percentage = int(tqdm_match.group(1))
-                await manager.broadcast(project_name, {
-                    "type": "tqdm_update",
-                    "payload": {"percentage": percentage, "details": line_str}
-                })
-            else:
-                parsed_line = parse_log_line(line_str)
+    while True:
+        if process.returncode is not None:
+            break
+        
+        try:
+            stdout_line = await asyncio.wait_for(process.stdout.readline(), timeout=0.1)
+            if stdout_line:
+                line_str = stdout_line.decode('utf-8', errors='ignore').strip()
+                tqdm_match = tqdm_regex.search(line_str)
+                
+                if tqdm_match:
+                    percentage = int(tqdm_match.group(1))
+
+                    if percentage < last_percentage and current_stage < total_stages:
+                        current_stage += 1
+                    
+                    stage_progress = percentage / total_stages
+                    completed_stages_progress = (current_stage - 1) * (100 / total_stages)
+                    
+                    total_progress = int(completed_stages_progress + stage_progress)
+                    
+                    total_progress = min(total_progress, 100)
+                    last_percentage = percentage
+
+                    await manager.broadcast(project_name, {
+                        "type": "tqdm_update",
+                        "payload": {"percentage": total_progress, "details": line_str}
+                    })
+                else:
+                    parsed_line = parse_log_line(line_str)
+                    await manager.broadcast(project_name, {"type": "progress_update", "payload": parsed_line})
+
+        except asyncio.TimeoutError:
+            pass 
+
+        try:
+            stderr_line = await asyncio.wait_for(process.stderr.readline(), timeout=0.1)
+            if stderr_line:
+                line_str = stderr_line.decode('utf-8', errors='ignore').strip()
                 await manager.broadcast(project_name, {
                     "type": "progress_update",
-                    "payload": parsed_line
+                    "payload": {"level": "ERROR", "message": line_str, "timestamp": datetime.datetime.now().isoformat()}
                 })
-        
-        stderr_line = await process.stderr.readline()
-        if stderr_line:
-            line_str = stderr_line.decode('utf-8', errors='ignore').strip()
-            await manager.broadcast(project_name, {
-                "type": "progress_update",
-                "payload": {"level": "ERROR", "message": line_str, "timestamp": datetime.datetime.now().isoformat()}
-            })
-
-        await asyncio.sleep(0.1) 
+        except asyncio.TimeoutError:
+            pass
 
     return_code = await process.wait()
     print(f"Workflow do projeto {project_name} concluído com código de saída: {return_code}")
 
+    final_message = {
+        "timestamp": datetime.datetime.now().isoformat()
+    }
     if return_code == 0:
-        await manager.broadcast(project_name, {
-            "type": "workflow_complete",
-            "message": f"Workflow do projeto {project_name} foi concluído com sucesso.",
-            "timestamp": datetime.datetime.now().isoformat()
-        })
+        final_message["type"] = "workflow_complete"
+        final_message["message"] = f"Workflow do projeto {project_name} foi concluído com sucesso."
     else:
-         await manager.broadcast(project_name, {
-            "type": "workflow_failed",
-            "message": f"Workflow do projeto {project_name} falhou com código de saída {return_code}.",
-            "timestamp": datetime.datetime.now().isoformat()
-        })
+        final_message["type"] = "workflow_failed"
+        final_message["message"] = f"Workflow do projeto {project_name} falhou com código de saída {return_code}."
+    
+    await manager.broadcast(project_name, final_message)
     
     if project_name in running_workflows:
         del running_workflows[project_name]
