@@ -11,7 +11,8 @@ const { Header, Content, Sider, Footer } = Layout;
 const { Title, Paragraph } = Typography;
 
 import fundo from '../assets/bck1.jpg';
-
+import Logo from './componentsHomepage/logo'
+import AppAppBar from './componentsHomepage/appBar';
 
 const HomePage = () => {
 
@@ -33,7 +34,9 @@ const HomePage = () => {
                 }}>
                     <a href='/'>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
-                            <ExperimentOutlined style={{ fontSize: '28px', color: '#1890ff' }} />
+                            {/* <ExperimentOutlined style={{ fontSize: '28px', color: '#1890ff' }} /> */}
+                            <Logo color={'#1890ff'}/>
+
                             <Title level={4} style={{ marginBottom: 0, marginLeft: 12 }}>PhyloPipeline</Title>
                         </div>
                     </a>
@@ -45,7 +48,9 @@ const HomePage = () => {
                 </Header>
 
                 <Content style={{ padding: '50px', backgroundColor: '#EEFAFFFF' }}>
-                    {/* Seção Hero */}
+                    
+                    {/* <AppAppBar/> */}
+
                     <Row align="middle" justify="center" style={{ minHeight: 'calc(100vh - 100px)', textAlign: 'center', }}>
                         <Col>
                             <Title style={{ fontSize: '4rem', marginBottom: 24 }}>
