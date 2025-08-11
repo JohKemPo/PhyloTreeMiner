@@ -73,7 +73,7 @@ function App() {
           <Logo size='30px'/>
           {!collapsed && (
             <Title level={4} style={{ color: colors.textDark, marginBottom: 0, marginLeft: '12px', whiteSpace: 'nowrap' }}>
-              PhyloPipeline
+              PhyloTreeMiner
             </Title>
           )}
         </div>
@@ -133,7 +133,7 @@ function App() {
           {/* {renderContent()} */}
           <Outlet />
           <Footer style={{ textAlign: 'center', backgroundColor: colors.background, color: colors.textMedium }}>
-            PhyloPipeline ©{new Date().getFullYear()} Created by JohKemPo
+            PhyloTreeMiner ©{new Date().getFullYear()} Created by PhyloTreeMiner@UFF
           </Footer>
         </Content>
 

@@ -137,9 +137,9 @@ const PipelineConfigurator = () => {
 
     const handleStartWorkflow = async (projectName) => {
         const finalPayload = convertToFinalFormat(pipelineData);
-      
+
         console.log(`Iniciando Workflow para o projeto '${projectName}' com os seguintes dados:`, JSON.stringify(finalPayload, null, 2));
-        try {                   
+        try {
             const response = await fetch(`http://localhost:8000/projects/${projectName}/run`, {
                 method: 'POST',
                 headers: {
@@ -148,7 +148,7 @@ const PipelineConfigurator = () => {
                 body: JSON.stringify({ configs: finalPayload }),
             });
 
-            if (!response.ok) {     
+            if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.detail || `Erro do servidor: ${response.status}`);
             }
@@ -156,7 +156,7 @@ const PipelineConfigurator = () => {
             messageInfo.success('Workflow iniciado! Acompanhe o progresso na página de projetos.');
             navigate('/projects');
         } catch (error) {
-           
+
             console.error("Falha ao iniciar o workflow:", error);
             messageInfo.error(`Não foi possível iniciar o workflow: ${error.message}`);
         }
@@ -220,7 +220,7 @@ const PipelineConfigurator = () => {
 
     const renderConfigValue = (value) => {
         if (typeof value === 'boolean') {
-            return value ? 'Sim' : 'Não';
+            return value ? 'Yes' : 'No';
         }
         if (typeof value === 'object' && value !== null) {
             // return <pre style={{ margin: 0 }}>{JSON.stringify(value, null, 4)}</pre>;
@@ -232,6 +232,8 @@ const PipelineConfigurator = () => {
                     children: children,
                 };
             });
+
+            console.log('Formatted Datas:', formattedDatas);
             return (
                 <Descriptions
                     column={1}
@@ -241,45 +243,45 @@ const PipelineConfigurator = () => {
                 >
                     {formattedDatas.map(item => (
                         <Descriptions.Item key={item.key} label={item.label}>
-                            {item.children}
+                            {typeof item.children === 'string' ? item.children : typeof item.children === 'boolean' ? (item.children ? 'yes' : 'no') : item.children}
                         </Descriptions.Item>
                     ))}
                 </Descriptions>
             );
         }
-        return value || 'Não definido';
+        return value || 'Not defined';
     };
 
 
     const steps = [
         {
-            title: '1. Configuração do Workflow',
+            title: '1. Workflow Configuration',
             status: current === 0 ? 'process' : 'wait',
-            description: 'Defina os parâmetros da execução.',
+            description: 'Set the execution parameters.',
             icon: <SettingOutlined />,
             content: (
                 <Form form={form} layout="vertical" name="pipeline_config">
-                    <Divider ref={ref1} orientation="left" style={{ color: '#ADADADFF' }}>Configurações de Construção de Árvores</Divider>
+                    <Divider ref={ref1} orientation="left" style={{ color: '#ADADADFF' }}>Tree Building Settings</Divider>
 
                     <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }} >
                         <Col span={8}>
 
-                            <Form.Item name="project_name" label="Nome do Projeto" rules={[{ required: true, message: 'Por favor, insira o nome do projeto!' }]}>
+                            <Form.Item name="project_name" label="Project Name" rules={[{ required: true, message: 'Please enter the project name!' }]}>
                                 <Input placeholder="Ex: Analise_Zika_Global" />
                             </Form.Item>
                         </Col>
                         <Col span={8}>
 
-                            <Form.Item label="Arquivo de Log (Gerado Automaticamente)">
+                            <Form.Item label="Log File (Automatically Generated)">
                                 <Input value={projectNameValue ? `projects/${projectNameValue}/out/outputs/log_setup_${new Date().toISOString().split('T')[0]}.log` : ''} disabled />
                             </Form.Item>
                         </Col>
 
                         <Col span={8}>
 
-                            <Form.Item name={['trees', 'mode']} label="Modo de Construção" initialValue="auto">
+                            <Form.Item name={['trees', 'mode']} label="Construction Mode" initialValue="auto">
                                 <Radio.Group>
-                                    <Radio value="auto">Automático (todas as combinações)</Radio>
+                                    <Radio value="auto">Automatic (all combinations)</Radio>
                                     <Radio value="manual">Manual</Radio>
                                 </Radio.Group>
                             </Form.Item>
@@ -287,8 +289,8 @@ const PipelineConfigurator = () => {
                     </Row>
                     <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }}>
                         <Col span={6}>
-                            <Form.Item name={['trees', 'ignore_mode']} label="Ignorar Métodos (Opcional)" initialValue="parsimony">
-                                <Select mode="multiple" placeholder="Selecione métodos a ignorar no modo auto" allowClear>
+                            <Form.Item name={['trees', 'ignore_mode']} label="Ignore Methods (Optional)" initialValue="parsimony">
+                                <Select mode="multiple" placeholder="Select methods to ignore in auto mode" allowClear>
                                     <Option value="distance">Distance</Option>
                                     <Option value="parsimony">Parsimônia</Option>
                                 </Select>
@@ -300,14 +302,14 @@ const PipelineConfigurator = () => {
                     {treeMode === 'manual' && (
                         <Row gutter={24}>
                             <Col span={6}>
-                                <Form.Item name={['trees', 'construct_method']} label="Método de Construção" initialValue="distance">
+                                <Form.Item name={['trees', 'construct_method']} label="Construction Method" initialValue="distance">
                                     <Select>
                                         <Option value="distance"> Distances</Option>
                                         <Option value="parsimony">Parsimony</Option>
                                     </Select>
                                 </Form.Item>
                             </Col>
-                            <Col span={6}><Form.Item name={['trees', 'alignment_method']} label="Método de Alinhamento" initialValue="MAFFT">
+                            <Col span={6}><Form.Item name={['trees', 'alignment_method']} label="Alignment Method" initialValue="MAFFT">
                                 <Select>
                                     <Option value="mafft">MAFFT</Option>
                                     <Option value="clustalw">ClustalW</Option>
@@ -315,12 +317,12 @@ const PipelineConfigurator = () => {
                             </Form.Item>
                             </Col>
                             <Col span={6}>
-                                <Form.Item name={['trees', 'input_format']} label="Formato de Entrada" initialValue="nexus">
+                                <Form.Item name={['trees', 'input_format']} label="Input Format" initialValue="nexus">
                                     <Select><Option value="nexus">Nexus (.nexus)</Option><Option value="nwk">Newick (.nwk)</Option></Select>
                                 </Form.Item>
                             </Col>
                             <Col span={6}>
-                                <Form.Item name={['trees', 'output_format']} label="Formato de Saída" initialValue="nexus">
+                                <Form.Item name={['trees', 'output_format']} label="Output Format" initialValue="nexus">
                                     <Select><Option value="nexus">Nexus (.nexus)</Option><Option value="nwk">Newick (.nwk)</Option></Select>
                                 </Form.Item>
                             </Col>
@@ -328,11 +330,11 @@ const PipelineConfigurator = () => {
                         </Row>
                     )}
 
-                    <Divider ref={ref2} orientation="left" style={{ color: '#ADADADFF' }}>Configurações de Construção de Subárvores</Divider>
+                    <Divider ref={ref2} orientation="left" style={{ color: '#ADADADFF' }}>Subtree Construction Settings</Divider>
 
                     <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }} >
                         <Col span={8}>
-                            <Form.Item name={['subtrees', 'method']} label="Método de Construção" initialValue="distance">
+                            <Form.Item name={['subtrees', 'method']} label="Construction Method" initialValue="distance">
                                 <Select>
                                     <Option value="distance"> Distance </Option>
                                     <Option value="parsimony">Parsimony</Option>
@@ -341,12 +343,12 @@ const PipelineConfigurator = () => {
                         </Col>
                         <Col span={8}>
 
-                            <Form.Item label="Formato de Entrada">
+                            <Form.Item label="Input format">
                                 <Input value={treeOutputFormat} disabled />
                             </Form.Item>
                         </Col>
                         <Col span={8}>
-                            <Form.Item name={['subtrees', 'output_format']} label="Formato de Saída" initialValue="nexus">
+                            <Form.Item name={['subtrees', 'output_format']} label="Output format" initialValue="nexus">
                                 <Select><Option value="nexus">Nexus (.nexus)</Option><Option value="nwk">Newick (.nwk)</Option></Select>
                             </Form.Item>
 
@@ -357,23 +359,23 @@ const PipelineConfigurator = () => {
                         <Col span={8}>
 
                             <Form.Item name={['subtrees', 'resume_infos']} valuePropName="checked" initialValue={true}>
-                                <Checkbox> Salvar Metadados das Subárvores</Checkbox>
+                                <Checkbox> Save Subtree Metadata</Checkbox>
                             </Form.Item>
                         </Col>
                         <Col span={8}>
 
                             <Form.Item name={['subtrees', 'save_metadata']} valuePropName="checked" initialValue={true}>
-                                <Checkbox > Salvar Metadados em JSON</Checkbox>
+                                <Checkbox > Save Metadata in JSON</Checkbox>
                             </Form.Item>
                         </Col>
 
-                        <Col span={8}><Form.Item name={['subtrees', 'subtree_miner']} valuePropName="checked" initialValue={true}><Checkbox>Executar Mineração de Subárvores</Checkbox></Form.Item></Col>
+                        <Col span={8}><Form.Item name={['subtrees', 'subtree_miner']} valuePropName="checked" initialValue={true}><Checkbox>Perform Subtree Mining</Checkbox></Form.Item></Col>
                     </Row>
                     {subtreeMinerMode &&
                         (
                             <div>
 
-                                <Divider ref={ref3} orientation="left" style={{ color: '#ADADADFF' }}>Configurações de Mineração de Subárvores</Divider>
+                                <Divider ref={ref3} orientation="left" style={{ color: '#ADADADFF' }}>Subtree Mining Settings</Divider>
 
                                 <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }} >
                                     {/* <Col span={8}>
@@ -388,16 +390,16 @@ const PipelineConfigurator = () => {
                                     </Col> */}
                                     <Col span={8}>
 
-                                        <Form.Item name={['subtree_mining', 'save_fpmax']} label="Mineração de Subárvores Frequêntes" valuePropName="checked" initialValue={true}>
-                                            <Checkbox onChange={{}}> Salvar Resultados FPMAX</Checkbox>
+                                        <Form.Item name={['subtree_mining', 'save_fpmax']} label="Frequent Subtree Mining" valuePropName="checked" initialValue={true}>
+                                            <Checkbox onChange={{}}> Save FPMAX Results</Checkbox>
                                         </Form.Item>
 
                                     </Col>
                                     <Col span={8}>
 
-                                        <Form.Item name={['subtree_mining', 'support_fpmax']} label="Suporte FPMAX" initialValue="auto">
+                                        <Form.Item name={['subtree_mining', 'support_fpmax']} label="FPMAX Support" initialValue="auto">
                                             <Radio.Group>
-                                                <Radio value="auto">Automático (0.1 a 1.0)</Radio>
+                                                <Radio value="auto">Automatic (0.1 a 1.0)</Radio>
                                                 <Radio value="manual">Manual</Radio>
                                             </Radio.Group>
                                         </Form.Item>
@@ -405,7 +407,7 @@ const PipelineConfigurator = () => {
                                     <Col span={8}>
 
                                         {supportFpmaxMode === 'manual' && (
-                                            <Form.Item name={['subtree_mining', 'support_value']} label="Valor do Suporte">
+                                            <Form.Item name={['subtree_mining', 'support_value']} label="Support value">
                                                 <InputNumber min={0.1} max={1.0} step={0.1} style={{ width: '100%' }} />
                                             </Form.Item>
                                         )}
@@ -420,21 +422,20 @@ const PipelineConfigurator = () => {
             )
         },
         {
-            title: '2. Seleção do Dataset',
+            title: '2. Dataset Selection',
             status: current === 1 ? 'process' : 'wait',
-            description: 'Escolha um dataset existente ou envie um novo.',
+            description: 'Choose an existing dataset or upload a new one.',
             icon: <DatabaseOutlined />,
             content: (
-                <Card title="Fonte de Dados das Sequências">
+                <Card title="Sequence Data Source">
                     <Select
-                        placeholder="Selecione um dataset existente (Exemplo)"
+                        placeholder="Select an existing dataset (Example)"
                         style={{ width: '100%', marginBottom: 24 }}
                         options={dataFolders}
                         onChange={(value) => setPipelineData(prev => ({ ...prev, dataset: { name: value } }))}>
-
                     </Select>
 
-                    <Text strong>OU</Text>
+                    <Text strong>OR</Text>
 
                     <Upload.Dragger
                         name="file"
@@ -442,27 +443,27 @@ const PipelineConfigurator = () => {
                         style={{ marginTop: 16 }}
                         beforeUpload={(file) => {
                             setPipelineData(prev => ({ ...prev, dataset: file }));
-                            message.success(`${file.name} selecionado com sucesso.`);
+                            message.success(`${file.name} selected successfully.`);
                             return false;
                         }}
                         onRemove={() => setPipelineData(prev => ({ ...prev, dataset: null }))}
                     >
                         <p className="ant-upload-drag-icon"><UploadOutlined /></p>
-                        <p className="ant-upload-text">Clique ou arraste o arquivo .fasta para esta área</p>
+                        <p className="ant-upload-text">Click or drag the .fasta file to this area</p>
                     </Upload.Dragger>
                 </Card>
             ),
         },
         {
-            title: '3. Revisão e Início',
+            title: '3. Review and Start',
             status: current === 2 ? 'process' : 'wait',
-            description: 'Confirme os dados e inicie a execução.',
+            description: 'Confirm the data and start the execution.',
             icon: <RocketOutlined />,
             content: (
                 <Card>
-                    <Title level={5}>Revise as Configurações Finais</Title>
+                    <Title level={5}>Review Final Settings</Title>
                     {pipelineData.config && (
-                        <Descriptions title="Configuração do Workflow" bordered column={1} size="small">
+                        <Descriptions title="Workflow Configuration" bordered column={1} size="small">
                             {Object.entries(pipelineData.config).map(([key, value]) => (
                                 <Descriptions.Item key={key} label={key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}>
                                     {renderConfigValue(value)}
@@ -472,13 +473,14 @@ const PipelineConfigurator = () => {
                     )}
                     {pipelineData.dataset && (
                         <Descriptions title="Dataset" bordered column={1} size="small" style={{ marginTop: 24 }}>
-                            <Descriptions.Item label="Arquivo Selecionado">{pipelineData.dataset.name}</Descriptions.Item>
-                            {pipelineData.dataset.size && <Descriptions.Item label="Tamanho">{`${(pipelineData.dataset.size / 1024).toFixed(2)} KB`}</Descriptions.Item>}
+                            <Descriptions.Item label="Selected File">{pipelineData.dataset.name}</Descriptions.Item>
+                            {pipelineData.dataset.size && <Descriptions.Item label="Size">{`${(pipelineData.dataset.size / 1024).toFixed(2)} KB`}</Descriptions.Item>}
                         </Descriptions>
                     )}
                 </Card>
             ),
         }
+
 
     ]
 
@@ -494,9 +496,9 @@ const PipelineConfigurator = () => {
             >
                 <Flex justify='space-between'>
 
-                    <Title level={3}>Configurações do workflow</Title>
+                    <Title level={3}>New workflow settings</Title>
                     <Button type="dashed" onClick={() => setOpen(!open)}>
-                        Tutorial de execução
+                        Need help?
                     </Button>
                 </Flex>
                 <Tour open={open} onClose={() => setOpen(!open)} steps={stepsTour} />
@@ -514,7 +516,7 @@ const PipelineConfigurator = () => {
                         borderBottomLeftRadius: 8,
                         padding: 32,
                     }}>
-                        <Title level={4} style={{ color: '#000000A8' }}>Passos</Title>
+                        <Title level={4} style={{ color: '#000000A8' }}>Steps</Title>
                         <Steps current={current} direction="vertical" items={steps.map(s => ({ title: s.title, description: s.description, status: s.status, icon: s.icon }))} />
                     </Col>
                     <Col xs={24} md={16} lg={18} style={{
@@ -523,9 +525,9 @@ const PipelineConfigurator = () => {
                     }}>
                         <div style={{ marginBottom: 64 }} >{steps[current].content}</div>
                         <div style={{ marginTop: 24 }}>
-                            {current > 0 && (<Button style={{ margin: '0 8px' }} onClick={handlePrev}>Anterior</Button>)}
-                            {current < steps.length - 1 && (<Button type="primary" onClick={handleNext}>Próximo</Button>)}
-                            {current === steps.length - 1 && (<Button type="primary" icon={<RocketOutlined />} onClick={() => handleStartWorkflow(pipelineData.config?.general.project_name)} disabled={!pipelineData.config || !pipelineData.dataset}>Iniciar Workflow</Button>)}
+                            {current > 0 && (<Button style={{ margin: '0 8px' }} onClick={handlePrev}>Back</Button>)}
+                            {current < steps.length - 1 && (<Button type="primary" onClick={handleNext}>Next</Button>)}
+                            {current === steps.length - 1 && (<Button type="primary" icon={<RocketOutlined />} onClick={() => handleStartWorkflow(pipelineData.config?.general.project_name)} disabled={!pipelineData.config || !pipelineData.dataset}>Start Workflow</Button>)}
                         </div>
                     </Col>
                 </Row>

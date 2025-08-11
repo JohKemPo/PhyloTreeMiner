@@ -13,36 +13,36 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 const FAQ = () => (
     <Container id="faq" sx={{ py: { xs: 8, sm: 16 } }}>
         <Typography component="h2" variant="h4" color="text.primary" align="center" sx={{ mb: { xs: 4, sm: 8 } }}>
-            Perguntas Frequentes
+            Frequently Asked Questions
         </Typography>
         <Box sx={{ maxWidth: '800px', mx: 'auto' }}>
             <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography>Para quem é o PhyloPipeline?</Typography>
+                    <Typography>Who is  for?</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
                     <Typography >
-                        O PhyloPipeline foi projetado tanto para pesquisadores experientes em bioinformática quanto para estudantes e cientistas que estão a começar na área de análise filogenética. A sua interface intuitiva e workflows pré-configurados facilitam o uso por iniciantes, enquanto as opções avançadas de personalização atendem às necessidades de especialistas.
+                         is designed for both experienced bioinformatics researchers and students and scientists new to phylogenetic analysis. Its intuitive interface and preconfigured workflows make it easy for beginners to use, while advanced customization options meet the needs of experts.
                     </Typography>
                 </AccordionDetails>
             </Accordion>
             <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography >Preciso de saber programar para usar a ferramenta?</Typography>
+                    <Typography >Do I need to know how to program to use the tool?</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
                     <Typography >
-                        Não! Um dos nossos principais objetivos é democratizar o acesso a análises complexas. Pode executar workflows completos através da nossa interface gráfica, sem escrever uma única linha de código.
+                        No! One of our main goals is to simplify access to complex analyses. You can execute complete workflows through our graphical interface, without writing a single line of code.
                     </Typography>
                 </AccordionDetails>
             </Accordion>
             <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography >Quais tipos de dados de entrada são suportados?</Typography>
+                    <Typography >What input data types are supported?</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
                     <Typography >
-                        Atualmente, a plataforma suporta sequências de DNA, RNA e proteínas em formato FASTA. Estamos a trabalhar para expandir o suporte a outros formatos populares na comunidade científica.
+                        The platform currently supports DNA, RNA, and protein sequences in FASTA format. We're working to expand support to other formats popular in the scientific community.
                     </Typography>
                 </AccordionDetails>
             </Accordion>

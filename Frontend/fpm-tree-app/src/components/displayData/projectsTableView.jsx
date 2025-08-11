@@ -13,7 +13,7 @@ const ProjectsTableView = ({ projects, statusMap, onProjectSelect }) => {
     
     const columns = [
         {
-            title: 'Nome do Projeto',
+            title: 'Project Name',
             dataIndex: 'name',
             key: 'name',
             sorter: (a, b) => a.name.localeCompare(b.name),
@@ -37,7 +37,7 @@ const ProjectsTableView = ({ projects, statusMap, onProjectSelect }) => {
             },
         },
         {
-            title: 'Progresso',
+            title: 'Progress',
             key: 'progress',
             render: (record) => (
                 record.status === 'running' ? <Progress percent={record.progress}status /> 
@@ -47,7 +47,7 @@ const ProjectsTableView = ({ projects, statusMap, onProjectSelect }) => {
             )
         },
         {
-            title: 'Última modificação',
+            title: 'Last Modified',
             dataIndex: 'last_modified',
             key: 'last_modified',
             sorter: (a, b) => new Date(a.last_modified) - new Date(b.last_modified),
@@ -64,17 +64,17 @@ const ProjectsTableView = ({ projects, statusMap, onProjectSelect }) => {
             ),
         },
         {
-            title: 'Etapa Atual',
+            title: 'Current Stage',
             key: 'step',
             render: (_, record) => <Text>{record.details?.current_step || '...'}</Text>,
         },
         {
-            title: 'Ações',
+            title: 'Actions',
             key: 'actions',
             render: (record) => (
                 <Space>
                     <Button type="primary" ghost onClick={() => onProjectSelect(record.name)}>
-                        Detalhes
+                        Details
                     </Button>
                     <Dropdown overlay={
                         <Menu>

@@ -24,7 +24,7 @@ const FooterComponent = () => (
         >
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
-                    PhyloPipeline
+                    PhyloTreeMiner
                 </Typography>
 
 
@@ -43,7 +43,7 @@ const FooterComponent = () => (
         >
             <div>
                 <Typography variant="body2" color="text.secondary">
-                    &copy; {new Date().getFullYear()} PhyloPipeline
+                    &copy; {new Date().getFullYear()} PhyloTreeMiner@UFF
                 </Typography>
             </div>
             <Stack direction="row" spacing={1} useFlexGap>

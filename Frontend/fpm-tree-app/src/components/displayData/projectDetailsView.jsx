@@ -35,15 +35,15 @@ const ProjectDetailView = ({ projectName, onBack }) => {
     
     return (
         <div>
-            <Button onClick={onBack} style={{ marginBottom: 24 }}>← Voltar para a Galeria de Jobs</Button>
-            <Title level={3}>Detalhes do Projeto: {projectName}</Title>
+            <Button onClick={onBack} style={{ marginBottom: 24 }}>← Return to Job Gallery</Button>
+            <Title level={3}>Project Details: {projectName}</Title>
             <Row gutter={24}>
                 <Col xs={24} md={10}>
-                    <Title level={4}>Explorador de Arquivos</Title>
+                    <Title level={4}>File Explorer</Title>
                     <ProjectExplorer initialProjectName={projectName} />
                 </Col>
                 <Col xs={24} md={14}>
-                    <Title level={4}>Logs em Tempo Real</Title>
+                    <Title level={4}>Real-Time Logs</Title>
                     <div ref={logContainerRef} style={{height: 600, overflowY: 'auto', backgroundColor: '#262626', color: 'white', padding: 16, borderRadius: 8, fontFamily: 'monospace'}}>
                         {logs.map((log, index) => (
                             <div key={index}>

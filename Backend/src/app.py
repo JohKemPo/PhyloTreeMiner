@@ -392,8 +392,8 @@ async def get_projects_details(project_names: List[str]):
         project_path = os.path.join(PROJECTS_ROOT, project_name)
         outputs_dir = os.path.join(project_path, "out", "outputs")
 
-        input_file = "Não encontrado"
-        current_step = "Não iniciada"
+        input_file = "Not found"
+        current_step = "Not started"
 
         if os.path.exists(outputs_dir):
             log_files = glob.glob(os.path.join(outputs_dir, "*.log"))
@@ -403,7 +403,7 @@ async def get_projects_details(project_names: List[str]):
                     lines = reversed(f.readlines())
 
                 input_file_regex = re.compile(r"Iniciando processamento do arquivo:\s*(.*)")
-                step_regex = re.compile(r"ETAPA:\s*(.*)")
+                step_regex = re.compile(r"STEP:\s*(.*)")
 
                 found_input = False
                 found_step = False

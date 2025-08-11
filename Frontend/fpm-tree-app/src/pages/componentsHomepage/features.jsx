@@ -24,24 +24,24 @@ const Features = () => (
                 <Grid item xs={12} md={6}>
                     <div>
                         <Typography component="h2" variant="h4" color="white">
-                            Funcionalidades do Produto
+                            Features
                         </Typography>
                         <Typography variant="body1" color="white" sx={{ mb: { xs: 2, sm: 4 } }}>
-                            Projetado para ser poderoso para profissionais e acessível para iniciantes. Aqui está um resumo de como nossa plataforma pode transformar sua pesquisa.
+                            Designed to be powerful for professionals and accessible for beginners, here's a summary of how our platform can transform your research.
                         </Typography>
                     </div>
                     <Stack direction="column" spacing={2}>
                         <Grid item container spacing={1}>
                             <CheckCircleRoundedIcon sx={{ color: 'white', mr: 1 }} />
-                            <Typography variant="body1" color='white'>Acompanhamento do progresso em tempo real.</Typography>
+                            <Typography variant="body1" color='white'>Real-time progress tracking.</Typography>
                         </Grid>
                         <Grid item container spacing={1}>
                             <CheckCircleRoundedIcon sx={{ color: 'white', mr: 1 }} />
-                            <Typography variant="body1" color='white'>Análise de workflows já executados.</Typography>
+                            <Typography variant="body1" color='white'>Analysis of workflows already executed.</Typography>
                         </Grid>
                         <Grid item container spacing={1}>
                             <CheckCircleRoundedIcon sx={{ color: 'white', mr: 1 }} />
-                            <Typography variant="body1" color='white'>Geração de métricas de avaliação filogenéticas.</Typography>
+                            <Typography variant="body1" color='white'>Generation of phylogenetic evaluation metrics.</Typography>
                         </Grid>
                     </Stack>
                 </Grid>

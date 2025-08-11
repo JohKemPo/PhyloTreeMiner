@@ -13,8 +13,8 @@ const NotFoundPage = () => (
   <Result
     status="404"
     title="404"
-    subTitle="Desculpe, a página que você visitou ainda não foi implementada ou não existe."
-    extra={<Button type="primary"><Link to="/">Voltar para o Início</Link></Button>}
+    subTitle="Sorry, the page you visited has not been implemented yet or does not exist."
+    extra={<Button type="primary"><Link to="/">Back to Homepage</Link></Button>}
   />
 );
 

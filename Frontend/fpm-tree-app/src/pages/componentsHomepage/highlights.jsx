@@ -61,10 +61,10 @@ const Highlights = () => (
         >
             <Box sx={{ width: { sm: '100%', md: '60%' }, textAlign: { sm: 'left', md: 'center' } }}>
                 <Typography component="h2" variant="h4" sx={{ color: 'grey.800', fontWeight: 'bold' }}>
-                    Destaques do Workflow
+                    Workflow Highlights
                 </Typography>
                 <Typography variant="body1" sx={{ color: 'grey.500' }}>
-                    Explore as principais funcionalidades que tornam o PhyloPipeline a ferramenta ideal para suas análises, de iniciantes a especialistas.
+                    Explore the key features that make PhyloTreeMiner the ideal tool for your analyses, from beginners to experts.
                 </Typography>
             </Box>
             <Grid container rowSpacing={{ xs: 1, sm: 2, md: 3 }} columnSpacing={{ xs: 1, sm: 2, md: 3 }}>
@@ -80,10 +80,10 @@ const Highlights = () => (
                         <Box sx={{ color: 'grey.800' }}><AnalyticsIcon /></Box>
                         <div>
                             <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Insights Visuais com Neo4j
+                                Visual Insights with Neo4j
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                A integração com Neo4j facilita a visualização de grafos, revelando insights biológicos profundos.
+                                Integration with Neo4j facilitates graph visualization, revealing deep biological insights.
                             </Typography>
                         </div>
                     </Stack>
@@ -100,10 +100,10 @@ const Highlights = () => (
                         <Box sx={{ color: 'grey.800' }}><AnalyticsIcon /></Box>
                         <div>
                             <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Insights Visuais com Neo4j
+                                Visual Insights with Neo4j
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                A integração com Neo4j facilita a visualização de grafos, revelando insights biológicos profundos.
+                                Integration with Neo4j facilitates graph visualization, revealing deep biological insights.
                             </Typography>
                         </div>
                     </Stack>
@@ -120,10 +120,10 @@ const Highlights = () => (
                         <Box sx={{ color: 'grey.800' }}><AnalyticsIcon /></Box>
                         <div>
                             <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Insights Visuais com Neo4j
+                                Visual Insights with Neo4j
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                A integração com Neo4j facilita a visualização de grafos, revelando insights biológicos profundos.
+                                Integration with Neo4j facilitates graph visualization, revealing deep biological insights.
                             </Typography>
                         </div>
                     </Stack>
@@ -140,10 +140,10 @@ const Highlights = () => (
                         <Box sx={{ color: 'grey.800' }}><AnalyticsIcon /></Box>
                         <div>
                             <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Insights Visuais com Neo4j
+                                Visual Insights with Neo4j
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                A integração com Neo4j facilita a visualização de grafos, revelando insights biológicos profundos.
+                                Integration with Neo4j facilitates graph visualization, revealing deep biological insights.
                             </Typography>
                         </div>
                     </Stack>
@@ -159,10 +159,10 @@ const Highlights = () => (
                         <Box sx={{ color: 'grey.800' }}><AnalyticsIcon /></Box>
                         <div>
                             <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Insights Visuais com Neo4j
+                                Visual Insights with Neo4j
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                A integração com Neo4j facilita a visualização de grafos, revelando insights biológicos profundos.
+                                Integration with Neo4j facilitates graph visualization, revealing deep biological insights.
                             </Typography>
                         </div>
                     </Stack>
@@ -178,10 +178,10 @@ const Highlights = () => (
                         <Box sx={{ color: 'grey.800' }}><AnalyticsIcon /></Box>
                         <div>
                             <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Insights Visuais com Neo4j
+                                Visual Insights with Neo4j
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                A integração com Neo4j facilita a visualização de grafos, revelando insights biológicos profundos.
+                                Integration with Neo4j facilitates graph visualization, revealing deep biological insights.
                             </Typography>
                         </div>
                     </Stack>

@@ -55,7 +55,7 @@ const Hero = () => {
                             fontSize: 'clamp(3.5rem, 10vw, 4rem)',
                         }}
                     >
-                        Simplificando a Análise Filogenética Complexa
+                        Simplifying Complex Phylogenetic Analysis
                         {/* <Typography
                             component="span"
                             variant="h1"
@@ -69,7 +69,7 @@ const Hero = () => {
                         </Typography> */}
                     </Typography>
                     <Typography variant="body1" textAlign="center" color="text.secondary">
-                        Uma poderosa ferramenta de e-science projetada para orquestrar, executar e visualizar workflows de análise filogenética de ponta a ponta.
+                        A powerful e-science tool designed to orchestrate, execute, and visualize end-to-end phylogenetic analysis workflows.
                     </Typography>
                     <Stack
                         direction={{ xs: 'column', sm: 'row' }}
@@ -78,10 +78,10 @@ const Hero = () => {
                         sx={{ pt: 2, width: { xs: '100%', sm: 'auto' } }}
                     >
                         <Button variant="contained" color="primary" onClick={handleStartWorking}>
-                            Começar a trabalhar
+                            Start working
                         </Button>
                         <Button variant="outlined" color="primary" href='https://github.com/UFFeScience/NMFSt.P' target="_blank" startIcon={<GitHubIcon/>}>
-                            Documentação
+                            Documentation
                         </Button>
                     </Stack>
                 </Stack>

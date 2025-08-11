@@ -162,7 +162,7 @@ const ProjectGallery = ({ onProjectSelect }) => {
 
     return (
         <div>
-            <Title level={3}>Projetos Recentes</Title>
+            <Title level={3}>Recent Projects</Title>
             <Card style={{ marginBottom: 24 }}>
                 <Space direction="vertical" style={{ width: '100%' }} size="middle">
                     <Row justify="space-between" align="middle" gutter={[16, 16]}>
@@ -171,11 +171,11 @@ const ProjectGallery = ({ onProjectSelect }) => {
                             <Space>
                                 <FilterOutlined />
                                 <Select defaultValue="all" style={{ width: 150 }} onChange={(value) => setStatusFilter(value)}>
-                                    <Option value="all">Todos Status</Option>
-                                    <Option value="running">Em Execução</Option>
-                                    <Option value="completed">Concluído</Option>
-                                    <Option value="idle">Aguardando</Option>
-                                    <Option value="failed">Falha</Option>
+                                    <Option value="all">All Statuses</Option>
+                                    <Option value="running">In Progress</Option>
+                                    <Option value="completed">Completed</Option>
+                                    <Option value="idle">Waiting..</Option>
+                                    <Option value="failed">Failure</Option>
                                 </Select>
                             </Space>
                         </Col>

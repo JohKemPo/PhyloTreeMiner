@@ -44,7 +44,7 @@ const HomePage = () => {
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                             <Logo color={'#1890ff'}/>
 
-                            <Title level={4} style={{ marginBottom: 0, marginLeft: 12 }}>PhyloPipeline</Title>
+                            <Title level={4} style={{ marginBottom: 0, marginLeft: 12 }}>PhyloTreeMiner</Title>
                         </div>
                     </a>
                     <Space>
@@ -133,7 +133,7 @@ const HomePage = () => {
 
                 <FooterComponent />
                 {/* <Footer style={{ textAlign: 'center', background: '#FFFFFFEC', color: '#B4B4B4FF'}}>
-                PhyloPipeline ©{new Date().getFullYear()} Created by JohKemPo
+                PhyloTreeMiner ©{new Date().getFullYear()} Created by JohKemPo
                 </Footer> */}
             </Layout>
         </div>

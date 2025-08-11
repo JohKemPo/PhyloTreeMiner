@@ -43,8 +43,8 @@ import Logo from './logo';
 
 
 const navLinks = [
-    { label: 'Recursos', href: '#highlights' },
-    { label: 'Sobre', href: '#sobre' },
+    { label: 'Highlights', href: '#highlights' },
+    { label: 'About Us', href: '#sobre' },
     { label: 'FAQ', href: '#faq' },
 ];
 
@@ -91,7 +91,7 @@ const AppAppBar = ({ mode, toggleColorMode }) => {
                                 ml: 2, fontWeight: 'bold', mr: 3,
                                 color: (theme) => theme.palette.mode === 'light' ? 'primary.main' : 'primary.light',
                             }} >
-                                PhyloPipeline
+                                PhyloTreeMiner
                             </Typography>
                         </Link>
                         {navLinks.map((link) => (
@@ -110,7 +110,7 @@ const AppAppBar = ({ mode, toggleColorMode }) => {
                         <Tooltip title="Projeto no GitHub">
                             <IconButton
                                 color="primary"
-                                href="https://github.com/SEU_USUARIO/SEU_REPOSITORIO"
+                                href="https://github.com/"
                                 target="_blank"
                             >
                                 <GitHubIcon />
@@ -118,7 +118,7 @@ const AppAppBar = ({ mode, toggleColorMode }) => {
                         </Tooltip>
 
                         <Button variant="contained" color="primary" onClick={handleStartWorking}>
-                            Começar a trabalhar
+                            Start working
                         </Button>
                     </Box>
                 </Toolbar>
