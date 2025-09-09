@@ -58,14 +58,14 @@ class Neo4jService:
             async for record in result:
                 for value in record.values():
                     if isinstance(value, Path):
-                        for node in value.nodes:
-                            node_id = node.element_id
+                        for path_node in value.nodes:
+                            node_id = path_node.element_id
                             if node_id not in nodes:
                                 nodes[node_id] = {
                                     'id': node_id,
-                                    'label': list(node.labels)[0] if node.labels else 'Node',
-                                    'properties': dict(node),
-                                    'title': dict(node).get('name', node_id)
+                                    'label': list(path_node.labels)[0] if path_node.labels else 'Node',
+                                    'properties': dict(path_node),
+                                    'title': dict(path_node).get('name', node_id)
                                 }
                         for rel in value.relationships:
                             edge_id = rel.element_id
@@ -84,8 +84,8 @@ class Neo4jService:
                             nodes[node_id] = {
                                 'id': node_id,
                                 'label': list(value.labels)[0] if value.labels else 'Node',
-                                'properties': dict(node),
-                                'title': dict(node).get('name', node_id)
+                                'properties': dict(value),
+                                'title': dict(value).get('name', node_id)
                             }
                     
                     elif isinstance(value, Relationship):
@@ -98,13 +98,14 @@ class Neo4jService:
                                 'label': value.type,
                                 'properties': dict(value)
                             }
-                            for node in [value.start_node, value.end_node]:
-                                if node.element_id not in nodes:
-                                     nodes[node.element_id] = {
-                                        'id': node.element_id,
-                                        'label': list(node.labels)[0] if node.labels else 'Node',
-                                        'properties': dict(node),
-                                        'title': dict(node).get('name', node.element_id)
+                            for related_node in [value.start_node, value.end_node]:
+                                node_id = related_node.element_id
+                                if node_id not in nodes:
+                                    nodes[node_id] = {
+                                        'id': node_id,
+                                        'label': list(related_node.labels)[0] if related_node.labels else 'Node',
+                                        'properties': dict(related_node),
+                                        'title': dict(related_node).get('name', node_id)
                                     }
         
         return {'nodes': list(nodes.values()), 'edges': list(edges.values())}

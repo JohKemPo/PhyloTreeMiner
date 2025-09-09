@@ -32,6 +32,7 @@ import PhylogeneticTreeViewer from "../../components/analysis/PhylogeneticTreeVi
 import TableView from "../../components/common/TableView";
 import TreeComparisonViewer from "../analysis/TreeComparisonViewer";
 import TreePatternAnalysis from "../analysis/TreePatternAnalysis";
+import CQLExecutor from "../CQLExecutor";
 
 const { Option } = Select;
 
@@ -410,7 +411,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
         );
       case "patternAnalysis":
         return (
-          <div style={{...viewerContainerStyle, marginTop: 16}}>
+          <div style={{ ...viewerContainerStyle, marginTop: 16 }}>
             <TreePatternAnalysis projectName={selectedProject} />
           </div>
         );
@@ -443,6 +444,16 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
             alt={modalItem?.name}
             style={{ maxWidth: "100%", maxHeight: "75vh" }}
           />
+        );
+      case "cql":
+        return (
+          <div style={viewerContainerStyle}>
+            <CQLExecutor
+              fileContent={modalContent}
+              fileName={modalItem?.name}
+              onClose={handleCloseModal}
+            />
+          </div>
         );
       case "error":
         return <Empty description="Could not load file contents." />;

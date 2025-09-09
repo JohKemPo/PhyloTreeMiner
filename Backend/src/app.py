@@ -15,7 +15,7 @@ import numpy as np
 from dendropy import Tree, TreeList, TaxonNamespace
 from dendropy.calculate import treecompare
 
-from src.routers import neo4j_router, ncbi_router
+from src.routers import neo4j_router, ncbi_router, cql_router
 from src.services.neo4j_services import neo4j_service
 from src.services.ncbi_acquisition import NCBIAcquisition
 
@@ -67,6 +67,11 @@ app.include_router(
     tags=["Neo4j"]
 )
 
+app.include_router(
+    cql_router.router,
+    prefix="/api/cql",
+    tags=["cql"]
+) 
 
 app.include_router(
     ncbi_router.router,
@@ -586,8 +591,10 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
             file_type = "clustal"
         elif any(full_path.endswith(ext) for ext in [".csv", ".tsv"]):
             file_type = "table"
-        elif any(full_path.endswith(ext) for ext in [".log", ".txt", ".cql"]):
+        elif any(full_path.endswith(ext) for ext in [".log", ".txt"]):
             file_type = "text"
+        elif any(full_path.endswith(ext) for ext in [".cql"]):
+            file_type = "cql"
         elif full_path.endswith(".json"):
             file_type = "json"
         
