@@ -179,7 +179,7 @@ const CQLExecutor = ({
 
   const executeCQLByBlocks = async () => {
     if (!fileContent) {
-      message.warning("Nenhum arquivo carregado para executar!");
+      message.warning("No files loaded to run!");
       return;
     }
 
@@ -192,7 +192,7 @@ const CQLExecutor = ({
     const totalBlocks = blocks.length;
 
     if (totalBlocks === 0) {
-      message.warning("Nenhum comando válido encontrado no arquivo!");
+      message.warning("No valid commands found in file!");
       setIsExecuting(false);
       return;
     }
@@ -206,8 +206,8 @@ const CQLExecutor = ({
 
     const notificationId = addNotification({
       type: "info",
-      message: "Executando script CQL",
-      description: `Preparando ${totalBlocks} blocos...`,
+      message: "Running CQL script",
+      description: `Preparing ${totalBlocks} blocks...`,
       duration: 0,
       showProgress: true,
       progress: 0,
@@ -235,7 +235,7 @@ const CQLExecutor = ({
 
         const block = blocks[i];
         if (!isValidCQLBlock(block)) {
-          console.error(`Bloco ${i} é inválido:`, block);
+          console.error(`Block ${i} is invalid:`, block);
           failed++;
           continue;
         }
@@ -266,7 +266,7 @@ const CQLExecutor = ({
 
           const result = await response.json();
           if (!result.success) {
-            throw new Error(`Bloco ${i} falhou`);
+            throw new Error(`Block ${i} failed`);
           }
 
           completed++;
@@ -275,11 +275,10 @@ const CQLExecutor = ({
             break;
           }
           failed++;
-          console.error(`Erro no bloco ${i}:`, error);
+          console.error(`Block error ${i}:`, error);
 
-          console.log("Bloco problemático:", block);
           if (parameters && Object.keys(parameters).length > 0) {
-            console.log("Parâmetros:", parameters);
+            console.log("Parameters:", parameters);
           }
         }
 
@@ -294,9 +293,9 @@ const CQLExecutor = ({
 
         updateNotification(notificationId, {
           progress,
-          description: `Processando bloco ${
+          description: `Processing block ${
             i + 1
-          }/${totalBlocks}... (${completed} sucessos, ${failed} falhas)`,
+          }/${totalBlocks}... (${completed} sucess, ${failed} failures)`,
         });
 
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -307,8 +306,8 @@ const CQLExecutor = ({
       if (executionControllerRef.current.signal.aborted) {
         updateNotification(notificationId, {
           type: "warning",
-          message: "Execução interrompida",
-          description: `Execução interrompida pelo usuário. ${completed}/${totalBlocks} blocos processados.`,
+          message: "Execution interrupted",
+          description: `Execution interrupted by user. ${completed}/${totalBlocks} processed blocks.`,
           duration: 5,
         });
       } else {
@@ -324,19 +323,19 @@ const CQLExecutor = ({
 
         updateNotification(notificationId, {
           type: "success",
-          message: "Execução concluída",
-          description: `${completed}/${totalBlocks} blocos executados com sucesso`,
+          message: "Execution completed",
+          description: `${completed}/${totalBlocks} blocks executed successfully`,
           duration: 5,
         });
       }
     } catch (error) {
-      console.error("Falha na execução:", error);
+      console.error("Fexecution failure:", error);
       setIsExecuting(false);
 
       if (currentNotificationId) {
         updateNotification(currentNotificationId, {
           type: "error",
-          message: "Erro na execução",
+          message: "Execution error",
           description: error.message,
           duration: 5,
         });
@@ -354,7 +353,7 @@ const CQLExecutor = ({
       const closeParens = (block.match(/\)/g) || []).length;
       
       if (openParens !== closeParens) {
-        console.warn("Parênteses desbalanceados no bloco:", block);
+        console.warn("Unbalanced parentheses in the block:", block);
         return false;
       }
       
@@ -365,7 +364,7 @@ const CQLExecutor = ({
     }
     
     if (!block.endsWith(';')) {
-      console.warn("Bloco não termina com ponto e vírgula:", block);
+      console.warn("Block does not end with semicolon:", block);
       return false;
     }
     
@@ -401,19 +400,19 @@ const CQLExecutor = ({
       setFileName(file.name);
       setFileContent(file.response?.content || "");
 
-      message.success(`${file.name} carregado com sucesso!`);
+      message.success(`${file.name} successfully loaded!`);
       setTimeout(() => setUploadProgress(0), 2000);
     } else if (file.status === "error") {
       setIsUploading(false);
       setUploadProgress(0);
-      message.error(`${file.name} falhou no upload.`);
+      message.error(`${file.name} upload failed.`);
     }
   };
 
   const beforeUpload = (file) => {
     const isCQL = file.name.endsWith(".cql");
     if (!isCQL) {
-      message.error("Apenas arquivos .cql são permitidos!");
+      message.error("Only .cql files are allowed!");
       return Upload.LIST_IGNORE;
     }
     return true;
@@ -461,7 +460,7 @@ const CQLExecutor = ({
       title={
         <Space>
           <FileTextOutlined />
-          <span>Executor de Scripts CQL</span>
+          <span>CQL Script Executor</span>
         </Space>
       }
       style={{ width: "100%" }}
@@ -473,32 +472,12 @@ const CQLExecutor = ({
     >
       <Space direction="vertical" style={{ width: "100%" }} size="middle">
         <div>
-          <Text>
-            Selecione um arquivo .cql para executar no banco de dados:
-          </Text>
-          <Upload
-            customRequest={customRequest}
-            beforeUpload={beforeUpload}
-            onChange={handleFileUpload}
-            showUploadList={false}
-            accept=".cql"
-            disabled={isUploading || isExecuting}
-          >
-            <Button
-              icon={<UploadOutlined />}
-              style={{ marginTop: "8px" }}
-              disabled={isUploading || isExecuting}
-              loading={isUploading}
-            >
-              {isUploading ? "Enviando..." : "Selecionar Arquivo CQL"}
-            </Button>
-          </Upload>
 
           {isUploading && (
             <div style={{ marginTop: "8px" }}>
               <Progress percent={uploadProgress} status="active" />
               <Text type="secondary">
-                Enviando arquivo... {uploadProgress}%
+                Sending file... {uploadProgress}%
               </Text>
             </div>
           )}
@@ -509,8 +488,8 @@ const CQLExecutor = ({
                 <Space direction="vertical" style={{ width: "100%" }}>
                   <Text strong>{fileName}</Text>
                   <Text type="secondary" style={{ fontSize: "12px" }}>
-                    {fileContent.length} caracteres,{" "}
-                    {fileContent.split("\n").length} linhas
+                    {fileContent.length} characters,{" "}
+                    {fileContent.split("\n").length} lines
                   </Text>
                 </Space>
               }
@@ -543,7 +522,7 @@ const CQLExecutor = ({
                     loading={isExecuting}
                     disabled={!fileContent || isUploading}
                   >
-                    Executar
+                    Upload
                   </Button>
                 </Space>
               }
@@ -554,7 +533,7 @@ const CQLExecutor = ({
         {fileContent && !isUploading && (
           <Card
             size="small"
-            title="Pré-visualização do Script"
+            title="Script Preview"
             style={{ marginTop: "16px" }}
           >
             <pre
@@ -573,7 +552,7 @@ const CQLExecutor = ({
         )}
 
         {isExecuting && (
-          <Card size="small" title="Execução em Andamento">
+          <Card size="small" title="Execution in Progress">
             <Space direction="vertical" style={{ width: "100%" }}>
               <Progress
                 percent={executionStats.progress}
@@ -585,25 +564,25 @@ const CQLExecutor = ({
               <Row gutter={16}>
                 <Col span={6}>
                   <Statistic
-                    title="Total de Blocos"
+                    title="Total Blocks"
                     value={executionStats.totalBlocks}
                   />
                 </Col>
                 <Col span={6}>
                   <Statistic
-                    title="Completos"
+                    title="Complete"
                     value={executionStats.completedBlocks}
                   />
                 </Col>
                 <Col span={6}>
                   <Statistic
-                    title="Falhas"
+                    title="Failures"
                     value={executionStats.failedBlocks}
                   />
                 </Col>
                 <Col span={6}>
                   <Statistic
-                    title="Progresso"
+                    title="Progress"
                     value={`${executionStats.progress}%`}
                   />
                 </Col>
@@ -619,7 +598,7 @@ const CQLExecutor = ({
                   {isPaused ? "Continuar" : "Pausar"}
                 </Button> */}
                 <Button danger onClick={stopExecution}>
-                  Parar Execução
+                  Stop Execution
                 </Button>
               </Space>
             </Space>
@@ -628,23 +607,23 @@ const CQLExecutor = ({
 
         {executionResult && (
           <div>
-            <Title level={5}>Resultado da Execução:</Title>
+            <Title level={5}>Execution Result:</Title>
             {executionResult.error ? (
               <Alert
-                message="Erro na Execução"
+                message="Execution Error"
                 description={executionResult.error}
                 type="error"
                 showIcon
               />
             ) : (
               <Alert
-                message="Execução Bem-sucedida"
+                message="Successful Execution"
                 description={
                   <div>
-                    <p>Script executado com sucesso!</p>
+                    <p>Script executed successfully!</p>
                     {executionResult.stats && (
                       <div>
-                        <p>Estatísticas:</p>
+                        <p>Statistics:</p>
                         <pre
                           style={{
                             fontSize: "12px",

@@ -17,7 +17,7 @@ import {
   Space,
   Popover,
   notification,
-  Select,
+  Alert,
 } from "antd";
 import {
   InfoCircleOutlined,
@@ -32,6 +32,7 @@ import {
 import QueryResultTable from "./QueryResultTable";
 import JsonViewer from "./JsonViewer";
 import PhylogeneticQueriesDocumentation from "../../pages/docs/PhylogeneticQueriesDocumentation";
+import { useNotification } from "../../contexts/NotificationContext";
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -47,6 +48,8 @@ const GraphVisualization = () => {
   const [predefinedQueries, setPredefinedQueries] = useState({});
   const [selectedNode, setSelectedNode] = useState(null);
   const [viewMode, setViewMode] = useState("initial");
+
+  const { addNotification } = useNotification();
 
   const [connectionDetails, setConnectionDetails] = useState({
     connected: false,
@@ -122,36 +125,52 @@ const GraphVisualization = () => {
     },
   };
 
-  useEffect(() => {
-    const API_URL = "http://localhost:8000/api/neo4j";
+  const API_URL = "http://localhost:8000/api/neo4j";
 
-    const checkConnection = async () => {
-      try {
-        checkConnectionStatus();
-        const response = await fetch(`${API_URL}/status`);
-        const data = await response.json();
-        setConnectionStatus(data.connected);
-      } catch (error) {
-        console.error("Erro ao verificar status:", error);
-        setConnectionStatus(false);
-      }
-    };
+  const checkConnectionStatus = async () => {
+    try {
+      const response = await fetch(`${API_URL}/status`);
+      const data = await response.json();
 
-    const checkConnectionStatus = async () => {
-      try {
-        const response = await fetch(`${API_URL}/status`);
-        const data = await response.json();
-        setConnectionDetails(data);
-      } catch (error) {
-        console.error("Erro ao verificar status:", error);
-        setConnectionDetails({
-          connected: false,
-          uri: "Não foi possível obter",
-          username: "Não foi possível obter",
+      setConnectionStatus(data.connected);
+      setConnectionDetails(data);
+
+      if (!data.connected) {
+        addNotification({
+          message: "Neo4j Connection Required",
+          type: "warning",
+          description: (
+            <Space direction="vertical">
+              <span style={{ textAlign: "justify" }}>
+                You are currently <b>disconnected</b>. Please provide your Neo4j
+                Aura instance credentials or create a new instance to continue.
+              </span>
+
+              <Button
+                type="primary"
+                icon={<InfoCircleOutlined />}
+                href="https://neo4j.com/docs/aura/classic/auradb/getting-started/create-database/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Create an Instance
+              </Button>
+            </Space>
+          ),
         });
       }
-    };
+    } catch (error) {
+      console.error("Erro ao verificar status:", error);
+      setConnectionStatus(false);
+      setConnectionDetails({
+        connected: false,
+        uri: "Não foi possível obter",
+        username: "Não foi possível obter",
+      });
+    }
+  };
 
+  useEffect(() => {
     const loadPredefinedQueries = async () => {
       try {
         const response = await fetch(`${API_URL}/predefined-queries`);
@@ -166,7 +185,7 @@ const GraphVisualization = () => {
       }
     };
 
-    checkConnection();
+    checkConnectionStatus();
     loadPredefinedQueries();
 
     return () => {
@@ -368,19 +387,44 @@ const GraphVisualization = () => {
 
   return (
     <>
+      <Alert
+        message="Attention!"
+        description={
+          <>
+            This tool provides only a <b>quick and simplified</b> way of using
+            <b> Neo4j</b>. For a more complete and detailed view of your
+            queries, please use the official console at{" "}
+            <a
+              href="https://console-preview.neo4j.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Neo4j Aura Lab
+            </a>
+            .
+          </>
+        }
+        type="info"
+        showIcon
+        closable
+        style={{ marginBottom: 16, maxWidth: "725px" }}
+      />
+
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={8}>
           <Card
             title="Graph Control Panel"
             style={{ marginBottom: 16 }}
             extra={
-              <Button
-                type="primary"
-                icon={<ReadOutlined />}
-                onClick={showModal}
-              >
-                Reference Guide
-              </Button>
+              <Space>
+                <Button
+                  type="primary"
+                  icon={<ReadOutlined />}
+                  onClick={showModal}
+                >
+                  Documentation
+                </Button>
+              </Space>
             }
           >
             <Paragraph>

@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { Layout, Menu, Button, Typography, Space, Flex, Modal } from "antd";
+import {
+  Layout,
+  Menu,
+  Button,
+  Typography,
+  Space,
+  Flex,
+  ConfigProvider,
+} from "antd";
 import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
@@ -52,6 +60,7 @@ function App() {
       key: "/doc",
       icon: <ReadOutlined />,
       label: <Link to="/doc">Documentation</Link>,
+      disabled: true
     },
   ];
 
@@ -60,123 +69,125 @@ function App() {
     ? currentPage.label.props.children
     : "Dashboard";
   return (
-    <NotificationProvider>
-      <Layout style={{ height: "100vh" }}>
-        <Sider
-          trigger={null}
-          collapsible
-          collapsed={collapsed}
-          width={250}
-          style={{
-            backgroundColor: colors.white,
-            borderRight: `1px solid ${colors.border}`,
-            transition: "all 0.2s",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-          }}
-        >
-          <a href="/">
-            <div
-              className="logo-container"
+    <ConfigProvider>
+      <NotificationProvider>
+        <Layout style={{ height: "100vh" }}>
+          <Sider
+            trigger={null}
+            collapsible
+            collapsed={collapsed}
+            width={250}
+            style={{
+              backgroundColor: colors.white,
+              borderRight: `1px solid ${colors.border}`,
+              transition: "all 0.2s",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <a href="/">
+              <div
+                className="logo-container"
+                style={{
+                  height: "64px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 10px",
+                  backgroundColor: colors.white,
+                }}
+              >
+                <Logo size="30px" />
+                {!collapsed && (
+                  <Title
+                    level={4}
+                    style={{
+                      color: colors.textDark,
+                      marginBottom: 0,
+                      marginLeft: "12px",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    PhyloTreeMiner
+                  </Title>
+                )}
+              </div>
+            </a>
+
+            <Menu
+              mode="inline"
+              selectedKeys={[location.pathname]}
+              // onClick={(e) => setCurrentView(e.key)}
+              items={menuItems}
+              style={{ borderRight: 0, backgroundColor: colors.white }}
+            />
+          </Sider>
+          <Layout style={{ backgroundColor: colors.background }}>
+            <Header
               style={{
-                height: "64px",
+                padding: "0 24px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                padding: "0 10px",
                 backgroundColor: colors.white,
+                borderBottom: `1px solid ${colors.border}`,
+                position: "sticky",
+                top: 0,
+                zIndex: 10,
               }}
             >
-              <Logo size="30px" />
-              {!collapsed && (
-                <Title
-                  level={4}
-                  style={{
-                    color: colors.textDark,
-                    marginBottom: 0,
-                    marginLeft: "12px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  PhyloTreeMiner
-                </Title>
-              )}
-            </div>
-          </a>
+              <Flex
+                justify="space-between"
+                align="center"
+                style={{ width: "100%" }}
+              >
+                <Space align="center" size="middle">
+                  <Button
+                    type="text"
+                    icon={
+                      collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
+                    }
+                    onClick={toggleCollapsed}
+                    style={{ fontSize: "16px" }}
+                  />
+                  <Title
+                    level={5}
+                    style={{ marginBottom: 0, color: "#8F8F8FFF" }}
+                  >
+                    {pageTitle}
+                  </Title>
+                </Space>
+                <Space align="center" size="middle">
+                  <Button shape="circle" icon={<SearchOutlined />} disabled />
+                  <Button shape="circle" icon={<BellOutlined />} disabled />
+                </Space>
+              </Flex>
+            </Header>
 
-          <Menu
-            mode="inline"
-            selectedKeys={[location.pathname]}
-            // onClick={(e) => setCurrentView(e.key)}
-            items={menuItems}
-            style={{ borderRight: 0, backgroundColor: colors.white }}
-          />
-        </Sider>
-        <Layout style={{ backgroundColor: colors.background }}>
-          <Header
-            style={{
-              padding: "0 24px",
-              display: "flex",
-              alignItems: "center",
-              backgroundColor: colors.white,
-              borderBottom: `1px solid ${colors.border}`,
-              position: "sticky",
-              top: 0,
-              zIndex: 10,
-            }}
-          >
-            <Flex
-              justify="space-between"
-              align="center"
-              style={{ width: "100%" }}
-            >
-              <Space align="center" size="middle">
-                <Button
-                  type="text"
-                  icon={
-                    collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
-                  }
-                  onClick={toggleCollapsed}
-                  style={{ fontSize: "16px" }}
-                />
-                <Title
-                  level={5}
-                  style={{ marginBottom: 0, color: "#8F8F8FFF" }}
-                >
-                  {pageTitle}
-                </Title>
-              </Space>
-              <Space align="center" size="middle">
-                <Button shape="circle" icon={<SearchOutlined />} disabled />
-                <Button shape="circle" icon={<BellOutlined />} disabled />
-              </Space>
-            </Flex>
-          </Header>
-
-          <Content
-            style={{
-              overflow: "auto",
-              flex: "1 1 auto",
-              padding: "24px",
-            }}
-          >
-            {/* {renderContent()} */}
-            <Outlet />
-            <Footer
+            <Content
               style={{
-                textAlign: "center",
-                backgroundColor: colors.background,
-                color: colors.textMedium,
+                overflow: "auto",
+                flex: "1 1 auto",
+                padding: "24px",
               }}
             >
-              PhyloTreeMiner ©{new Date().getFullYear()} Created by
-              PhyloTreeMiner@UFF
-            </Footer>
-          </Content>
+              {/* {renderContent()} */}
+              <Outlet />
+              <Footer
+                style={{
+                  textAlign: "center",
+                  backgroundColor: colors.background,
+                  color: colors.textMedium,
+                }}
+              >
+                PhyloTreeMiner ©{new Date().getFullYear()} Created by
+                PhyloTreeMiner@UFF
+              </Footer>
+            </Content>
+          </Layout>
         </Layout>
-      </Layout>
-    </NotificationProvider>
+      </NotificationProvider>
+    </ConfigProvider>
   );
 }
 

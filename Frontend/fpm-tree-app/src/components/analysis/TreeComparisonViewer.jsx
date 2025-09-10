@@ -73,7 +73,7 @@ const TreeComparisonViewer = ({ tree1, tree2, tree1Name, tree2Name, comparisonDa
           <Card>
             <Statistic
               title="Quartet Distance"
-              value={comparisonData.quartet_distance === -1 ? 0 : comparisonData.quartet_distance}
+              value={comparisonData.quartet_distance === -1 ? '--' : comparisonData.quartet_distance}
               valueStyle={{ color: comparisonData.quartet_distance > 0 ? '#cf1322' : '#3f8600' }}
             />
             <Text type="secondary">
