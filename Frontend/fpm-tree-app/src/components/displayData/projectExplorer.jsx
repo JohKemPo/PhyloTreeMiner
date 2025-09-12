@@ -33,6 +33,7 @@ import TableView from "../../components/common/TableView";
 import TreeComparisonViewer from "../analysis/TreeComparisonViewer";
 import TreePatternAnalysis from "../analysis/TreePatternAnalysis";
 import CQLExecutor from "../CQLExecutor";
+import PhylogeneticInsights from "../analysis/Tree/PhylogeneticInsights";
 
 const { Option } = Select;
 
@@ -412,7 +413,15 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       case "patternAnalysis":
         return (
           <div style={{ ...viewerContainerStyle, marginTop: 16 }}>
-            <TreePatternAnalysis projectName={selectedProject} />
+            <Space direction="vertical" style={{width:"100%"}}>
+              <TreePatternAnalysis projectName={selectedProject} />
+
+              <PhylogeneticInsights
+                treeData={[metadata[0]]}
+                loading={false}
+                error={null}
+              />
+            </Space>
           </div>
         );
       case "newick":

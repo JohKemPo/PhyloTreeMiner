@@ -1,13 +1,4 @@
-import * as React from 'react';
-
-import {
-    ThemeProvider,
-    createTheme,
-    alpha
-} from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
 import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
 import AppBar from '@mui/material/AppBar';
 import Container from '@mui/material/Container';
 import Toolbar from '@mui/material/Toolbar';
@@ -15,13 +6,6 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
-import Stack from '@mui/material/Stack';
-import Grid from '@mui/material/Grid';
-import Card from '@mui/material/Card';
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import TextField from '@mui/material/TextField';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -30,15 +14,7 @@ import {
 
 } from '@mui/material';
 
-// Ícones
 import GitHubIcon from '@mui/icons-material/GitHub';
-import Brightness4Icon from '@mui/icons-material/Brightness4';
-import Brightness7Icon from '@mui/icons-material/Brightness7';
-import ScienceIcon from '@mui/icons-material/Science';
-import AccountTreeIcon from '@mui/icons-material/AccountTree';
-import AnalyticsIcon from '@mui/icons-material/Analytics';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Logo from './logo';
 
 
@@ -46,7 +22,7 @@ const navLinks = [
     { label: 'Highlights', href: '#highlights' },
     { label: 'About Us', href: '#sobre' },
     // { label: 'FAQ', href: '#faq' },
-    { label: 'Documentation', href: '/doc' },
+    // { label: 'Documentation', href: '/doc' },
 ];
 
 

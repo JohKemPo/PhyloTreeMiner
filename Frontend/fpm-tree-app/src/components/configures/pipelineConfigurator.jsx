@@ -448,8 +448,8 @@ const PipelineConfigurator = () => {
       tree_config: {
         mode: trees.mode === "auto" ? "auto" : trees.mode,
         ignore_mode: Array.isArray(trees.ignore_mode)
-          ? trees.ignore_mode
-          : "",
+          ? trees.ignore_mode[0]
+          : trees.ignore_mode,
         construct_tree_method:
           trees.mode === "manual" ? trees.algorithm_reconstruct : "nj",
         align_method:

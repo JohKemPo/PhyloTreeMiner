@@ -133,9 +133,9 @@ const TreePatternAnalysis = ({ projectName }) => {
         <Title level={2}>
           Tree Pattern Analysis
         </Title>
-        <Button size="small" onClick={fetchAnalysis}>
+        {/* <Button size="small" onClick={fetchAnalysis}>
           Reload Analysis
-        </Button>
+        </Button> */}
       </Flex>
 
       <Row gutter={16} style={{ marginBottom: 24 }}>

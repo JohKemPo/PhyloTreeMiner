@@ -10,6 +10,7 @@ import TestPage from './pages/testPage.jsx';
 import HomePage from './pages/homePage.jsx';
 import AnalysisPage from './pages/AnalysisPage.jsx';
 import DocumentationHome from './pages/DocumentationHome.jsx';
+import SystemHealth from './components/displayData/SystemHealth.jsx';
 
 const NotFoundPage = () => (
   <Result
@@ -49,6 +50,10 @@ const router = createBrowserRouter([
       {
         path: 'doc',
         element: <DocumentationHome/>, 
+      },
+      {
+        path: 'systemHealth',
+        element: <SystemHealth/>, 
       },
     ]
   }
