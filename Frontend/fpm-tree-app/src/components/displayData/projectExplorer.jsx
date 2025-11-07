@@ -26,6 +26,7 @@ import {
   FileOutlined,
   HomeOutlined,
   BarChartOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import MSAViewer from "../../components/analysis/MSAViewer";
 import PhylogeneticTreeViewer from "../../components/analysis/PhylogeneticTreeViewer";
@@ -63,6 +64,8 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
   const [isComparisonAllowed, setIsComparisonAllowed] = useState(false);
   const [isComparisonLoading, setIsComparisonLoading] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
+
+  const [showInfoAlert, setShowInfoAlert] = useState(true);
 
   const API_BASE_URL = "http://localhost:8000";
   const directoryContentRef = useRef([]);
@@ -474,6 +477,22 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       case "nexus":
         return (
           <div style={viewerContainerStyle}>
+            {showInfoAlert && (
+              <Alert
+                message="Interactive Features"
+                description={
+                  <div>
+                    <p><strong>• Clickable Taxa/Terminals:</strong> Click on any taxon/terminal to view detailed information about the sequence.</p>
+                    <p><strong>• Filters and Highlights:</strong> Apply filters to the view and highlight groups of common information for comparative analysis.</p>
+                  </div>
+                }
+                type="info"
+                showIcon
+                closable
+                onClose={() => setShowInfoAlert(false)}
+                style={{ marginBottom: 16 }}
+              />
+            )}
             <PhylogeneticTreeViewer data={modalContent} metadata={metadata} />
           </div>
         );
@@ -536,7 +555,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       );
       const isTree = isTreeFile(item);
       const isLoading = isItemLoading(item.path);
-
+      setShowAnalysis(true)
       return (
         <List.Item
           onClick={() => !isLoading && handleItemClick(item)}

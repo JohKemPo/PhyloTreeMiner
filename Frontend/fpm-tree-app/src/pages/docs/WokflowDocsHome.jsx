@@ -12,15 +12,16 @@ import {
   Space,
   Card,
   Alert,
-  Tag
+  Tag,
+  Button,
+  Steps
 } from "antd";
 import {
   HomeOutlined,
-  SearchOutlined,
   FileTextOutlined,
   BookOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
+  RocketOutlined,
+  AppstoreOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
 import Logo from '../../pages/componentsHomepage/logo'
@@ -40,6 +41,7 @@ const PhyloTreeMinerDocs = () => {
   ]);
 
   // Estrutura completa da documentação
+
   const documentationStructure = {
     home: {
       title: "PhyloTreeMiner Docs",
@@ -74,8 +76,7 @@ const PhyloTreeMinerDocs = () => {
                 )}
               </div>
             <Title level={3} type="secondary">
-              Identificação Paralela de Subárvores Frequentes em Análises
-              Filogenéticas
+              Parallel Identification of Frequent Subtrees in Phylogenetic Analyses
             </Title>
           </div>
 
@@ -87,47 +88,47 @@ const PhyloTreeMinerDocs = () => {
             }}
           >
             <Paragraph style={{ fontSize: "16px", margin: 0 }}>
-              <strong>🚀 Uma plataforma computacional avançada</strong> para
-              automatizar a análise filogenética em larga escala, proporcionando
-              uma solução sistemática, paralela e reprodutível para identificar
-              padrões evolutivos robustos.
+              <strong>An advanced computational platform</strong> for
+              automating large-scale phylogenetic analysis, providing
+              a systematic, parallel, and reproducible solution to identify
+              robust evolutionary patterns.
             </Paragraph>
           </Card>
 
           <Divider />
 
-          <Title level={2}>🎯 Objetivo Principal</Title>
+          <Title level={2}>Main Objective</Title>
           <Paragraph>
-            Diante do{" "}
-            <Text strong>crescimento exponencial de dados biológicos</Text> e da
-            capacidade de gerar árvores filogenéticas cada vez maiores, surge um
-            novo desafio: como extrair conhecimento confiável de milhares de
-            árvores que podem ser geradas a partir do mesmo conjunto de dados.
+            Facing the{" "}
+            <Text strong>exponential growth of biological data</Text> and the
+            capacity to generate increasingly larger phylogenetic trees, a new
+            challenge arises: how to extract reliable knowledge from thousands
+            of trees that can be generated from the same dataset.
           </Paragraph>
 
           <Alert
-            message="Mudança de Paradigma"
-            description="O PhyloTreeMiner move o foco da 'busca pela árvore única e correta' para a 'identificação das relações evolutivas mais robustas e confiáveis'"
+            message="Paradigm Shift"
+            description="PhyloTreeMiner shifts the focus from 'searching for the single correct tree' to 'identifying the most robust and reliable evolutionary relationships'"
             type="info"
             showIcon
             style={{ marginBottom: 24 }}
           />
 
-          <Title level={2}>🔍 O Problema: A Incerteza Filogenética</Title>
+          <Title level={2}>🔍 The Problem: Phylogenetic Uncertainty</Title>
 
           <Card style={{ marginBottom: 16 }}>
             <Title level={4}>
-              📊 Por quê? O Desafio da Escolha Metodológica
+              Why? The Methodological Choice Challenge
             </Title>
             <Paragraph>
-              A construção de uma árvore filogenética não é um processo único.
-              Existem múltiplas filosofias e métodos:
+              Building a phylogenetic tree is not a unique process.
+              There are multiple philosophies and methods:
             </Paragraph>
             <List
               dataSource={[
-                "Máxima Parsimônia",
-                "Máxima Verossimilhança",
-                "Matriz de Distâncias",
+                "Maximum Parsimony",
+                "Maximum Likelihood",
+                "Distance Matrix",
               ]}
               renderItem={(item) => (
                 <List.Item>
@@ -138,16 +139,16 @@ const PhyloTreeMinerDocs = () => {
           </Card>
 
           <Alert
-            message="Questões Críticas"
+            message="Critical Questions"
             description={
               <List
                 size="small"
                 dataSource={[
-                  "Como extrair conhecimento útil da variação metodológica?",
-                  "Como identificar padrões evolutivos confiáveis em meio a discordância?",
-                  "Por que as árvores de consenso tradicionais são inadequadas?",
+                  "How to extract useful knowledge from methodological variation?",
+                  "How to identify reliable evolutionary patterns amidst disagreement?",
+                  "Why are traditional consensus trees inadequate?",
                 ]}
-                renderItem={(item) => <List.Item>• {item}</List.Item>}
+                renderItem={(item) => <List.Item>{item}</List.Item>}
               />
             }
             type="warning"
@@ -156,56 +157,56 @@ const PhyloTreeMinerDocs = () => {
 
           <Divider />
 
-          <Title level={2}>💡 A Solução: Foco na Robustez</Title>
+          <Title level={2}>The Solution: Focus on Robustness</Title>
 
           <Card
             type="inner"
-            title="🎯 O que é Robustez Filogenética?"
+            title="What is Phylogenetic Robustness?"
             style={{ marginBottom: 24 }}
           >
             <Paragraph>
-              Um padrão (clado) que é identificado consistentemente por métodos
-              com premissas matemáticas e estatísticas completamente diferentes
-              é, por definição, um padrão de{" "}
-              <Text strong>altíssima confiança</Text>, e não um artefato de um
-              único método.
+              A pattern (clade) that is consistently identified by methods
+              with completely different mathematical and statistical premises
+              is, by definition, a pattern of{" "}
+              <Text strong>very high confidence</Text>, and not an artifact of a
+              single method.
             </Paragraph>
           </Card>
 
-          <Title level={2}>⚙️ Como Funciona: O Workflow Automatizado</Title>
+          <Title level={2}>How It Works: The Automated Workflow</Title>
 
           <List
             itemLayout="vertical"
             dataSource={[
               {
-                title: "1. 📥 Aquisição e Pré-processamento",
+                title: "1. Acquisition and Pre-processing",
                 content:
-                  "Aquisição de sequências (arquivos Fasta ou consulta direta ao NCBI) com validação e preparação dos dados",
+                  "Sequence acquisition (Fasta files or direct NCBI query) with data validation and preparation",
               },
               {
-                title: "2. 🔄 Alinhamento Múltiplo de Sequências",
+                title: "2. Multiple Sequence Alignment",
                 content:
-                  "Alinhamento usando diferentes programas (ClustalW, MAFFT) para criar a base da comparação estrutural",
+                  "Alignment using different programs (ClustalW, MAFFT) to create the basis for structural comparison",
               },
               {
-                title: "3. 🌳 Inferência das Árvores (O Ensemble)",
+                title: "3. Tree Inference (The Ensemble)",
                 content:
-                  "Geração paralela de um conjunto robusto de árvores candidatas usando múltiplos métodos de inferência",
+                  "Parallel generation of a robust set of candidate trees using multiple inference methods",
               },
               {
-                title: "4. 🎯 Geração e Mapeamento de Subárvores",
+                title: "4. Subtree Generation and Mapping",
                 content:
-                  "Decomposição de cada árvore em subárvores com enriquecimento de metadados (país, data, etc.)",
+                  "Decomposition of each tree into subtrees with metadata enrichment (country, date, etc.)",
               },
               {
-                title: "5. 📊 Mineração (Cálculo de Frequência)",
+                title: "5. Mining (Frequency Calculation)",
                 content:
-                  "Comparação de todas as subárvores usando algoritmo FPMax para calcular frequência de padrões topológicos",
+                  "Comparison of all subtrees using FPMax algorithm to calculate topological pattern frequency",
               },
               {
-                title: "6. 📈 Representação de Conhecimento",
+                title: "6. Knowledge Representation",
                 content:
-                  "Exportação para banco de dados de grafos (Neo4j) para visualização interativa e consultas complexas",
+                  "Export to graph database (Neo4j) for interactive visualization and complex queries",
               },
             ]}
             renderItem={(item) => (
@@ -217,50 +218,50 @@ const PhyloTreeMinerDocs = () => {
 
           <Divider />
 
-          <Title level={2}>🌟 Funcionalidades Chave e Sua Importância</Title>
+          <Title level={2}>Key Features and Their Importance</Title>
 
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col span={12}>
               <Card
                 size="small"
-                title="🔄 Múltiplas Metodologias de Inferência"
+                title="Multiple Inference Methodologies"
                 style={{ height: "100%" }}
               >
                 <Paragraph>
-                  <strong>Base do "teste de estresse" metodológico</strong>.
-                  Integra um arsenal abrangente incluindo:
+                  <strong>Basis of the methodological "stress test"</strong>.
+                  Integrates a comprehensive arsenal including:
                 </Paragraph>
                 <List
                   size="small"
                   dataSource={[
-                    "Métodos de Distância (NJ, UPGMA)",
-                    "Máxima Verossimilhança (RAxML, IQ-TREE)",
-                    "Inferência Bayesiana (MrBayes)",
+                    "Distance Methods (NJ, UPGMA)",
+                    "Maximum Likelihood (RAxML, IQ-TREE)",
+                    "Bayesian Inference (MrBayes)",
                   ]}
-                  renderItem={(item) => <List.Item>• {item}</List.Item>}
+                  renderItem={(item) => <List.Item>{item}</List.Item>}
                 />
               </Card>
             </Col>
             <Col span={12}>
               <Card
                 size="small"
-                title="🌐 Integração com NCBI"
+                title="NCBI Integration"
                 style={{ height: "100%" }}
               >
                 <Paragraph>
                   <strong>
-                    Aquisição e enriquecimento automático de dados
+                    Automated data acquisition and enrichment
                   </strong>
-                  . Consulta direta ao banco de dados do NCBI para:
+                  . Direct query to NCBI database for:
                 </Paragraph>
                 <List
                   size="small"
                   dataSource={[
-                    "Automatizar aquisição de sequências",
-                    "Associar metadados cruciais (data, localização, gene)",
-                    "Transformar padrões abstratos em informações acionáveis",
+                    "Automating sequence acquisition",
+                    "Associating crucial metadata (date, location, gene)",
+                    "Transforming abstract patterns into actionable information",
                   ]}
-                  renderItem={(item) => <List.Item>• {item}</List.Item>}
+                  renderItem={(item) => <List.Item>{item}</List.Item>}
                 />
               </Card>
             </Col>
@@ -270,43 +271,43 @@ const PhyloTreeMinerDocs = () => {
             <Col span={12}>
               <Card
                 size="small"
-                title="⚡ Algoritmo FPMax"
+                title="FPMax Algorithm"
                 style={{ height: "100%" }}
               >
                 <Paragraph>
-                  <strong>Mineração eficiente em larga escala</strong>. Torna
-                  viável a comparação de milhares de árvores e milhões de
-                  subárvores:
+                  <strong>Efficient large-scale mining</strong>. Makes
+                  feasible the comparison of thousands of trees and millions of
+                  subtrees:
                 </Paragraph>
                 <List
                   size="small"
                   dataSource={[
-                    "Abordagem de ciência da computação de alto desempenho",
-                    "Resolução de problemas NP-difíceis",
-                    "Análise concluída em tempo hábil",
+                    "High-performance computer science approach",
+                    "Solving NP-hard problems",
+                    "Analysis completed in reasonable time",
                   ]}
-                  renderItem={(item) => <List.Item>• {item}</List.Item>}
+                  renderItem={(item) => <List.Item>{item}</List.Item>}
                 />
               </Card>
             </Col>
             <Col span={12}>
               <Card
                 size="small"
-                title="📈 Integração com OWID"
+                title="OWID Integration"
                 style={{ height: "100%" }}
               >
                 <Paragraph>
-                  <strong>Contextualização epidemiológica em tempo real</strong>
-                  . Conecta padrões filogenéticos com dados do mundo real:
+                  <strong>Real-time epidemiological contextualization</strong>
+                  . Connects phylogenetic patterns with real-world data:
                 </Paragraph>
                 <List
                   size="small"
                   dataSource={[
-                    "Validação de impacto de variantes",
-                    "Sistema de alerta precoce",
-                    "Monitoramento de intervenções",
+                    "Variant impact validation",
+                    "Early warning system",
+                    "Intervention monitoring",
                   ]}
-                  renderItem={(item) => <List.Item>• {item}</List.Item>}
+                  renderItem={(item) => <List.Item>{item}</List.Item>}
                 />
               </Card>
             </Col>
@@ -314,11 +315,11 @@ const PhyloTreeMinerDocs = () => {
 
           <Divider />
 
-          <Title level={2}>🎯 Insights Geográficos e Temporais</Title>
+          <Title level={2}>Geographical and Temporal Insights</Title>
 
           <Alert
-            message="Transformando Dados em Conhecimento Acionável"
-            description="O PhyloTreeMiner não apenas encontra padrões frequentes, mas os contextualiza no espaço e no tempo, fornecendo insights profundos sobre dinâmica evolutiva"
+            message="Transforming Data into Actionable Knowledge"
+            description="PhyloTreeMiner not only finds frequent patterns but contextualizes them in space and time, providing deep insights into evolutionary dynamics"
             type="success"
             showIcon
             style={{ marginBottom: 24 }}
@@ -328,30 +329,30 @@ const PhyloTreeMinerDocs = () => {
             <Col span={8}>
               <Card size="small" style={{ textAlign: "center" }}>
                 <div style={{ fontSize: "24px", marginBottom: 8 }}>🌍</div>
-                <Title level={4}>Análise Geográfica</Title>
+                <Title level={4}>Geographical Analysis</Title>
                 <Paragraph>
-                  Rastreamento de linhagens por região, identificação de rotas
-                  de dispersão e hotspots evolutivos
+                  Lineage tracking by region, identification of dispersal
+                  routes and evolutionary hotspots
                 </Paragraph>
               </Card>
             </Col>
             <Col span={8}>
               <Card size="small" style={{ textAlign: "center" }}>
                 <div style={{ fontSize: "24px", marginBottom: 8 }}>📅</div>
-                <Title level={4}>Análise Temporal</Title>
+                <Title level={4}>Temporal Analysis</Title>
                 <Paragraph>
-                  Monitoramento da emergência e declínio de linhagens ao longo
-                  do tempo, detectando tendências evolutivas
+                  Monitoring emergence and decline of lineages over
+                  time, detecting evolutionary trends
                 </Paragraph>
               </Card>
             </Col>
             <Col span={8}>
               <Card size="small" style={{ textAlign: "center" }}>
                 <div style={{ fontSize: "24px", marginBottom: 8 }}>🔗</div>
-                <Title level={4}>Correlação Epidemiológica</Title>
+                <Title level={4}>Epidemiological Correlation</Title>
                 <Paragraph>
-                  Integração com dados de saúde pública para validar impacto
-                  biológico de padrões genéticos
+                  Integration with public health data to validate biological
+                  impact of genetic patterns
                 </Paragraph>
               </Card>
             </Col>
@@ -365,19 +366,463 @@ const PhyloTreeMinerDocs = () => {
               border: "1px solid #ffd591",
             }}
           >
-            <Title level={3}>💫 Por que o PhyloTreeMiner é Essencial?</Title>
+            <Title level={3}>Why PhyloTreeMiner is Essential?</Title>
             <Paragraph>
-              Em um mundo com dados biológicos crescendo exponencialmente,
-              ferramentas tradicionais tornam-se inadequadas. O PhyloTreeMiner
-              representa a{" "}
-              <Text strong>próxima geração de análise filogenética</Text>, onde
-              a robustez metodológica, a escalabilidade computacional e a
-              contextualização epidemiológica se unem para fornecer insights
-              confiáveis e acionáveis para pesquisa e saúde pública.
+              In a world with biological data growing exponentially,
+              traditional tools become inadequate. PhyloTreeMiner
+              represents the{" "}
+              <Text strong>next generation of phylogenetic analysis</Text>, where
+              methodological robustness, computational scalability and
+              epidemiological contextualization come together to provide
+              reliable and actionable insights for research and public health.
             </Paragraph>
           </Card>
         </div>
       ),
+    },
+    phylotreeminerWebapp: {
+      title: "PhyloTreeMiner WebApp",
+      icon: <AppstoreOutlined />,
+      count: 4,
+      subsections: {
+        gettingStarted: {
+          title: "Getting Started with the WebApp",
+          content: (
+            <div>
+              <Title level={2}>PhyloTreeMiner WebApp Guide</Title>
+
+              <Alert
+                message="Interactive Web Interface"
+                description="Configure and execute phylogenetic analyses through an intuitive web interface"
+                type="info"
+                showIcon
+                style={{ marginBottom: 24 }}
+              />
+
+              <Paragraph>
+                The PhyloTreeMiner WebApp provides a user-friendly interface to configure, 
+                manage, and execute phylogenetic analysis workflows without needing command-line expertise.
+              </Paragraph>
+
+              <Card
+                title="🚀 Quick Start"
+                style={{ marginBottom: 24 }}
+                type="inner"
+              >
+                <List
+                  bordered
+                  dataSource={[
+                    "Access the WebApp through your browser",
+                    "Navigate to Workflow Settings to create a new project",
+                    "Configure your analysis parameters in three simple steps",
+                    "Select your dataset or download from NCBI",
+                    "Review and launch your analysis",
+                  ]}
+                  renderItem={(item) => (
+                    <List.Item>
+                      <Text strong>{item}</Text>
+                    </List.Item>
+                  )}
+                />
+              </Card>
+
+              <Title level={3}>Accessing the WebApp</Title>
+              <Paragraph>
+                To start using the PhyloTreeMiner WebApp, simply access the workflow configuration page:
+              </Paragraph>
+
+              <Card style={{ marginBottom: 16 }}>
+                <div style={{ textAlign: "center", padding: "16px" }}>
+                  <Button 
+                    type="primary" 
+                    size="large"
+                    onClick={() => window.location.href = '/workflow'}
+                    icon={<RocketOutlined />}
+                  >
+                    Go to Workflow Settings
+                  </Button>
+                  <Paragraph style={{ marginTop: 8, marginBottom: 0 }}>
+                    Or navigate to: <Text code>/workflow</Text> in the sidebar menu
+                  </Paragraph>
+                </div>
+              </Card>
+            </div>
+          ),
+        },
+        workflowConfiguration: {
+          title: "Workflow Configuration Steps",
+          content: (
+            <div>
+              <Title level={2}>Step-by-Step Workflow Configuration</Title>
+
+              <Alert
+                message="Three-Step Configuration Process"
+                description="Follow these steps to configure your phylogenetic analysis"
+                type="info"
+                showIcon
+                style={{ marginBottom: 24 }}
+              />
+
+              <Steps
+                current={0}
+                direction="vertical"
+                items={[
+                  {
+                    title: "Step 1: Workflow Configuration",
+                    description: "Set the core parameters for tree and subtree construction",
+                    status: "process",
+                  },
+                  {
+                    title: "Step 2: Dataset Selection",
+                    description: "Choose existing data, upload files, or search NCBI",
+                    status: "wait",
+                  },
+                  {
+                    title: "Step 3: Review and Start",
+                    description: "Confirm settings and launch the analysis",
+                    status: "wait",
+                  },
+                ]}
+              />
+
+              <Divider />
+
+              <Title level={3}>Step 1: Workflow Configuration</Title>
+
+              <Card style={{ marginBottom: 24 }}>
+                <Title level={4}>Project Setup</Title>
+                <List
+                  size="small"
+                  dataSource={[
+                    "Project Name: Choose a unique identifier for your analysis",
+                    "Log File: Automatically generated based on project name and date",
+                    "Construction Mode: Select between automatic, manual, or advanced modes",
+                  ]}
+                  renderItem={(item) => <List.Item>{item}</List.Item>}
+                />
+              </Card>
+
+              <Card style={{ marginBottom: 24 }}>
+                <Title level={4}>Tree Building Settings</Title>
+                <Row gutter={[16, 16]}>
+                  <Alert
+                    message="Large datasets"
+                    description="For very large sets of sequences, we suggest selecting the MrBayes and Parsimony methods to be ignored."
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 24 }}
+                  />
+                </Row>
+                <Row gutter={[16, 16]}>
+                  <Col span={12}>
+                    <Card size="small" title="Construction Mode">
+                      <List
+                        size="small"
+                        dataSource={[
+                          "Auto: Distance and parsimony methods only",
+                          "Manual: Full control over individual methods",
+                          "Advanced: All available method combinations",
+                        ]}
+                        renderItem={(item) => <List.Item>{item}</List.Item>}
+                      />
+                    </Card>
+                  </Col>
+                  <Col span={12}>
+                    <Card size="small" title="Method Configuration">
+                      <List
+                        size="small"
+                        dataSource={[
+                          "Ignore Methods: Optionally exclude specific algorithms",
+                          "Threads: Set CPU threads for parallel processing",
+                          "Formats: Choose input/output formats (Nexus/Newick)",
+                        ]}
+                        renderItem={(item) => <List.Item>{item}</List.Item>}
+                      />
+                    </Card>
+                  </Col>
+                </Row>
+              </Card>
+
+              <Card style={{ marginBottom: 24 }}>
+                <Title level={4}>Subtree Construction</Title>
+                <List
+                  size="small"
+                  dataSource={[
+                    "Construction Method: Distance or Parsimony based",
+                    "Input/Output Formats: Inherited from main tree settings",
+                    "Metadata Options: Save subtree metadata and JSON files",
+                    "Subtree Mining: Enable pattern discovery in subtrees",
+                  ]}
+                  renderItem={(item) => <List.Item>{item}</List.Item>}
+                />
+              </Card>
+
+              <Card style={{ marginBottom: 24 }}>
+                <Title level={4}>Subtree Mining (Optional)</Title>
+                <Paragraph>
+                  When subtree mining is enabled, configure additional parameters:
+                </Paragraph>
+                <List
+                  size="small"
+                  dataSource={[
+                    "Save FPMax Results: Store frequent pattern mining results",
+                    "FPMax Support: Automatic or manual support threshold setting",
+                    "Support Value: Manual threshold from 0.1 to 1.0 (if manual mode)",
+                  ]}
+                  renderItem={(item) => <List.Item>{item}</List.Item>}
+                />
+              </Card>
+
+              <Alert
+                message="Pro Tip"
+                description="Use the 'Need Help?' button for interactive guidance through each configuration section"
+                type="info"
+                showIcon
+              />
+            </div>
+          ),
+        },
+        datasetManagement: {
+          title: "Dataset Selection & Management",
+          content: (
+            <div>
+              <Title level={2}>Dataset Selection and Management</Title>
+
+              <Alert
+                message="Multiple Data Sources"
+                description="Choose from existing datasets, upload new files, or download from NCBI"
+                type="info"
+                showIcon
+                style={{ marginBottom: 24 }}
+              />
+
+              <Title level={3}>Step 2: Data Source Options</Title>
+
+              <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col span={8}>
+                  <Card
+                    title="📁 Existing Datasets"
+                    style={{ height: "100%" }}
+                    type="inner"
+                  >
+                    <Paragraph>
+                      <strong>Pre-uploaded Data</strong>
+                    </Paragraph>
+                    <List
+                      size="small"
+                      dataSource={[
+                        "Select from previously uploaded datasets",
+                        "Automatic folder detection",
+                        "Quick access to processed sequences",
+                      ]}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
+                    />
+                  </Card>
+                </Col>
+                <Col span={8}>
+                  <Card
+                    title="⬆️ Upload New Data"
+                    style={{ height: "100%" }}
+                    type="inner"
+                  >
+                    <Paragraph>
+                      <strong>Local File Upload</strong>
+                    </Paragraph>
+                    <List
+                      size="small"
+                      dataSource={[
+                        "Drag-and-drop interface",
+                        "Supports FASTA and ZIP files",
+                        "Automatic sequence validation",
+                        "Custom dataset naming",
+                      ]}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
+                    />
+                  </Card>
+                </Col>
+                <Col span={8}>
+                  <Card
+                    title="🌐 NCBI Search (Beta)"
+                    style={{ height: "100%" }}
+                    type="inner"
+                  >
+                    <Paragraph>
+                      <strong>Direct Database Access</strong>
+                    </Paragraph>
+                    <List
+                      size="small"
+                      dataSource={[
+                        "Real-time NCBI queries",
+                        "Species-specific searches",
+                        "Automatic sequence filtering",
+                        "Advanced quality controls",
+                      ]}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+
+              <Title level={3}>NCBI Search Features</Title>
+
+              <Card style={{ marginBottom: 24 }}>
+                <List
+                  bordered
+                  dataSource={[
+                    "Search Query: Use NCBI query syntax for precise results",
+                    "Species Selection: Choose from auto-detected species",
+                    "Sequence Limits: Set maximum number of sequences to download",
+                    "Email Requirement: NCBI requires valid email for queries",
+                    "Advanced Filters: Length thresholds, UTR trimming, similarity filtering",
+                  ]}
+                  renderItem={(item) => (
+                    <List.Item>
+                      <Text>{item}</Text>
+                    </List.Item>
+                  )}
+                />
+              </Card>
+
+              <Alert
+                message="NCBI Search Tips"
+                description={
+                  <div>
+                    <p>Use <Text strong>[Organism]</Text> for species-specific searches</p>
+                    <p>Example: <Text code>"Zika virus[Organism] AND complete genome"</Text></p>
+                    <p>Leave 'Save As' empty for automatic naming based on species</p>
+                  </div>
+                }
+                type="warning"
+                showIcon
+              />
+            </div>
+          ),
+        },
+        reviewExecution: {
+          title: "Review & Execution",
+          content: (
+            <div>
+              <Title level={2}>Review and Launch Analysis</Title>
+
+              <Alert
+                message="Final Verification"
+                description="Review all settings before starting the computational workflow"
+                type="warning"
+                showIcon
+                style={{ marginBottom: 24 }}
+              />
+
+              <Title level={3}>Step 3: Final Review</Title>
+
+              <Paragraph>
+                Before launching your analysis, carefully review all configuration settings:
+              </Paragraph>
+
+              <Card style={{ marginBottom: 24 }}>
+                <Title level={4}>Configuration Summary</Title>
+                <List
+                  bordered
+                  dataSource={[
+                    "Workflow Configuration: Tree and subtree construction parameters",
+                    "Dataset Information: Selected data source and file details",
+                    "Performance Settings: Thread allocation and resource usage",
+                    "Output Settings: File formats and storage locations",
+                  ]}
+                  renderItem={(item) => (
+                    <List.Item>
+                      <Text strong>{item}</Text>
+                    </List.Item>
+                  )}
+                />
+              </Card>
+
+              <Title level={3}>Launching the Workflow</Title>
+
+              <Card style={{ marginBottom: 24 }}>
+                <List
+                  bordered
+                  dataSource={[
+                    "Click 'Start Workflow' to begin execution",
+                    "Monitor progress in the Projects section",
+                    "Access logs and results in the output directory",
+                    "Receive completion notifications",
+                  ]}
+                  renderItem={(item) => (
+                    <List.Item>
+                      <Text>{item}</Text>
+                    </List.Item>
+                  )}
+                />
+              </Card>
+
+              <Row gutter={[16, 16]}>
+                <Col span={12}>
+                  <Card
+                    size="small"
+                    title="📊 Expected Outputs"
+                    style={{ height: "100%" }}
+                  >
+                    <List
+                      size="small"
+                      dataSource={[
+                        "Phylogenetic trees in selected format",
+                        "Subtree decompositions and metadata",
+                        "FPMax mining results (if enabled)",
+                        "Execution logs and performance metrics",
+                      ]}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
+                    />
+                  </Card>
+                </Col>
+                <Col span={12}>
+                  <Card
+                    size="small"
+                    title="⏱️ Execution Time"
+                    style={{ height: "100%" }}
+                  >
+                    <List
+                      size="small"
+                      dataSource={[
+                        "Depends on dataset size and complexity",
+                        "Influenced by selected methods and threads",
+                        "Larger datasets may take several hours",
+                        "Monitor progress in real-time",
+                      ]}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+
+              <Divider />
+
+              <Card
+                style={{
+                  backgroundColor: "#f6ffed",
+                  border: "1px solid #b7eb8f",
+                }}
+              >
+                <Title level={4}>Ready to Start?</Title>
+                <Paragraph>
+                  Once you've reviewed all settings and selected your dataset, 
+                  click the 'Start Workflow' button to begin your phylogenetic analysis. 
+                  The system will handle all computational steps automatically.
+                </Paragraph>
+                <div style={{ textAlign: "center", marginTop: 16 }}>
+                  <Button 
+                    type="primary" 
+                    size="large"
+                    onClick={() => window.location.href = '/workflow'}
+                    icon={<RocketOutlined />}
+                  >
+                    Configure New Workflow
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          ),
+        },
+      },
     },
     workflowGuide: {
       title: "Workflow Guide",
@@ -388,36 +833,36 @@ const PhyloTreeMinerDocs = () => {
           title: "Workflow Overview",
           content: (
             <div>
-              <Title level={2}>🌳 PhyloTreeMiner Workflow Overview</Title>
+              <Title level={2}>PhyloTreeMiner Workflow Overview</Title>
 
               <Alert
-                message="Fluxo de Trabalho Integrado"
-                description="Pipeline completo e automatizado para análise filogenética em larga escala"
+                message="Integrated Workflow"
+                description="Complete and automated pipeline for large-scale phylogenetic analysis"
                 type="info"
                 showIcon
                 style={{ marginBottom: 24 }}
               />
 
               <Paragraph>
-                O PhyloTreeMiner fornece um workflow completo e padronizado para
-                análises filogenéticas, encapsulado em um ambiente Docker. A
-                solução permite a execução de pipelines de alinhamento e
-                construção de árvores filogenéticas de forma{" "}
-                <Text strong>reprodutível e eficiente</Text>.
+                PhyloTreeMiner provides a complete and standardized workflow for
+                phylogenetic analyses, encapsulated in a Docker environment. The
+                solution allows execution of alignment and phylogenetic tree
+                construction pipelines in a{" "}
+                <Text strong>reproducible and efficient</Text> manner.
               </Paragraph>
 
               <Card
-                title="📋 Etapas do Workflow"
+                title="📋 Workflow Steps"
                 style={{ marginBottom: 24 }}
                 type="inner"
               >
                 <List
                   bordered
                   dataSource={[
-                    "🔍 Alinhamento de sequências usando MAFFT ou Clustal Omega",
-                    "🌳 Construção de árvores filogenéticas usando IQ-TREE ou RAxML-NG",
-                    "🎯 Mineração e análise de subárvores",
-                    "📊 Geração de resultados e coleta de metadados",
+                    "Sequence alignment using MAFFT or Clustal Omega",
+                    "Phylogenetic tree construction using IQ-TREE or RAxML-NG",
+                    "Subtree mining and analysis",
+                    "Result generation and metadata collection",
                   ]}
                   renderItem={(item) => (
                     <List.Item>
@@ -427,37 +872,36 @@ const PhyloTreeMinerDocs = () => {
                 />
               </Card>
 
-              <Title level={3}>🎯 Componentes Principais</Title>
+              <Title level={3}>Main Components</Title>
               <Paragraph>
-                O workflow é controlado por um arquivo de configuração JSON que
-                fornece
-                <Text strong> flexibilidade total</Text> na escolha de métodos e
-                parâmetros para cada etapa de análise.
+                The workflow is controlled by a JSON configuration file that
+                provides
+                <Text strong> total flexibility</Text> in choosing methods and
+                parameters for each analysis step.
               </Paragraph>
 
               <Row gutter={[16, 16]}>
                 <Col span={12}>
                   <Card
                     size="small"
-                    title="⚙️ Configuração"
+                    title="Configuration"
                     style={{ height: "100%" }}
                   >
                     <Paragraph>
-                      <code>templates/config.json</code> define todos os
-                      parâmetros para construção de árvores e mineração de
-                      subárvores
+                      <code>templates/config.json</code> defines all
+                      parameters for tree construction and subtree mining
                     </Paragraph>
                   </Card>
                 </Col>
                 <Col span={12}>
                   <Card
                     size="small"
-                    title="🐳 Containerização"
+                    title="Containerization"
                     style={{ height: "100%" }}
                   >
                     <Paragraph>
-                      Ambiente Docker completo com todas as dependências
-                      pré-instaladas para máxima reprodutibilidade
+                      Complete Docker environment with all dependencies
+                      pre-installed for maximum reproducibility
                     </Paragraph>
                   </Card>
                 </Col>
@@ -469,33 +913,32 @@ const PhyloTreeMinerDocs = () => {
           title: "Configuration Guide",
           content: (
             <div>
-              <Title level={2}>⚙️ Guia de Configuração</Title>
+              <Title level={2}>Configuration Guide</Title>
 
               <Alert
-                message="Arquivo de Configuração Central"
-                description="Todo o workflow é controlado através do templates/config.json"
+                message="Central Configuration File"
+                description="The entire workflow is controlled through templates/config.json"
                 type="warning"
                 showIcon
                 style={{ marginBottom: 24 }}
               />
 
               <Paragraph>
-                O workflow é configurado através do arquivo{" "}
-                <code>templates/config.json</code>. Este arquivo JSON define
-                todos os parâmetros para construção de árvores e mineração de
-                subárvores.
+                The workflow is configured through the{" "}
+                <code>templates/config.json</code> file. This JSON file defines
+                all parameters for tree construction and subtree mining.
               </Paragraph>
 
               <Card
-                title="📁 Seções Principais de Configuração"
+                title="Main Configuration Sections"
                 style={{ marginBottom: 24 }}
               >
                 <List
                   bordered
                   dataSource={[
-                    "🌳 tree_config: Parâmetros principais de construção de árvores",
-                    "🎯 subtree_config: Configuração de mineração de subárvores",
-                    "⚡ subtree_miner_configs: Configurações específicas do algoritmo de mineração",
+                    "tree_config: Main tree construction parameters",
+                    "subtree_config: Subtree mining configuration",
+                    "subtree_miner_configs: Specific mining algorithm configurations",
                   ]}
                   renderItem={(item) => (
                     <List.Item>
@@ -505,9 +948,9 @@ const PhyloTreeMinerDocs = () => {
                 />
               </Card>
 
-              <Title level={3}>📋 Exemplo de Configuração</Title>
+              <Title level={3}>📋 Configuration Example</Title>
               <Paragraph>
-                Configuração básica para uma análise padrão:
+                Basic configuration for a standard analysis:
               </Paragraph>
 
               <Card>
@@ -521,15 +964,15 @@ const PhyloTreeMinerDocs = () => {
                 >
                   {`{
   "log_file": true,
-  "project_name": "MinhaAnalise",
+  "project_name": "MyAnalysis",
   "output_log": "./projects/#/out",
   "tree_config": {
     "mode": "auto",
     "construct_tree_method": "distance",
     "align_method": "mafft",
     "num_threads": 4,
-    "input_path": "./data/minhas_sequencias",
-    "output_path": "./projects/MinhaAnalise/out",
+    "input_path": "./data/my_sequences",
+    "output_path": "./projects/MyAnalysis/out",
     "output_format": "nexus"
   },
   "subtree_config": {
@@ -547,8 +990,8 @@ const PhyloTreeMinerDocs = () => {
               </Card>
 
               <Alert
-                message="Dica de Performance"
-                description="Ajuste 'num_threads' conforme o número de CPUs disponíveis para processamento paralelo"
+                message="Performance Tip"
+                description="Adjust 'num_threads' according to available CPUs for parallel processing"
                 type="info"
                 showIcon
                 style={{ marginTop: 16 }}
@@ -560,22 +1003,22 @@ const PhyloTreeMinerDocs = () => {
           title: "Input & Output Formats",
           content: (
             <div>
-              <Title level={2}>📁 Formatos de Entrada e Saída</Title>
+              <Title level={2}>Input and Output Formats</Title>
 
               <Row gutter={[16, 24]}>
                 <Col span={12}>
                   <Card
-                    title="📥 Requisitos de Entrada"
+                    title="📥 Input Requirements"
                     style={{ height: "100%" }}
                     type="inner"
                   >
                     <List
                       bordered
                       dataSource={[
-                        "Sequências de entrada: Formato FASTA (.fasta, .fa)",
-                        "Múltiplos arquivos de sequência suportados",
-                        "Processamento em lote automático de conjuntos de dados",
-                        "Validação automática de formato e conteúdo",
+                        "Input sequences: FASTA format (.fasta, .fa)",
+                        "Multiple sequence files supported",
+                        "Automatic batch processing of datasets",
+                        "Automatic format and content validation",
                       ]}
                       renderItem={(item) => (
                         <List.Item>
@@ -587,18 +1030,18 @@ const PhyloTreeMinerDocs = () => {
                 </Col>
                 <Col span={12}>
                   <Card
-                    title="📤 Formatos de Saída"
+                    title="📤 Output Formats"
                     style={{ height: "100%" }}
                     type="inner"
                   >
                     <List
                       bordered
                       dataSource={[
-                        "Árvores: Nexus (.nexus) ou Newick (.nwk)",
-                        "Alinhamentos: Formatos de alinhamento padrão",
-                        "Arquivos de log: Logs de execução detalhados",
-                        "Metadados: JSON com metadados para subárvores mineradas",
-                        "Resultados FPMax: Padrões frequentes identificados",
+                        "Trees: Nexus (.nexus) or Newick (.nwk)",
+                        "Alignments: Standard alignment formats",
+                        "Log files: Detailed execution logs",
+                        "Metadata: JSON with metadata for mined subtrees",
+                        "FPMax Results: Identified frequent patterns",
                       ]}
                       renderItem={(item) => (
                         <List.Item>
@@ -612,7 +1055,7 @@ const PhyloTreeMinerDocs = () => {
 
               <Divider />
 
-              <Title level={3}>🎯 Estrutura de Diretórios</Title>
+              <Title level={3}>Directory Structure</Title>
 
               <Card>
                 <pre
@@ -623,19 +1066,19 @@ const PhyloTreeMinerDocs = () => {
                     borderRadius: "4px",
                   }}
                 >
-                  {`projeto/
-├── data/                 # Dados de entrada
-│   ├── sequencias.fasta
-│   └── outro_conjunto.fa
+                  {`project/
+├── data/                 # Input data
+│   ├── sequences.fasta
+│   └── another_dataset.fa
 ├── templates/
-│   └── config.json      # Arquivo de configuração
-└── projects/            # Resultados das análises
-    └── MeuProjeto/
+│   └── config.json      # Configuration file
+└── projects/            # Analysis results
+    └── MyProject/
         ├── out/
-        │   ├── Trees/   # Árvores geradas
-        │   ├── Alignments/ # Alinhamentos
-        │   └── logs/    # Logs de execução
-        └── resultados/  # Resultados finais`}
+        │   ├── Trees/   # Generated trees
+        │   ├── Alignments/ # Alignments
+        │   └── logs/    # Execution logs
+        └── results/     # Final results`}
                 </pre>
               </Card>
             </div>
@@ -645,33 +1088,33 @@ const PhyloTreeMinerDocs = () => {
           title: "Performance Optimization",
           content: (
             <div>
-              <Title level={2}>⚡ Otimização de Performance</Title>
+              <Title level={2}>Performance Optimization</Title>
 
               <Alert
-                message="Otimização para Larga Escala"
-                description="Configure adequadamente para lidar com grandes conjuntos de dados filogenéticos"
+                message="Optimization for Large Scale"
+                description="Configure properly to handle large phylogenetic datasets"
                 type="warning"
                 showIcon
                 style={{ marginBottom: 24 }}
               />
 
               <Paragraph>
-                Otimize a execução do workflow configurando adequadamente a
-                alocação de recursos e processamento paralelo.
+                Optimize workflow execution by properly configuring resource
+                allocation and parallel processing.
               </Paragraph>
 
               <Card
-                title="🎯 Parâmetros Chave de Performance"
+                title="Key Performance Parameters"
                 style={{ marginBottom: 24 }}
               >
                 <List
                   bordered
                   dataSource={[
-                    "num_threads: Número de threads CPU para processamento paralelo",
-                    "align_method: Escolha entre MAFFT (mais rápido) e ClustalW",
-                    "construct_tree_method: Seleção de algoritmos de construção de árvores",
-                    "memory_allocation: Alocação de recursos no Docker",
-                    "mode: Modo de operação (auto, OFST, distance, parsimony)",
+                    "num_threads: Number of CPU threads for parallel processing",
+                    "align_method: Choice between MAFFT (faster) and ClustalW",
+                    "construct_tree_method: Selection of tree construction algorithms",
+                    "memory_allocation: Resource allocation in Docker",
+                    "mode: Operation mode (auto, OFST, distance, parsimony)",
                   ]}
                   renderItem={(item) => (
                     <List.Item>
@@ -681,9 +1124,9 @@ const PhyloTreeMinerDocs = () => {
                 />
               </Card>
 
-              <Title level={3}>💡 Configurações Recomendadas</Title>
+              <Title level={3}>💡 Recommended Settings</Title>
               <Paragraph>
-                Para performance ideal em uma estação de trabalho padrão:
+                For optimal performance on a standard workstation:
               </Paragraph>
 
               <Card style={{ marginBottom: 16 }}>
@@ -710,36 +1153,36 @@ const PhyloTreeMinerDocs = () => {
                 <Col span={12}>
                   <Card
                     size="small"
-                    title="🖥️ Hardware Recomendado"
+                    title="🖥️ Recommended Hardware"
                     style={{ height: "100%" }}
                   >
                     <List
                       size="small"
                       dataSource={[
-                        "CPU: 8+ cores para processamento paralelo",
-                        "RAM: 16GB+ para grandes conjuntos de dados",
-                        "Storage: SSD para I/O rápido de arquivos",
-                        "Docker: 4GB+ de memória alocada",
+                        "CPU: 8+ cores for parallel processing",
+                        "RAM: 16GB+ for large datasets",
+                        "Storage: SSD for fast file I/O",
+                        "Docker: 4GB+ allocated memory",
                       ]}
-                      renderItem={(item) => <List.Item>• {item}</List.Item>}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
                     />
                   </Card>
                 </Col>
                 <Col span={12}>
                   <Card
                     size="small"
-                    title="🚀 Dicas de Otimização"
+                    title="🚀 Optimization Tips"
                     style={{ height: "100%" }}
                   >
                     <List
                       size="small"
                       dataSource={[
-                        "Use MAFFT para conjuntos grandes de dados",
-                        "Ajuste num_threads conforme disponibilidade de CPU",
-                        "Monitore uso de memória durante execução",
-                        'Use modo "auto" para balanceamento automático',
+                        "Use MAFFT for large datasets",
+                        "Adjust num_threads according to CPU availability",
+                        "Monitor memory usage during execution",
+                        'Use "auto" mode for automatic balancing',
                       ]}
-                      renderItem={(item) => <List.Item>• {item}</List.Item>}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
                     />
                   </Card>
                 </Col>
@@ -758,27 +1201,27 @@ const PhyloTreeMinerDocs = () => {
           title: "Docker Execution Guide",
           content: (
             <div>
-              <Title level={2}>🐳 Guia de Execução Docker</Title>
+              <Title level={2}>Docker Execution Guide</Title>
 
               <Alert
-                message="Execução com Máxima Reprodutibilidade"
-                description="Use Docker para ambiente isolado e consistente em qualquer sistema"
+                message="Execution with Maximum Reproducibility"
+                description="Use Docker for isolated and consistent environment on any system"
                 type="info"
                 showIcon
                 style={{ marginBottom: 24 }}
               />
 
               <Paragraph>
-                Execute o workflow PhyloTreeMiner usando Docker para máxima
-                reprodutibilidade e isolamento.
+                Execute the PhyloTreeMiner workflow using Docker for maximum
+                reproducibility and isolation.
               </Paragraph>
 
               <Card
-                title="📥 Passo 1: Construir Imagem Docker"
+                title="📥 Step 1: Build Docker Image"
                 style={{ marginBottom: 16 }}
               >
                 <Paragraph>
-                  Construa a imagem Docker antes da primeira execução:
+                  Build the Docker image before first execution:
                 </Paragraph>
                 <Card>
                   <pre
@@ -794,20 +1237,21 @@ const PhyloTreeMinerDocs = () => {
                   </pre>
                 </Card>
                 <Alert
-                  message="Atenção"
-                  description="Este passo pode levar vários minutos na primeira vez enquanto o Conda baixa todas as dependências"
+                  message="Attention"
+                  description="This step may take several minutes the first time while Conda downloads all dependencies"
                   type="warning"
                   showIcon
+                  style={{marginTop: '8px'}}
                 />
               </Card>
 
               <Card
-                title="⚙️ Passo 2: Preparar Configuração"
+                title="⚙️ Step 2: Prepare Configuration"
                 style={{ marginBottom: 16 }}
               >
                 <Paragraph>
-                  Edite <code>templates/config.json</code> com os parâmetros da
-                  sua análise:
+                  Edit <code>templates/config.json</code> with your analysis
+                  parameters:
                 </Paragraph>
                 <Card>
                   <pre
@@ -819,10 +1263,10 @@ const PhyloTreeMinerDocs = () => {
                     }}
                   >
                     {`{
-  "project_name": "MinhaAnalise",
+  "project_name": "MyAnalysis",
   "tree_config": {
-    "input_path": "./data/minhas_sequencias",
-    "output_path": "./projects/MinhaAnalise/out",
+    "input_path": "./data/my_sequences",
+    "output_path": "./projects/MyAnalysis/out",
     "num_threads": 4
   }
 }`}
@@ -831,15 +1275,14 @@ const PhyloTreeMinerDocs = () => {
               </Card>
 
               <Card
-                title="🚀 Passo 3: Executar Workflow"
+                title="🚀 Step 3: Execute Workflow"
                 style={{ marginBottom: 16 }}
               >
                 <Paragraph>
-                  Execute o container com montagem de volumes para acesso aos
-                  dados:
+                  Run the container with volume mounts for data access:
                 </Paragraph>
 
-                <Title level={4}>🐧 Linux/macOS</Title>
+                <Title level={4}>Linux/macOS</Title>
                 <Card style={{ marginBottom: 16 }}>
                   <pre
                     style={{
@@ -858,7 +1301,7 @@ const PhyloTreeMinerDocs = () => {
                   </pre>
                 </Card>
 
-                <Title level={4}>🪟 Windows PowerShell</Title>
+                <Title level={4}>Windows PowerShell</Title>
                 <Card>
                   <pre
                     style={{
@@ -879,8 +1322,8 @@ const PhyloTreeMinerDocs = () => {
               </Card>
 
               <Alert
-                message="Resultados"
-                description="Após execução, seus arquivos de resultado estarão disponíveis na pasta projects/ local"
+                message="Results"
+                description="After execution, your result files will be available in the local projects/ folder"
                 type="success"
                 showIcon
               />
@@ -891,29 +1334,29 @@ const PhyloTreeMinerDocs = () => {
           title: "Local CLI Execution",
           content: (
             <div>
-              <Title level={2}>💻 Execução Local via CLI</Title>
+              <Title level={2}>Local CLI Execution</Title>
 
               <Alert
-                message="Execução Direta sem Container"
-                description="Execute o PhyloTreeMiner diretamente na sua máquina local"
+                message="Direct Execution without Container"
+                description="Execute PhyloTreeMiner directly on your local machine"
                 type="warning"
                 showIcon
                 style={{ marginBottom: 24 }}
               />
 
               <Paragraph>
-                Execute o PhyloTreeMiner diretamente na sua máquina local sem
+                Execute PhyloTreeMiner directly on your local machine without
                 Docker.
               </Paragraph>
 
-              <Card title="📋 Pré-requisitos" style={{ marginBottom: 24 }}>
+              <Card title="📋 Prerequisites" style={{ marginBottom: 24 }}>
                 <List
                   bordered
                   dataSource={[
-                    "Python 3.10 ou superior",
-                    "Todas as dependências do environment.yml",
-                    "MAFFT, IQ-TREE, RAxML-NG instalados system-wide",
-                    "Pacotes Python: Biopython, DendroPy, Pandas",
+                    "Python 3.10 or higher",
+                    "All dependencies from environment.yml",
+                    "MAFFT, IQ-TREE, RAxML-NG installed system-wide",
+                    "Python packages: Biopython, DendroPy, Pandas",
                   ]}
                   renderItem={(item) => (
                     <List.Item>
@@ -923,8 +1366,8 @@ const PhyloTreeMinerDocs = () => {
                 />
               </Card>
 
-              <Card title="⚡ Comando de Execução" style={{ marginBottom: 16 }}>
-                <Paragraph>Execute o workflow diretamente:</Paragraph>
+              <Card title="⚡ Execution Command" style={{ marginBottom: 16 }}>
+                <Paragraph>Execute the workflow directly:</Paragraph>
                 <Card style={{ marginBottom: 16 }}>
                   <pre
                     style={{
@@ -939,7 +1382,7 @@ const PhyloTreeMinerDocs = () => {
                   </pre>
                 </Card>
 
-                <Paragraph>Ou usando Python 3 explicitamente:</Paragraph>
+                <Paragraph>Or using Python 3 explicitly:</Paragraph>
                 <Card>
                   <pre
                     style={{
@@ -956,11 +1399,11 @@ const PhyloTreeMinerDocs = () => {
               </Card>
 
               <Card
-                title="🔧 Configuração do Ambiente"
+                title="Environment Configuration"
                 style={{ marginBottom: 16 }}
               >
                 <Paragraph>
-                  Crie e ative o ambiente Conda a partir do environment.yml:
+                  Create and activate the Conda environment from environment.yml:
                 </Paragraph>
                 <Card>
                   <pre
@@ -979,17 +1422,17 @@ conda activate phylotreeminer`}
               </Card>
 
               <Alert
-                message="Vantagens da Execução Local"
+                message="Local Execution Advantages"
                 description={
                   <List
                     size="small"
                     dataSource={[
-                      "Acesso direto a recursos do sistema",
-                      "Debug mais fácil",
-                      "Integração com ferramentas locais",
-                      "Performance potencialmente melhor",
+                      "Direct access to system resources",
+                      "Easier debugging",
+                      "Integration with local tools",
+                      "Potentially better performance",
                     ]}
-                    renderItem={(item) => <List.Item>• {item}</List.Item>}
+                    renderItem={(item) => <List.Item>{item}</List.Item>}
                   />
                 }
                 type="info"
@@ -1002,22 +1445,22 @@ conda activate phylotreeminer`}
           title: "Troubleshooting & Common Issues",
           content: (
             <div>
-              <Title level={2}>🔧 Solução de Problemas</Title>
+              <Title level={2}>Troubleshooting</Title>
 
               <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
                 <Col span={8}>
                   <Card
-                    title="🐳 Problemas com Docker"
+                    title="🐳 Docker Issues"
                     size="small"
                     style={{ height: "100%" }}
                   >
                     <List
                       size="small"
                       dataSource={[
-                        "Erros de permissão: Garanta acesso do Docker aos diretórios montados",
-                        "Memória insuficiente: Aumente alocação de memória no Docker Desktop",
-                        "Falhas na construção: Verifique conexão de rede para downloads",
-                        "Imagem não encontrada: Verifique nome da imagem no build",
+                        "Permission errors: Ensure Docker has access to mounted directories",
+                        "Insufficient memory: Increase memory allocation in Docker Desktop",
+                        "Build failures: Check network connection for downloads",
+                        "Image not found: Verify image name in build",
                       ]}
                       renderItem={(item) => (
                         <List.Item>
@@ -1029,17 +1472,17 @@ conda activate phylotreeminer`}
                 </Col>
                 <Col span={8}>
                   <Card
-                    title="⚡ Problemas de Execução"
+                    title="⚡ Execution Issues"
                     size="small"
                     style={{ height: "100%" }}
                   >
                     <List
                       size="small"
                       dataSource={[
-                        "Arquivos de entrada faltando: Verifique paths no config.json",
-                        "Falhas no alinhamento: Verifique formato e conteúdo do FASTA",
-                        "Erros na construção de árvores: Valide resultados do alinhamento primeiro",
-                        "Permissões negadas: Verifique permissões de escrita nos diretórios",
+                        "Missing input files: Check paths in config.json",
+                        "Alignment failures: Verify FASTA format and content",
+                        "Tree construction errors: Validate alignment results first",
+                        "Permission denied: Check write permissions in directories",
                       ]}
                       renderItem={(item) => (
                         <List.Item>
@@ -1051,17 +1494,17 @@ conda activate phylotreeminer`}
                 </Col>
                 <Col span={8}>
                   <Card
-                    title="🚀 Problemas de Performance"
+                    title="🚀 Performance Issues"
                     size="small"
                     style={{ height: "100%" }}
                   >
                     <List
                       size="small"
                       dataSource={[
-                        "Execução lenta: Aumente num_threads na configuração",
-                        "Erros de memória: Reduza num_threads ou tamanho do dataset",
-                        "Espaço em disco: Monitore crescimento do diretório projects/",
-                        "CPU sobrecarregada: Ajuste número de threads conforme disponibilidade",
+                        "Slow execution: Increase num_threads in configuration",
+                        "Memory errors: Reduce num_threads or dataset size",
+                        "Disk space: Monitor projects/ directory growth",
+                        "CPU overload: Adjust number of threads according to availability",
                       ]}
                       renderItem={(item) => (
                         <List.Item>
@@ -1073,15 +1516,15 @@ conda activate phylotreeminer`}
                 </Col>
               </Row>
 
-              <Card title="🎯 Soluções Comuns" style={{ marginBottom: 16 }}>
+              <Card title="Common Solutions" style={{ marginBottom: 16 }}>
                 <List
                   bordered
                   dataSource={[
-                    "Verifique se todos os caminhos no config.json existem",
-                    "Confirme que as sequências FASTA estão no formato correto",
-                    "Valide permissões de leitura/escrita nos diretórios data/ e projects/",
-                    "Verifique logs detalhados em projects/[nome_projeto]/out/logs/",
-                    "Teste com dataset pequeno antes de executar análise completa",
+                    "Check if all paths in config.json exist",
+                    "Confirm FASTA sequences are in correct format",
+                    "Validate read/write permissions in data/ and projects/ directories",
+                    "Check detailed logs in projects/[project_name]/out/logs/",
+                    "Test with small dataset before running complete analysis",
                   ]}
                   renderItem={(item) => (
                     <List.Item>
@@ -1092,8 +1535,8 @@ conda activate phylotreeminer`}
               </Card>
 
               <Alert
-                message="Dica de Debug"
-                description="Sempre verifique os arquivos de log para informações detalhadas sobre erros e avisos"
+                message="Debug Tip"
+                description="Always check log files for detailed information about errors and warnings"
                 type="info"
                 showIcon
               />
@@ -1111,27 +1554,27 @@ conda activate phylotreeminer`}
           title: "Alignment Tools",
           content: (
             <div>
-              <Title level={2}>🛠️ Ferramentas de Alinhamento</Title>
+              <Title level={2}>Alignment Tools</Title>
 
               <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
                 <Col span={12}>
                   <Card
                     title="⚡ MAFFT"
                     style={{ height: "100%" }}
-                    extra={<Tag color="blue">Recomendado</Tag>}
+                    extra={<Tag color="blue">Recommended</Tag>}
                   >
                     <Paragraph>
-                      <strong>Método:</strong> Multiple alignment using fast
+                      <strong>Method:</strong> Multiple alignment using fast
                       Fourier transform
                       <br />
-                      <strong>Casos de Uso:</strong> Grandes conjuntos de dados,
-                      execução mais rápida
+                      <strong>Use Cases:</strong> Large datasets,
+                      faster execution
                       <br />
-                      <strong>Configuração:</strong> align_method: "mafft"
+                      <strong>Configuration:</strong> align_method: "mafft"
                     </Paragraph>
                     <Alert
-                      message="Vantagens"
-                      description="Velocidade superior para conjuntos grandes, boa acurácia"
+                      message="Advantages"
+                      description="Superior speed for large datasets, good accuracy"
                       type="success"
                       size="small"
                     />
@@ -1140,17 +1583,17 @@ conda activate phylotreeminer`}
                 <Col span={12}>
                   <Card title="🎯 Clustal Omega" style={{ height: "100%" }}>
                     <Paragraph>
-                      <strong>Método:</strong> Progressive multiple sequence
+                      <strong>Method:</strong> Progressive multiple sequence
                       alignment
                       <br />
-                      <strong>Casos de Uso:</strong> Conjuntos menores, alta
-                      acurácia
+                      <strong>Use Cases:</strong> Smaller datasets, high
+                      accuracy
                       <br />
-                      <strong>Configuração:</strong> align_method: "clustalw"
+                      <strong>Configuration:</strong> align_method: "clustalw"
                     </Paragraph>
                     <Alert
-                      message="Características"
-                      description="Alta confiabilidade, adequado para análises precisas"
+                      message="Characteristics"
+                      description="High reliability, suitable for precise analyses"
                       type="info"
                       size="small"
                     />
@@ -1164,7 +1607,7 @@ conda activate phylotreeminer`}
           title: "Tree Construction Tools",
           content: (
             <div>
-              <Title level={2}>🌳 Ferramentas de Construção de Árvores</Title>
+              <Title level={2}>Tree Construction Tools</Title>
 
               <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
                 <Col span={8}>
@@ -1175,10 +1618,10 @@ conda activate phylotreeminer`}
                     extra={<Tag color="green">ML</Tag>}
                   >
                     <Paragraph>
-                      <strong>Método:</strong> Maximum likelihood inference
+                      <strong>Method:</strong> Maximum likelihood inference
                       <br />
-                      <strong>Casos de Uso:</strong> Inferência filogenética de
-                      alta acurácia
+                      <strong>Use Cases:</strong> High accuracy phylogenetic
+                      inference
                     </Paragraph>
                   </Card>
                 </Col>
@@ -1190,11 +1633,11 @@ conda activate phylotreeminer`}
                     extra={<Tag color="green">ML</Tag>}
                   >
                     <Paragraph>
-                      <strong>Método:</strong> Randomized Axelerated Maximum
+                      <strong>Method:</strong> Randomized Axelerated Maximum
                       Likelihood
                       <br />
-                      <strong>Casos de Uso:</strong> Análises filogenéticas em
-                      larga escala
+                      <strong>Use Cases:</strong> Large-scale phylogenetic
+                      analyses
                     </Paragraph>
                   </Card>
                 </Col>
@@ -1206,23 +1649,23 @@ conda activate phylotreeminer`}
                     extra={<Tag color="orange">Distance</Tag>}
                   >
                     <Paragraph>
-                      <strong>Método:</strong> Construção baseada em distância
+                      <strong>Method:</strong> Distance-based construction
                       <br />
-                      <strong>Casos de Uso:</strong> Construção rápida, grandes
+                      <strong>Use Cases:</strong> Fast construction, large
                       datasets
                       <br />
-                      <strong>Configuração:</strong> construct_tree_method: "nj"
+                      <strong>Configuration:</strong> construct_tree_method: "nj"
                     </Paragraph>
                   </Card>
                 </Col>
               </Row>
 
-              <Card title="📈 Comparação de Métodos">
+              <Card title="📈 Method Comparison">
                 <List
                   dataSource={[
-                    "Máxima Verossimilhança (IQ-TREE, RAxML): Alta acurácia, computacionalmente intensivo",
-                    "Neighbor-Joining: Rápido, adequado para datasets grandes e análises exploratórias",
-                    "UPGMA: Simples, baseado em agrupamento, útil para análises iniciais",
+                    "Maximum Likelihood (IQ-TREE, RAxML): High accuracy, computationally intensive",
+                    "Neighbor-Joining: Fast, suitable for large datasets and exploratory analyses",
+                    "UPGMA: Simple, clustering-based, useful for initial analyses",
                   ]}
                   renderItem={(item) => (
                     <List.Item>
@@ -1238,39 +1681,39 @@ conda activate phylotreeminer`}
           title: "Mining Algorithms",
           content: (
             <div>
-              <Title level={2}>⛏️ Algoritmos de Mineração</Title>
+              <Title level={2}>Mining Algorithms</Title>
 
               <Card
-                title="⚡ Algoritmo FPMax"
+                title="⚡ FPMax Algorithm"
                 style={{ marginBottom: 24 }}
                 extra={<Tag color="red">High Performance</Tag>}
               >
                 <Paragraph>
-                  <strong>Descrição:</strong> Algoritmo eficiente para mineração
-                  de conjuntos de itens frequentes
+                  <strong>Description:</strong> Efficient algorithm for mining
+                  frequent itemsets
                   <br />
-                  <strong>Importância:</strong> Torna viável a comparação de
-                  milhares de árvores e milhões de subárvores
+                  <strong>Importance:</strong> Makes feasible the comparison of
+                  thousands of trees and millions of subtrees
                 </Paragraph>
 
                 <Alert
-                  message="Desafio Computacional"
-                  description="Comparar centenas ou milhares de árvores e suas milhões de subárvores possíveis é um problema NP-difícil de larga escala"
+                  message="Computational Challenge"
+                  description="Comparing hundreds or thousands of trees and their possible millions of subtrees is an NP-hard large-scale problem"
                   type="warning"
                   style={{ marginBottom: 16 }}
                 />
 
-                <Title level={4}>🎯 Por que FPMax?</Title>
+                <Title level={4}>Why FPMax?</Title>
                 <List
                   dataSource={[
-                    "Abordagem de ciência da computação de alto desempenho",
-                    "Capacidade de lidar com problemas NP-difíceis",
-                    "Análise concluída em tempo hábil",
-                    "Eficiência em larga escala",
+                    "High-performance computer science approach",
+                    "Ability to handle NP-hard problems",
+                    "Analysis completed in reasonable time",
+                    "Large-scale efficiency",
                   ]}
                   renderItem={(item) => (
                     <List.Item>
-                      <Text>• {item}</Text>
+                      <Text>{item}</Text>
                     </List.Item>
                   )}
                 />
@@ -1282,55 +1725,55 @@ conda activate phylotreeminer`}
           title: "Integration Tools",
           content: (
             <div>
-              <Title level={2}>🔗 Ferramentas de Integração</Title>
+              <Title level={2}>Integration Tools</Title>
 
               <Row gutter={[16, 16]}>
                 <Col span={12}>
                   <Card
-                    title="🌐 Integração NCBI"
+                    title="🌐 NCBI Integration"
                     style={{ height: "100%" }}
                     extra={<Tag color="blue">Data Source</Tag>}
                   >
                     <Paragraph>
-                      <strong>Funcionalidade:</strong> Consulta direta ao banco
-                      de dados do NCBI
+                      <strong>Functionality:</strong> Direct query to NCBI
+                      database
                       <br />
-                      <strong>Vantagens:</strong> Aquisição automática e
-                      enriquecimento com metadados
+                      <strong>Advantages:</strong> Automated acquisition and
+                      enrichment with metadata
                     </Paragraph>
                     <List
                       size="small"
                       dataSource={[
-                        "Data de coleta",
-                        "Localização geográfica",
-                        "Informações do gene",
-                        "Metadados do organismo",
+                        "Collection date",
+                        "Geographical location",
+                        "Gene information",
+                        "Organism metadata",
                       ]}
-                      renderItem={(item) => <List.Item>• {item}</List.Item>}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
                     />
                   </Card>
                 </Col>
                 <Col span={12}>
                   <Card
-                    title="📊 Integração OWID"
+                    title="📊 OWID Integration"
                     style={{ height: "100%" }}
                     extra={<Tag color="purple">Epidemiology</Tag>}
                   >
                     <Paragraph>
-                      <strong>Funcionalidade:</strong> Cruzamento com dados
-                      epidemiológicos do Our World in Data
+                      <strong>Functionality:</strong> Cross-referencing with
+                      epidemiological data from Our World in Data
                       <br />
-                      <strong>Importância:</strong> Conexão entre padrões
-                      genéticos e dados do mundo real
+                      <strong>Importance:</strong> Connection between genetic
+                      patterns and real-world data
                     </Paragraph>
                     <List
                       size="small"
                       dataSource={[
-                        "Validação de impacto de variantes",
-                        "Sistema de alerta precoce",
-                        "Monitoramento de intervenções",
+                        "Variant impact validation",
+                        "Early warning system",
+                        "Intervention monitoring",
                       ]}
-                      renderItem={(item) => <List.Item>• {item}</List.Item>}
+                      renderItem={(item) => <List.Item>{item}</List.Item>}
                     />
                   </Card>
                 </Col>
@@ -1339,8 +1782,10 @@ conda activate phylotreeminer`}
           ),
         },
       },
-    },
+    }
   };
+
+
 
   const navigateTo = (sectionKey, subsectionKey = null) => {
     if (sectionKey === "home") {

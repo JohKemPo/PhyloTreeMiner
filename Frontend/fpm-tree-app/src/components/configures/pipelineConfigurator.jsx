@@ -296,31 +296,31 @@ const PipelineConfigurator = () => {
       try {
         const values = await form.validateFields({ recursive: true });
         
+        let ignoreMode = values.trees?.ignore_mode;
+        
+        if (Array.isArray(ignoreMode)) {
+          ignoreMode = ignoreMode.filter(method => method !== 'none');
+        } else if (ignoreMode === 'none') {
+          ignoreMode = []; 
+        }
+        
         const finalConfig = {
           general: {
             project_name: values.project_name.replace(/ /g, "_"),
-            output_dir: `projects/${values.project_name.replace(
-              / /g,
-              "_"
-            )}/out/`,
-            log_file: `projects/${values.project_name.replace(
-              / /g,
-              "_"
-            )}/out/outputs/log_setup_${
+            output_dir: `projects/${values.project_name.replace(/ /g, "_")}/out/`,
+            log_file: `projects/${values.project_name.replace(/ /g, "_")}/out/outputs/log_setup_${
               new Date().toISOString().split("T")[0]
             }.log`,
           },
-
           subtrees: {
             ...(values.subtrees || {}),
             input_format: values.trees?.output_format || "nexus",
           },
           trees: {
-            mode:
-              values.trees?.mode === "auto" ||  values.trees?.mode === "advanced"
-                ? values.trees?.mode
-                : values.trees?.construct_method,
-            ignore_mode: values.trees?.ignore_mode === 'none' ? ' ' : values.trees?.ignore_mode,
+            mode: values.trees?.mode === "auto" || values.trees?.mode === "advanced"
+              ? values.trees?.mode
+              : values.trees?.construct_method,
+            ignore_mode: ignoreMode || [], 
             num_threads: values.trees?.num_threads || 1,
             construct_method: values.trees?.algorithm_reconstruct || "nj",
             alignment_method: values.trees?.alignment_method || "mafft",
@@ -330,16 +330,6 @@ const PipelineConfigurator = () => {
           subtree_mining: values.subtree_mining,
         };
 
-        // if (values.trees?.mode === 'auto') {
-        //     finalConfig.trees = {
-        //         mode: 'auto',
-        //         ignore_mode: values.trees.ignore_mode,
-        //         num_threads: values.trees.num_threads || 1,
-        //         output_format: 'nexus'
-        //     };
-        // } else {
-        //     finalConfig.trees = values.trees;
-        // }
         finalConfig.subtrees.input_format = finalConfig.trees.output_format;
 
         setPipelineData((prev) => ({ ...prev, config: finalConfig }));
@@ -349,9 +339,7 @@ const PipelineConfigurator = () => {
       }
     } else if (current === 1) {
       if (!pipelineData.dataset) {
-        messageInfo.error(
-          "Por favor, selecione ou envie um arquivo de dataset."
-        );
+        messageInfo.error("Por favor, selecione ou envie um arquivo de dataset.");
         return;
       }
       setCurrent(current + 1);
@@ -441,6 +429,8 @@ const PipelineConfigurator = () => {
     const projectName = general.project_name || "default_project";
     const outputPath = `./projects/#/out`;
 
+    const ignoreMode = trees.ignore_mode || [];
+
     const finalFormat = {
       log_file: true,
       project_name: projectName,
@@ -448,7 +438,7 @@ const PipelineConfigurator = () => {
 
       tree_config: {
         mode: trees.mode === "auto" ? "auto" : trees.mode,
-        ignore_mode: trees.ignore_mode,
+        ignore_mode: ignoreMode,
         construct_tree_method:
           trees.mode === "manual" ? trees.algorithm_reconstruct : "nj",
         align_method:
@@ -488,9 +478,23 @@ const PipelineConfigurator = () => {
     if (typeof value === "boolean") {
       return value ? "Yes" : "No";
     }
+    
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return "None";
+      }
+      return (
+        <div>
+          {value.map((item, index) => (
+            <div key={index} style={{ marginBottom: "4px" }}>
+              {item} 
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
     if (typeof value === "object" && value !== null) {
-      // return <pre style={{ margin: 0 }}>{JSON.stringify(value, null, 4)}</pre>;
-      const datas = JSON.stringify(value, null, 4);
       const formattedDatas = Object.entries(value).map(
         ([label, children], index) => {
           return {
@@ -501,7 +505,6 @@ const PipelineConfigurator = () => {
         }
       );
 
-      // console.log('Formatted Datas:', formattedDatas);
       return (
         <Descriptions
           column={1}
@@ -511,18 +514,27 @@ const PipelineConfigurator = () => {
         >
           {formattedDatas.map((item) => (
             <Descriptions.Item key={item.key} label={item.label}>
-              {typeof item.children === "string"
-                ? item.children
-                : typeof item.children === "boolean"
-                ? item.children
-                  ? "yes"
-                  : "no"
-                : item.children}
+              {Array.isArray(item.children) ? (
+                <div>
+                  {item.children.map((child, idx) => (
+                    <div key={idx} style={{ marginBottom: "2px" }}>
+                      • {child}
+                    </div>
+                  ))}
+                </div>
+              ) : typeof item.children === "string" ? (
+                item.children
+              ) : typeof item.children === "boolean" ? (
+                item.children ? "Yes" : "No"
+              ) : (
+                item.children
+              )}
             </Descriptions.Item>
           ))}
         </Descriptions>
       );
     }
+    
     return value || "Not defined";
   };
 
@@ -619,13 +631,18 @@ const PipelineConfigurator = () => {
               <Form.Item
                 name={["trees", "mode"]}
                 label="Construction Mode"
-                initialValue="auto"
-                tooltip="Combination of all available methods for constructing trees."
+                initialValue="advanced"
+                tooltip={
+                  <p>
+                    <b>Advanced</b>: Combination of all available methods for constructing trees. <br/><br/>
+                    <b>Manual</b>: Manually select a single method. 
+                  </p>
+                }
               >
                 <Radio.Group>
-                  <Radio value="auto">Automatic (all combinations)</Radio>
+                  <Radio value="auto">Only distance and parsimony methods   </Radio>
                   <Radio value="manual">Manual</Radio>
-                  <Radio value="advanced">Advanced</Radio>
+                  <Radio value="advanced">Advanced (all combinations)</Radio>
                 </Radio.Group>
               </Form.Item>
             </Col>
@@ -635,15 +652,20 @@ const PipelineConfigurator = () => {
               <Form.Item
                 name={["trees", "ignore_mode"]}
                 label="Ignore Methods (Optional)"
-                initialValue="parsimony"
+                tooltip="Select multiple methods to ignore in auto/advanced modes"
               >
                 <Select
-                  placeholder="Select methods to ignore in auto mode"
+                  mode="multiple" 
+                  placeholder="Select methods to ignore"
                   allowClear
                 >
                   <Option value="distance">Distance</Option>
-                  <Option value="parsimony">Parsimônia</Option>
-                  <Option value="none">None</Option>
+                  <Option value="parsimony">Parsimony</Option>
+                  <Option value="iqtree">IQ-TREE</Option>
+                  <Option value="fasttree">FastTree</Option>
+                  <Option value="raxml">RAxML</Option>
+                  <Option value="mrbayes">MrBayes</Option>
+                  <Option value="none" tooltip='aaaaaa'>None</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -882,7 +904,6 @@ const PipelineConfigurator = () => {
 
           <Text strong>OR</Text>
 
-         
           <div style={{ marginTop: 16 }}>
             <Space direction="horizontal">
               <div>

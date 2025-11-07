@@ -10,7 +10,13 @@ BACKEND_URL="http://localhost:8000"
 FRONTEND_URL=""
 
 # Conda paths
-CONDA_BASE="/home/joh/miniconda3"
+CONDA_BASE=$(conda info --base 2>/dev/null)
+
+if [ $? -ne 0 ] || [ -z "$CONDA_BASE" ]; then
+    echo "Erro: Conda não encontrado ou não inicializado"
+    exit 1
+fi
+
 CONDA_ENV_NAME="ic"
 CONDA_ENV_PATH="$CONDA_BASE/envs/$CONDA_ENV_NAME"
 REQUIREMENTS_FILE="./requirements.txt"
@@ -139,6 +145,108 @@ wait_for_app() {
     return 1
 }
 
+# Phylogenetic tools installation check and setup
+check_and_install_phylogenetic_tools() {
+    echo ""
+    echo "🔍 Checking phylogenetic tools..."
+    echo "=========================================="
+    
+    local tools=("clustalo" "mafft" "iqtree2" "fasttree" "raxml-ng" "mb")
+    local tools_names=("Clustal Omega" "MAFFT" "IQ-TREE" "FastTree" "RAxML" "MrBayes")
+    local missing_tools=()
+    
+    # Check which tools are missing
+    for i in "${!tools[@]}"; do
+        if command -v "${tools[$i]}" >/dev/null 2>&1; then
+            echo "✅ ${tools_names[$i]} ($(command -v ${tools[$i]}))"
+        else
+            echo "❌ ${tools_names[$i]} not found"
+            missing_tools+=("${tools[$i]}")
+        fi
+    done
+    
+    # Install missing tools if any
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        echo ""
+        echo "📦 Installing missing phylogenetic tools..."
+        
+        # Activate conda environment for installation
+        export PATH="$CONDA_ENV_PATH/bin:$PATH"
+        export CONDA_PREFIX="$CONDA_ENV_PATH"
+        export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
+        
+        # Install via conda
+        if conda install -c bioconda "${missing_tools[@]}" -y; then
+            echo "✅ All phylogenetic tools installed successfully!"
+        else
+            echo "⚠️  Some tools may not have installed correctly"
+            echo "You can try manual installation: conda install -c bioconda ${missing_tools[*]}"
+        fi
+    else
+        echo "✅ All phylogenetic tools are available!"
+    fi
+    
+    echo "=========================================="
+}
+
+# Alternative method for individual tool installation (more robust)
+install_individual_tools() {
+    echo ""
+    echo "🔧 Installing phylogenetic tools individually..."
+    
+    # Activate conda environment
+    export PATH="$CONDA_ENV_PATH/bin:$PATH"
+    export CONDA_PREFIX="$CONDA_ENV_PATH"
+    export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
+    
+    local tools_to_install=()
+    
+    # Check and collect missing tools
+    command -v clustalo >/dev/null 2>&1 || tools_to_install+=("clustalo")
+    command -v mafft >/dev/null 2>&1 || tools_to_install+=("mafft")
+    command -v iqtree2 >/dev/null 2>&1 || tools_to_install+=("iq-tree")
+    command -v FastTree >/dev/null 2>&1 || tools_to_install+=("fasttree")
+    command -v raxml-ng >/dev/null 2>&1 || tools_to_install+=("raxml")
+    command -v mb >/dev/null 2>&1 || tools_to_install+=("mrbayes")
+    
+    if [ ${#tools_to_install[@]} -gt 0 ]; then
+        echo "Installing: ${tools_to_install[*]}"
+        
+        for tool in "${tools_to_install[@]}"; do
+            echo "📦 Installing $tool..."
+            if conda install -c bioconda "$tool" -y; then
+                echo "✅ $tool installed successfully"
+            else
+                echo "❌ Failed to install $tool"
+            fi
+        done
+    fi
+}
+
+# Verify installation after setup
+verify_phylogenetic_tools() {
+    echo ""
+    echo "✅ Verification of phylogenetic tools:"
+    echo "=========================================="
+    
+    declare -A tool_commands=(
+        ["Clustal Omega"]="clustalo --version"
+        ["MAFFT"]="mafft --version"
+        ["IQ-TREE"]="iqtree2 --version"
+        ["FastTree"]="FastTree -expert 2>&1 | head -1"
+        ["RAxML"]="raxml-ng --version"
+        ["MrBayes"]="mb --version 2>&1 | head -1"
+    )
+    
+    for tool_name in "${!tool_commands[@]}"; do
+        if eval "${tool_commands[$tool_name]}" >/dev/null 2>&1; then
+            echo "✅ $tool_name: Working"
+        else
+            echo "❌ $tool_name: Not functioning properly"
+        fi
+    done
+}
+
 #  INITIAL CHECK 
 echo "🔍 Checking prerequisites..."
 echo "=========================================="
@@ -221,7 +329,7 @@ cd Frontend/fpm-tree-app || { echo "ERROR: Frontend/fpm-tree-app directory not f
 # Check if npm is available
 # if ! command -v npm &> /dev/null; then
 #     echo "📦 Installing Node.js..."
-#     curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+#     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 #     sudo apt-get install -y nodejs
 # fi
 

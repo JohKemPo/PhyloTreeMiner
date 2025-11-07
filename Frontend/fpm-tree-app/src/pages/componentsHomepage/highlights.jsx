@@ -1,167 +1,138 @@
-import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Grid from '@mui/material/Grid';
+import React from "react";
+import { Row, Col, Card, Typography, Space, Divider } from "antd";
+import {
+  BranchesOutlined,
+  AlignLeftOutlined,
+  FileTextOutlined,
+  ExperimentOutlined,
+  ClusterOutlined,
+  CodeOutlined,
+  BarChartOutlined,
+  FunctionOutlined,
+} from "@ant-design/icons";
 
-import AnalyticsIcon from '@mui/icons-material/Analytics';
-import AlignHorizontalLeftIcon from '@mui/icons-material/AlignHorizontalLeft';
-import FileOpenIcon from '@mui/icons-material/FileOpen';
-import ScienceIcon from '@mui/icons-material/Science';
-import AccountTreeIcon from '@mui/icons-material/AccountTree';
-import DataObjectIcon from '@mui/icons-material/DataObject';
+const { Title, Paragraph, Text } = Typography;
 
+const Highlights = () => {
+  const features = [
+    {
+      icon: <BranchesOutlined style={{ fontSize: "24px", color: "#1890ff" }}/>,
+      title: "Visual Insights with Neo4j",
+      description:
+        "Graph-based visualization powered by Neo4j reveals hidden biological relationships between taxa, enabling the discovery of complex evolutionary patterns that are difficult to capture in tabular views.",
+    },
+    {
+      icon: (
+        <AlignLeftOutlined style={{ fontSize: "24px", color: "#1890ff" }} />
+      ),
+      title: "Alignment Viewer",
+      description:
+        "An advanced visualization tool for multiple sequence alignments, highlighting conservation patterns, gap distributions, and regions of biological significance to support comparative and evolutionary analysis.",
+    },
+    {
+      icon: <FileTextOutlined style={{ fontSize: "24px", color: "#1890ff" }} />,
+      title: "Multi-format Support",
+      description:
+        "Seamlessly handles common bioinformatics standards such as phylogenetic trees (.nexus, .newick) and sequence alignments (.fasta, .clustal), ensuring smooth integration into existing research workflows.",
+    },
+    {
+      icon: (
+        <ExperimentOutlined style={{ fontSize: "24px", color: "#1890ff" }} />
+      ),
+      title: "Data correlation with the NCBI",
+      description:
+        <p>Real-time integration with <a href="" target="_blank">NCBI</a> databases enhances analyses with taxonomic metadata and links to relevant publications, providing deeper biological context to sequence-based studies.</p>,
+    },
+    {
+      icon: <ClusterOutlined style={{ fontSize: "24px", color: "#1890ff" }} />,
+      title: "Interactive Tree Exploration",
+      description:
+        "Phylogenetic trees that allow intuitive exploration of evolutionary relationships, with interactive node selection to investigate clades, divergences, and lineage-specific patterns.",
+    },
+    {
+      icon: <CodeOutlined style={{ fontSize: "24px", color: "#1890ff" }} />,
+      title: "Containerized Workflow with Docker",
+      description:
+        "Delivered in a reproducible Docker environment, ensuring consistent analyses, facilitating collaboration, and supporting long-term scientific reproducibility across different systems.",
+    },
+    {
+      icon: <BarChartOutlined style={{ fontSize: "24px", color: "#1890ff" }} />,
+      title: "Epidemiological Data Integration with OWID",
+      description:
+        <p>Connect phylogenetic analyses with epidemiological data from <a href="https://ourworldindata.org/" target="_balnk">Our World in Data (OWID)</a>, enabling correlation of evolutionary patterns with public health trends, disease incidence, and real-time population metrics.</p>,
+    },
+    {
+      icon: <FunctionOutlined style={{ fontSize: "24px", color: "#1890ff" }} />,
+      title: "Pattern Mining with FPMax",
+      description: <p>Identify significant evolutionary patterns using the <a href="http://ceur-ws.org/Vol-90/grahne.pdf" target="_balnk">FPMax</a> algorithm for maximal frequent pattern mining, revealing sets of genetic characteristics that co-occur in specific lineages.</p>
+    },
+  ];
 
-const Highlights = () => (
-    <Box
-        id="highlights"
-        sx={{
-            // pt: { xs: 4, sm: 12 },
-            pb: { xs: 8, sm: 16 },
-            color: 'white',
-            // bgcolor: '#06090E',
-        }}
-    >
-        <Container
-            sx={{
-                position: 'relative',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: { xs: 3, sm: 6 },
-            }}
+  return (
+    <div style={{ padding: "40px 0", backgroundColor: "white"}}>
+      <div style={{ textAlign: "center", marginBottom: 48 }}>
+        <Title level={2} style={{ color: "#262626", marginBottom: 16 }}>
+          Workflow Highlights
+        </Title>
+        <Paragraph
+          style={{
+            fontSize: "16px",
+            color: "#8c8c8c",
+            maxWidth: "600px",
+            margin: "0 auto",
+          }}
         >
-            <Box sx={{ width: { sm: '100%', md: '60%' }, textAlign: { sm: 'left', md: 'center' } }}>
-                <Typography component="h2" variant="h4" sx={{ color: 'grey.800', fontWeight: 'bold' }}>
-                    Workflow Highlights
-                </Typography>
-                <Typography variant="body1" sx={{ color: 'grey.500' }}>
-                    Explore the key features that make PhyloTreeMiner the ideal tool for your analyses.
-                </Typography>
-            </Box>
-            <Grid container rowSpacing={{ xs: 1, sm: 2, md: 3 }} columnSpacing={{ xs: 1, sm: 2, md: 3 }}>
-                <Grid item size={{ xs: 2, sm: 4, md: 4 }}>
-                    <Stack
-                        direction="column"
-                        color="inherit"
-                        spacing={1}
-                        useFlexGap
-                        sx={{ p: 4, height: '100%', border: '1px solid #E4E4E4FF', borderRadius: 2 }}
-                    >
-                        <Box sx={{ color: 'grey.800' }}><AnalyticsIcon /></Box>
-                        <div>
-                            <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Visual Insights with Neo4j
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                Graph-based visualization powered by Neo4j reveals hidden biological relationships between taxa, enabling the discovery of complex evolutionary patterns that are difficult to capture in tabular views.
-                            </Typography>
-                        </div>
-                    </Stack>
-                </Grid>
+          Explore the key features that make PhyloTreeMiner the ideal tool for
+          your analyses.
+        </Paragraph>
+      </div>
 
-                <Grid item size={{ xs: 2, sm: 4, md: 4 }}>
-                    <Stack
-                        direction="column"
-                        color="inherit"
-                        spacing={1}
-                        useFlexGap
-                        sx={{ p: 4, height: '100%', border: '1px solid #E4E4E4FF', borderRadius: 2 }}
-                    >
-                        <Box sx={{ color: 'grey.800' }}><AlignHorizontalLeftIcon /></Box>
-                        <div>
-                            <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Alignment Viewer
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                An advanced visualization tool for multiple sequence alignments, highlighting conservation patterns, gap distributions, and regions of biological significance to support comparative and evolutionary analysis.
-                            </Typography>
-                        </div>
-                    </Stack>
-                </Grid>
-
-                <Grid item size={{ xs: 2, sm: 4, md: 4 }}>
-                    <Stack
-                        direction="column"
-                        color="inherit"
-                        spacing={1}
-                        useFlexGap
-                        sx={{ p: 4, height: '100%', border: '1px solid #E4E4E4FF', borderRadius: 2 }}
-                    >
-                        <Box sx={{ color: 'grey.800' }}><FileOpenIcon /></Box>
-                        <div>
-                            <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Multi-format Support
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                Seamlessly handles common bioinformatics standards such as phylogenetic trees (.nexus, .newick) and sequence alignments (.fasta, .clustal), ensuring smooth integration into existing research workflows.
-                            </Typography>
-                        </div>
-                    </Stack>
-                </Grid>
-
-                <Grid item size={{ xs: 2, sm: 4, md: 4 }}>
-                    <Stack
-                        direction="column"
-                        color="inherit"
-                        spacing={1}
-                        useFlexGap
-                        sx={{ p: 4, height: '100%', border: '1px solid #E4E4E4FF', borderRadius: 2 }}
-                    >
-                        <Box sx={{ color: 'grey.800' }}><ScienceIcon /></Box>
-                        <div>
-                            <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Data Enrichment with NCBI
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                Real-time integration with NCBI databases enhances analyses with taxonomic metadata and links to relevant publications, providing deeper biological context to sequence-based studies.
-                            </Typography>
-                        </div>
-                    </Stack>
-                </Grid>
-
-                <Grid item size={{ xs: 2, sm: 4, md: 4 }}>
-                    <Stack
-                        direction="column"
-                        color="inherit"
-                        spacing={1}
-                        useFlexGap
-                        sx={{ p: 4, height: '100%', border: '1px solid #E4E4E4FF', borderRadius: 2 }}
-                    >
-                        <Box sx={{ color: 'grey.800' }}><AccountTreeIcon /></Box>
-                        <div>
-                            <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Interactive Tree Exploration
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                Phylogenetic trees that allow intuitive exploration of evolutionary relationships, with interactive node selection to investigate clades, divergences, and lineage-specific patterns.
-                            </Typography>
-                        </div>
-                    </Stack>
-                </Grid>
-
-                <Grid item size={{ xs: 2, sm: 4, md: 4 }}>
-                    <Stack
-                        direction="column"
-                        color="inherit"
-                        spacing={1}
-                        useFlexGap
-                        sx={{ p: 4, height: '100%', border: '1px solid #E4E4E4FF', borderRadius: 2 }}
-                    >
-                        <Box sx={{ color: 'grey.800' }}><DataObjectIcon /></Box>
-                        <div>
-                            <Typography fontWeight="bold" gutterBottom sx={{ color: 'grey.800' }}>
-                                Containerized Workflow with Docker
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: 'grey.800' }} align="justify">
-                                Delivered in a reproducible Docker environment, ensuring consistent analyses, facilitating collaboration, and supporting long-term scientific reproducibility across different systems.
-                            </Typography>
-                        </div>
-                    </Stack>
-                </Grid>
-            </Grid>
-        </Container>
-    </Box>
-);
+      <Row gutter={[24, 24]} justify="center" style={{paddingRight:'64px', paddingLeft:'64px'}}>
+        {features.map((feature, index) => (
+          <Col key={index} xs={24} sm={12} md={12} lg={8} xl={6}>
+            <Card
+              style={{
+                height: "100%",
+                border: "1px solid #f0f0f0",
+                borderRadius: "8px",
+                boxShadow:
+                  "0 1px 2px rgba(0,0,0,0.03), 0 1px 6px rgba(0,0,0,0.03)",
+                transition: "all 0.3s ease",
+              }}
+              bodyStyle={{
+                padding: "24px",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+              }}
+              hoverable
+            >
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <div>{feature.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <Title
+                    level={4}
+                    style={{
+                      color: "#262626",
+                      marginBottom: 12,
+                      fontSize: "16px",
+                    }}
+                  >
+                    {feature.title}
+                  </Title>
+                  <Paragraph
+                    style={{ color: "#595959", margin: 0, lineHeight: "1.6" }}
+                  >
+                    {feature.description}
+                  </Paragraph>
+                </div>
+              </Space>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+    </div>
+  );
+};
 
 export default Highlights;
