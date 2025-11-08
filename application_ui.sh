@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export CONDA_SOLVER=classic
+
 LOG_FILE_BACKEND="./logs_backend.log"
 LOG_FILE_FRONTEND="./logs_frontend.log"
 BACKEND_PID=""
@@ -9,19 +11,23 @@ FRONTEND_PID=""
 BACKEND_URL="http://localhost:8000"
 FRONTEND_URL=""
 
-# Conda paths
-CONDA_BASE=$(conda info --base 2>/dev/null)
-
-if [ $? -ne 0 ] || [ -z "$CONDA_BASE" ]; then
-    echo "Erro: Conda não encontrado ou não inicializado"
-    exit 1
-fi
-
-CONDA_ENV_NAME="ic"
-CONDA_ENV_PATH="$CONDA_BASE/envs/$CONDA_ENV_NAME"
+# Conda paths (will be defined dynamically)
+CONDA_BASE=""
+CONDA_ENV_NAME="Phylotreeminer"
+CONDA_ENV_PATH=""
 REQUIREMENTS_FILE="./requirements.txt"
 
-# Function to extract frontend port from the log
+# NEW: Parse setup parameter
+IS_SETUP="false"
+if [ "$1" == "--setup" ] || [ "$1" == "setup" ]; then
+    IS_SETUP="true"
+fi
+
+# ==============================================================================
+# UTILITY FUNCTIONS (from provided file)
+# ==============================================================================
+
+# Function to extract frontend port from log
 get_frontend_port() {
     if [ -f "$LOG_FILE_FRONTEND" ]; then
         local port_line=$(grep "Local: http://localhost:" "$LOG_FILE_FRONTEND" | tail -1)
@@ -38,87 +44,49 @@ get_frontend_port() {
             return 0
         fi
     fi
-    echo "5179"  
-}
-
-# Function to check if conda environment exists
-check_conda_env() {
-    if [ -d "$CONDA_ENV_PATH" ]; then
-        echo "✅ Conda environment '$CONDA_ENV_NAME' found."
-        return 0
-    else
-        echo "❌ Conda environment '$CONDA_ENV_NAME' not found."
-        return 1
-    fi
-}
-
-# Function to create conda environment and install requirements
-create_conda_env() {
-    echo "🔄 Creating conda environment '$CONDA_ENV_NAME'..."
-    
-    if [ ! -f "$REQUIREMENTS_FILE" ]; then
-        echo "❌ ERROR: File $REQUIREMENTS_FILE not found!"
-        return 1
-    fi
-    
-    if conda create -n $CONDA_ENV_NAME python=3.10 -y; then
-        echo "✅ Conda environment created successfully."
-        
-        export PATH="$CONDA_ENV_PATH/bin:$PATH"
-        export CONDA_PREFIX="$CONDA_ENV_PATH"
-        export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
-        
-        echo "📦 Installing dependencies from requirements.txt..."
-        if pip install -r "$REQUIREMENTS_FILE"; then
-            echo "✅ Dependencies installed successfully."
-            return 0
-        else
-            echo "❌ Failed to install dependencies."
-            return 1
-        fi
-    else
-        echo "❌ Failed to create conda environment."
-        return 1
-    fi
+    echo "5179" # Fallback
 }
 
 cleanup() {
-    echo "Running cleanup..."
+    echo "Performing cleanup..."
     if [ ! -z "$BACKEND_PID" ]; then
         kill $BACKEND_PID 2>/dev/null || true
     fi
     if [ ! -z "$FRONTEND_PID" ]; then
         kill $FRONTEND_PID 2>/dev/null || true
     fi
+    # Kill any remaining child processes
+    pkill -f 'uvicorn src.app:app' 2>/dev/null || true
+    pkill -f 'npm run dev' 2>/dev/null || true
     exit 1
 }
 
-# Configure trap to catch error signals
+# Set trap to capture error signals
 trap 'cleanup' 1 2 3 15
 
 check_command() {
     if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to execute: $1"
+        echo "❌ ERROR: Failed to execute: $1"
         cleanup
     fi
 }
 
 check_port() {
+    local port_to_check=$1
+    local app_name=$2
+    
     if command -v lsof >/dev/null 2>&1; then
-        if lsof -Pi :$1 -sTCP:LISTEN -t >/dev/null ; then
-            echo "WARNING: Port $1 is already in use (Vite will automatically choose another)"
+        if lsof -Pi :$port_to_check -sTCP:LISTEN -t >/dev/null ; then
+            echo "⚠️  WARNING: Port $port_to_check is already in use. ($app_name will choose another if possible)"
+            return 1
+        fi
+    elif command -v netstat >/dev/null 2>&1; then
+        if netstat -tuln | grep ":$port_to_check " >/dev/null; then
+            echo "⚠️  WARNING: Port $port_to_check is already in use. ($app_name will choose another if possible)"
             return 1
         fi
     else
-        # Fallback using netstat
-        if command -v netstat >/dev/null 2>&1; then
-            if netstat -tuln | grep ":$1 " >/dev/null; then
-                echo "WARNING: Port $1 is already in use (Vite will automatically choose another)"
-                return 1
-            fi
-        else
-            echo "WARNING: Could not check port $1 (lsof and netstat not found)"
-        fi
+        echo "WARNING: Could not check port $port_to_check (lsof and netstat not found)"
     fi
     return 0
 }
@@ -141,148 +109,298 @@ wait_for_app() {
         echo "Waiting... ($elapsed/$timeout seconds)"
     done
     
-    echo "WARNING: Timeout waiting for $url (it may be starting up more slowly)"
+    echo "WARNING: Timeout waiting for $url"
     return 1
 }
 
-# Phylogenetic tools installation check and setup
-check_and_install_phylogenetic_tools() {
+
+# ==============================================================================
+# NEW SETUP FUNCTIONS (Integrated from our conversation)
+# ==============================================================================
+
+# Function to install Miniconda (Linux x86_64)
+install_miniconda() {
+    echo "------------------------------------------"
+    echo "🔄 Attempting to install Miniconda (Linux x86_64)..."
+    echo "------------------------------------------"
     echo ""
-    echo "🔍 Checking phylogenetic tools..."
-    echo "=========================================="
+    local MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+    local MINICONDA_SH="Miniconda3-latest-Linux-x86_64.sh"
     
-    local tools=("clustalo" "mafft" "iqtree2" "fasttree" "raxml-ng" "mb")
-    local tools_names=("Clustal Omega" "MAFFT" "IQ-TREE" "FastTree" "RAxML" "MrBayes")
-    local missing_tools=()
-    
-    # Check which tools are missing
-    for i in "${!tools[@]}"; do
-        if command -v "${tools[$i]}" >/dev/null 2>&1; then
-            echo "✅ ${tools_names[$i]} ($(command -v ${tools[$i]}))"
-        else
-            echo "❌ ${tools_names[$i]} not found"
-            missing_tools+=("${tools[$i]}")
-        fi
-    done
-    
-    # Install missing tools if any
-    if [ ${#missing_tools[@]} -gt 0 ]; then
-        echo ""
-        echo "📦 Installing missing phylogenetic tools..."
-        
-        # Activate conda environment for installation
-        export PATH="$CONDA_ENV_PATH/bin:$PATH"
-        export CONDA_PREFIX="$CONDA_ENV_PATH"
-        export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
-        
-        # Install via conda
-        if conda install -c bioconda "${missing_tools[@]}" -y; then
-            echo "✅ All phylogenetic tools installed successfully!"
-        else
-            echo "⚠️  Some tools may not have installed correctly"
-            echo "You can try manual installation: conda install -c bioconda ${missing_tools[*]}"
-        fi
-    else
-        echo "✅ All phylogenetic tools are available!"
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "❌ ERROR: 'curl' not found. Please install curl (sudo apt install curl) and try again."
+        exit 1
     fi
     
-    echo "=========================================="
+    if ! curl -O $MINICONDA_URL; then
+        echo ""
+        echo "❌ ERROR: Failed to download Miniconda. Please install it manually."
+        echo ""
+
+        exit 1
+    fi
+    
+    # Install in batch mode to default directory ~/miniconda3
+    bash $MINICONDA_SH -b -p $HOME/miniconda3
+    rm $MINICONDA_SH
+
+    echo ""
+    echo "✅ Miniconda installed in ~/miniconda3"
+    echo ""
+    
+    # Add to current session's PATH
+    export PATH="$HOME/miniconda3/bin:$PATH"
+    
+    # Check if conda command now exists
+    if ! command -v conda >/dev/null 2>&1; then
+        echo ""
+        echo "❌ ERROR: Conda installation failed. Check ~/miniconda3."
+        echo ""
+        
+        exit 1
+    fi
+    
+    # Initialize conda for shell (required for 'conda activate')
+    conda init bash
+    echo ""
+    echo "✅ Conda installed. You may need to 'source ~/.bashrc' or restart the terminal after this script."
+    echo ""
+
 }
 
-# Alternative method for individual tool installation (more robust)
-install_individual_tools() {
+# Main setup function
+run_full_setup() {
     echo ""
-    echo "🔧 Installing phylogenetic tools individually..."
+    echo "=========================================="
+    echo "🚀 Starting complete setup process..."
+    echo "=========================================="
+    echo ""
+
     
-    # Activate conda environment
+    # 1. Check/Install Conda
+    if ! command -v conda >/dev/null 2>&1; then
+        echo ""
+        echo "❌ Conda not found."
+        install_miniconda
+    else
+        echo ""
+        echo "✅ Conda found."
+    fi
+    
+    # Update CONDA_BASE and CONDA_ENV_PATH variables
+    CONDA_BASE=$(conda info --base)
+    CONDA_ENV_PATH="$CONDA_BASE/envs/$CONDA_ENV_NAME"
+    
+    # 2. Configure Bioconda channels (essential!)
+    echo ""
+    echo "🔧 Configuring Conda channels (bioconda, conda-forge)..."
+    export CONDA_ALWAYS_YES="true"
+    conda update -n base -c conda-forge conda
+    conda config --add channels defaults >/dev/null 2>&1
+    conda config --add channels bioconda >/dev/null 2>&1
+    conda config --add channels conda-forge >/dev/null 2>&1
+    echo ""
+
+    
+    # 3. Create Conda environment (if it doesn't exist)
+    echo ""
+    echo "🐍 Checking Conda environment '$CONDA_ENV_NAME'..."
+    echo ""
+    if [ ! -d "$CONDA_ENV_PATH" ]; then
+        echo "🔄 Creating environment '$CONDA_ENV_NAME' with Python 3.10..."
+        if ! conda create -n $CONDA_ENV_NAME python=3.10; then
+            echo "❌ ERROR: Failed to create conda environment."
+            echo ""
+
+            exit 1
+        fi
+        echo "✅ Environment created."
+        echo ""
+
+    else
+        echo "✅ Environment '$CONDA_ENV_NAME' already exists."
+        echo ""
+
+    fi
+    
+    # Activate environment for next commands
+    echo "Activating environment for package installation..."
+    echo ""
+
     export PATH="$CONDA_ENV_PATH/bin:$PATH"
     export CONDA_PREFIX="$CONDA_ENV_PATH"
     export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
     
-    local tools_to_install=()
-    
-    # Check and collect missing tools
-    command -v clustalo >/dev/null 2>&1 || tools_to_install+=("clustalo")
-    command -v mafft >/dev/null 2>&1 || tools_to_install+=("mafft")
-    command -v iqtree2 >/dev/null 2>&1 || tools_to_install+=("iq-tree")
-    command -v FastTree >/dev/null 2>&1 || tools_to_install+=("fasttree")
-    command -v raxml-ng >/dev/null 2>&1 || tools_to_install+=("raxml")
-    command -v mb >/dev/null 2>&1 || tools_to_install+=("mrbayes")
-    
-    if [ ${#tools_to_install[@]} -gt 0 ]; then
-        echo "Installing: ${tools_to_install[*]}"
-        
-        for tool in "${tools_to_install[@]}"; do
-            echo "📦 Installing $tool..."
-            if conda install -c bioconda "$tool" -y; then
-                echo "✅ $tool installed successfully"
-            else
-                echo "❌ Failed to install $tool"
-            fi
-        done
-    fi
-}
-
-# Verify installation after setup
-verify_phylogenetic_tools() {
+    # 4. Install Python dependencies (pip)
+    echo "📦 Installing Python dependencies from $REQUIREMENTS_FILE..."
     echo ""
-    echo "✅ Verification of phylogenetic tools:"
+
+    if [ ! -f "$REQUIREMENTS_FILE" ]; then
+        echo "❌ ERROR: File $REQUIREMENTS_FILE not found!"
+        echo ""
+
+        exit 1
+    fi
+    if ! pip install -r "$REQUIREMENTS_FILE"; then
+         echo "❌ ERROR: Failed to install Python dependencies."
+        echo ""
+
+         exit 1
+    fi
+    echo ""
+    echo "✅ Python dependencies installed."
+    echo "------------------------------------------"
+    echo ""
+    
+
+
+    # 5. Install phylogeny tools (Bioconda)
+    echo "🧬 Installing phylogeny tools (Bioconda)..."
+    echo ""
+
+    # Required packages (conda package names):
+    # clustalo, mafft, iq-tree, fasttree, raxml-ng, mrbayes
+    local tools_list=("clustalo" "mafft" "iqtree" "fasttree" "raxml-ng" "mrbayes")
+
+    
+    echo "Installing: ${tools_list[*]}"
+    echo ""
+
+    if ! conda install -n $CONDA_ENV_NAME -c bioconda ${tools_list[@]}; then
+        echo "❌ ERROR: Failed to install one or more phylogeny tools."
+        echo "Try manually: conda install -n $CONDA_ENV_NAME -c bioconda ${tools_list[*]}"
+        echo ""
+
+        exit 1
+    fi
+    echo "✅ Phylogeny tools installed."
+    echo ""
+
+
+    # 6. Install Frontend dependencies (npm)
+    echo "🎨 Installing Frontend dependencies (npm)..."
+    cd Frontend/fpm-tree-app || { echo "❌ ERROR: Frontend/fpm-tree-app directory not found!"; exit 1; }
+    echo ""
+
+    
+    # Check if npm is installed
+    if ! command -v npm >/dev/null 2>&1; then
+        echo "❌ ERROR: npm (Node.js) is not installed."
+        echo "Please install Node.js manually (ex: 'sudo apt install nodejs npm') and run setup again."
+        cd ../..
+        exit 1
+    fi
+    
+    if [ ! -f "package.json" ]; then
+        echo "❌ ERROR: package.json not found!"
+        cd ../..
+        exit 1
+    fi
+    
+    echo "🧹 Cleaning old frontend dependencies..."
+    rm -rf node_modules package-lock.json
+    
+    echo "📦 Running npm install..."
+    if ! npm install; then
+        echo "❌ ERROR: Failed to install npm dependencies."
+        cd ../..
+        exit 1
+    fi
+    
+    # Config creation logic (from your script) moved here
+    if [ ! -f "vite.config.js" ]; then
+        echo "⚠️ vite.config.js not found, creating a basic one..."
+        cat > vite.config.js <<EOL
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+})
+EOL
+    fi
+
+    if [ ! -f "tsconfig.json" ] && [ ! -f "jsconfig.json" ]; then
+        echo "⚠️ tsconfig.json/jsconfig.json not found, creating jsconfig.json..."
+        cat > jsconfig.json <<EOL
+{
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  }
+}
+EOL
+    fi
+    
+    echo "✅ Frontend dependencies and configs installed."
+    cd ../..
+
+    echo ""
+    echo ""
     echo "=========================================="
-    
-    declare -A tool_commands=(
-        ["Clustal Omega"]="clustalo --version"
-        ["MAFFT"]="mafft --version"
-        ["IQ-TREE"]="iqtree2 --version"
-        ["FastTree"]="FastTree -expert 2>&1 | head -1"
-        ["RAxML"]="raxml-ng --version"
-        ["MrBayes"]="mb --version 2>&1 | head -1"
-    )
-    
-    for tool_name in "${!tool_commands[@]}"; do
-        if eval "${tool_commands[$tool_name]}" >/dev/null 2>&1; then
-            echo "✅ $tool_name: Working"
-        else
-            echo "❌ $tool_name: Not functioning properly"
-        fi
-    done
+    echo "🎉🎉🎉 Setup complete! 🎉🎉🎉"
+    echo "=========================================="
+    echo "Continuing to start applications..."
+    echo ""
 }
 
-#  INITIAL CHECK 
+# ==============================================================================
+# SCRIPT MAIN FLOW
+# ==============================================================================
+
+# INITIAL VERIFICATION
+echo ""
+echo ""
+echo "=========================================="
 echo "🔍 Checking prerequisites..."
 echo "=========================================="
+echo ""
 
-# Check if conda is installed
-if ! command -v conda >/dev/null 2>&1; then
-    echo "❌ ERROR: Conda is not installed!"
-    echo "Install Miniconda/Anaconda first: https://docs.conda.io/en/latest/miniconda.html"
+
+# If setup is requested, run it
+if [ "$IS_SETUP" == "true" ]; then
+    run_full_setup
+fi
+
+# Define/Redefine Conda paths
+# (Necessary if setup just ran)
+if command -v conda >/dev/null 2>&1; then
+    CONDA_BASE=$(conda info --base 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$CONDA_BASE" ]; then
+        echo "Error: Conda not found or not initialized"
+        exit 1
+    fi
+    CONDA_ENV_PATH="$CONDA_BASE/envs/$CONDA_ENV_NAME"
+else
+    # If conda is still not found (and not setup), fail
+    echo "❌ ERROR: Conda is not installed or not in PATH."
+    echo "Install Miniconda/Anaconda: https://docs.conda.io/en/latest/miniconda.html"
+    echo "Or run this script with '--setup' to try automatic installation."
     exit 1
 fi
 
-# Check if conda environment exists, otherwise create it
-if ! check_conda_env; then
-    echo "📝 Environment does not exist, creating automatically..."
-    if ! create_conda_env; then
-        echo "❌ Failed to create conda environment. Check the errors above."
-        exit 1
-    fi
+# Critical check: Does the 'ic' environment exist?
+if [ ! -d "$CONDA_ENV_PATH" ]; then
+    echo "❌ ERROR: Conda environment '$CONDA_ENV_NAME' not found."
+    echo "Please run this script with the '--setup' parameter first:"
+    echo "   bash $0 --setup"
+    exit 1
 fi
 
-#  SOLUTION FOR CONDA SOLVER ISSUE 
-echo "Configuring Conda classic solver..."
-export CONDA_ALWAYS_YES="true"
-conda config --set solver classic >/dev/null 2>&1 || echo "WARNING: Could not configure classic solver"
+echo "✅ Conda environment '$CONDA_ENV_NAME' found at $CONDA_ENV_PATH"
+echo ""
 
-#  Check ports 
-echo "Checking ports..."
-check_port 8000
-check_port 5179
+# Check ports
+echo "🔎 Checking ports..."
+check_port 8000 "Backend"
+check_port 5179 "Frontend (Vite)"
 
-#  Start Backend 
-echo "Starting backend in background..."
-cd Backend || { echo "ERROR: Backend directory not found!"; exit 1; }
+# Start Backend
+echo ""
+echo "📌 Starting backend in background..."
+cd Backend || { echo "❌ ERROR: Backend directory not found!"; exit 1; }
 
 # Manually activate conda environment
-echo "Activating conda environment '$CONDA_ENV_NAME'..."
+echo "📌 Activating conda environment '$CONDA_ENV_NAME'..."
 export PATH="$CONDA_ENV_PATH/bin:$PATH"
 export CONDA_PREFIX="$CONDA_ENV_PATH"
 export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
@@ -291,127 +409,79 @@ export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
 if command -v python >/dev/null 2>&1; then
     PYTHON_PATH=$(command -v python)
     PYTHON_VERSION=$(python --version 2>&1)
-    echo "Using Python: $PYTHON_PATH"
-    echo "Version: $PYTHON_VERSION"
+    echo "⚙️ Using Python: $PYTHON_PATH"
+    echo "⚙️ Version: $PYTHON_VERSION"
 else
-    echo "ERROR: Python not found in environment!"
+    echo "❌ ERROR: Python not found in environment!"
     cleanup
 fi
-
-# Check if requirements.txt is up to date
-echo "Checking if all dependencies are installed..."
-if pip install -r requirements.txt --quiet; then
-    echo "✅ Dependencies verified/updated."
-else
-    echo "⚠️  WARNING: Some dependencies may not be up to date"
-fi
+      
+echo "------------------------------------------"
+echo ""
 
 # Check if uvicorn is available
 if ! command -v uvicorn >/dev/null 2>&1; then
     echo "❌ ERROR: uvicorn not found in environment!"
-    echo "Installing uvicorn..."
-    pip install uvicorn
-    check_command "pip install uvicorn"
+    echo "The pip dependencies seem to not be installed. Try running with '--setup'."
+    cleanup
 fi
 
-echo "Starting backend server..."
+echo "📌 Starting backend server (Uvicorn)..."
 uvicorn src.app:app --reload --reload-dir src --host 0.0.0.0 --port 8000 > ../$LOG_FILE_BACKEND 2>&1 &
 BACKEND_PID=$!
 cd ..
 
-echo "Backend started with PID: $BACKEND_PID"
-echo "Backend logs: $LOG_FILE_BACKEND"
+echo "📌 Backend started with PID: $BACKEND_PID"
+echo "⚙️ Backend Logs: $LOG_FILE_BACKEND"
+echo "------------------------------------------"
+echo ""
 
-#  Start Frontend 
-echo "Starting frontend in background..."
-cd Frontend/fpm-tree-app || { echo "ERROR: Frontend/fpm-tree-app directory not found!"; cleanup; }
+# Start Frontend
+echo "📌 Starting frontend in background..."
+cd Frontend/fpm-tree-app || { echo "❌ ERROR: Frontend/fpm-tree-app directory not found!"; cleanup; }
 
-# Check if npm is available
-# if ! command -v npm &> /dev/null; then
-#     echo "📦 Installing Node.js..."
-#     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-#     sudo apt-get install -y nodejs
-# fi
+# Check if npm is available (don't try to install, just check)
+if ! command -v npm >/dev/null 2>&1; then
+    echo "❌ ERROR: npm (Node.js) is not installed. Please install it manually."
+    cleanup
+fi
 
-# # Check if npm is available
-# if ! command -v npm &> /dev/null; then
-#     echo "❌ ERROR: npm not found even after Node.js install!"
-#     cleanup
-# fi
+# Check if dependencies are installed (node_modules)
+if [ ! -d "node_modules" ]; then
+    echo "❌ ERROR: 'node_modules' directory not found."
+    echo "Frontend dependencies are not installed. Try running with '--setup'."
+    cleanup
+fi
 
-# # Check if package.json exists
-# if [ ! -f "package.json" ]; then
-#     echo "❌ ERROR: package.json not found in frontend directory!"
-#     cleanup
-# fi
-
-# # Remove node_modules and lock file to avoid conflicts
-# echo "🧹 Cleaning old dependencies..."
-# rm -rf node_modules package-lock.json
-
-# # Install required frontend dependencies
-# echo "📦 Installing frontend dependencies..."
-# npm install react@18 react-dom@18 --save
-# npm install vite @vitejs/plugin-react --save-dev
-# npm install react-router-dom leaflet vis-data vis-network react-markdown --save
-# npm install react-leaflet@4.2.1 --save
-
-# # Reinstall all other project dependencies
-# npm install
-
-# # Ensure vite.config.js exists with react plugin
-# if [ ! -f "vite.config.js" ]; then
-#     echo "⚠️ vite.config.js not found, creating a basic one..."
-#     cat > vite.config.js <<EOL
-# import { defineConfig } from 'vite'
-# import react from '@vitejs/plugin-react'
-
-# export default defineConfig({
-#   plugins: [react()],
-# })
-# EOL
-# fi
-
-# # Ensure tsconfig.json/jsconfig.json has react-jsx
-# if [ ! -f "tsconfig.json" ] && [ ! -f "jsconfig.json" ]; then
-#     echo "⚠️ tsconfig.json/jsconfig.json not found, creating jsconfig.json..."
-#     cat > jsconfig.json <<EOL
-# {
-#   "compilerOptions": {
-#     "jsx": "react-jsx"
-#   }
-# }
-# EOL
-# fi
-
-echo "Starting frontend server..."
+echo "📌 Starting frontend server (Vite)..."
 npm run dev > ../../$LOG_FILE_FRONTEND 2>&1 &
 FRONTEND_PID=$!
 cd ../..
 
-echo "Frontend started with PID: $FRONTEND_PID"
-echo "Frontend logs: $LOG_FILE_FRONTEND"
+echo "⚙️ Frontend started with PID: $FRONTEND_PID"
+echo "⚙️ Frontend Logs: $LOG_FILE_FRONTEND"
 
-#  Wait for apps to start 
+# Wait for apps to start
 echo ""
 echo "Waiting for applications to start..."
 echo "=========================================="
 
 # Give frontend time to choose a port
-echo "Waiting for frontend to choose a port..."
+echo "Waiting for frontend to define port..."
 sleep 5
 
 # Detect actual frontend port
 FRONTEND_PORT=$(get_frontend_port)
 FRONTEND_URL="http://localhost:$FRONTEND_PORT"
 
-echo "Frontend using port: $FRONTEND_PORT"
+echo "⚙️ Frontend using port: $FRONTEND_PORT"
+echo ""
 
 # Check if curl is available to check URLs
 if ! command -v curl >/dev/null 2>&1; then
-    echo "WARNING: curl not found, skipping URL checks"
-    echo "Backend probably at: $BACKEND_URL"
-    echo "Frontend probably at: $FRONTEND_URL"
+    echo "WARNING: curl not found, skipping URL verification"
+    echo "   Backend probably at: $BACKEND_URL"
+    echo "   Frontend probably at: $FRONTEND_URL"
 else
     if wait_for_app $BACKEND_URL 10 2; then
         echo "✅ Backend running at: $BACKEND_URL"
@@ -441,8 +511,8 @@ echo "   Backend:  tail -f $LOG_FILE_BACKEND"
 echo "   Frontend: tail -f $LOG_FILE_FRONTEND"
 echo ""
 echo "⏹️  To stop both applications:"
-echo "   pkill -f 'uvicorn src.app:app'"
-echo "   pkill -f 'npm run dev'"
+echo "   Use Ctrl+C in this terminal"
+echo "(Or manually: pkill -f 'uvicorn src.app:app' && pkill -f 'npm run dev')"
 echo ""
 echo "🔍 To check if they are running:"
 echo "   ps aux | grep -E '(uvicorn|npm)'"
@@ -468,7 +538,7 @@ check_processes() {
 }
 
 echo ""
-echo "Press Ctrl+C to stop the applications..."
+echo "Press Ctrl+C to stop applications..."
 while check_processes; do
     sleep 5
 done
