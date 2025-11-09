@@ -279,7 +279,7 @@ run_full_setup() {
 
     # 6. Install Frontend dependencies (npm)
     echo "🎨 Installing Frontend dependencies (npm)..."
-    cd Frontend/fpm-tree-app || { echo "❌ ERROR: Frontend/fpm-tree-app directory not found!"; exit 1; }
+    cd Frontend/phylotreeminer-app || { echo "❌ ERROR: Frontend/phylotreeminer-app directory not found!"; exit 1; }
     echo ""
 
     
@@ -438,7 +438,7 @@ echo ""
 
 # Start Frontend
 echo "📌 Starting frontend in background..."
-cd Frontend/fpm-tree-app || { echo "❌ ERROR: Frontend/fpm-tree-app directory not found!"; cleanup; }
+cd Frontend/phylotreeminer-app || { echo "❌ ERROR: Frontend/phylotreeminer-app directory not found!"; cleanup; }
 
 # Check if npm is available (don't try to install, just check)
 if ! command -v npm >/dev/null 2>&1; then

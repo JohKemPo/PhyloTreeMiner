@@ -1,6 +1,13 @@
-# FPM-Tree
+# PhyloTreeMiner
 
 [Official CLI workflow documentation](https://github.com/JohKemPo/BioComp_UFF/tree/main/README.md)
+
+⚠️ **To clone the repository and its submodules:** ⚠️
+
+```bash
+git clone --recurse-submodules <URL-do-repositorio>
+```
+
 
 # Initial Dependencies
 
@@ -61,7 +68,7 @@ If you run the script with the `--setup` flag, it will handle **all** of the fol
 
   * **Frontend Libraries (npm):**
 
-      * The script runs `npm install` in the `Frontend/fpm-tree-app` directory, installing packages like `react` and `vite` (listed in `package.json`).
+      * The script runs `npm install` in the `Frontend/phylotreeminer-app` directory, installing packages like `react` and `vite` (listed in `package.json`).
 
 # Quick Start Guide
 
