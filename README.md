@@ -68,7 +68,7 @@ If you run the script with the `--setup` flag, it will handle **all** of the fol
 
   * **Frontend Libraries (npm):**
 
-      * The script runs `npm install` in the `Frontend/phylotreeminer-app` directory, installing packages like `react` and `vite` (listed in `package.json`).
+      * The script runs `npm install` in the `Frontend/phylotreeminer` directory, installing packages like `react` and `vite` (listed in `package.json`).
 
 # Quick Start Guide
 
