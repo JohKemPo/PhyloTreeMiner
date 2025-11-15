@@ -1,7 +1,6 @@
-# services/neo4j_service.py
 from neo4j import AsyncGraphDatabase 
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from neo4j.graph import Node, Relationship, Path
 
 class Neo4jService:
@@ -36,6 +35,33 @@ class Neo4jService:
         async with self.driver.session() as session:
             result = await session.run(query, parameters or {})
             return [record.data() async for record in result]
+
+    async def execute_batch_queries(self, queries: List[Tuple[str, Dict]]) -> List[Dict[str, Any]]:
+        """
+        Executa múltiplas queries Cypher em lote
+        """
+        if not self.connected:
+            return []
+        
+        results = []
+        async with self.driver.session() as session:
+            for query, params in queries:
+                try:
+                    result = await session.run(query, params or {})
+                    records = [record.data() async for record in result]
+                    results.append({
+                        "success": True,
+                        "query": query,
+                        "result": records
+                    })
+                except Exception as e:
+                    results.append({
+                        "success": False,
+                        "query": query,
+                        "error": str(e)
+                    })
+        
+        return results
 
     async def get_graph_data(self, query: str = None, limit: int = 100) -> Dict[str, Any]:
         """

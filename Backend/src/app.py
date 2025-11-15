@@ -15,12 +15,15 @@ import numpy as np
 from dendropy import Tree, TreeList, TaxonNamespace
 from dendropy.calculate import treecompare
 
-import aiofiles
+from src.routers.neo4j_router import router as neo4j_router
+from src.routers.ncbi_router import router as ncbi_router
+from src.routers.cql_router import router as cql_router
+from src.routers.cql_batch_router import router as cql_batch_router
 
-from src.routers import neo4j_router, ncbi_router, cql_router
 from src.services.neo4j_services import neo4j_service
 from src.services.ncbi_acquisition import NCBIAcquisition
 from src.services.genericOWIDAnalyzer import GenericOWIDAnalyzer
+from src.services.cql_batch_service import init_cql_batch_service
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PATH_BASE_WORKFLOW = os.path.abspath(os.path.join(BASE_DIR, "../../BioComp_UFF"))
@@ -42,6 +45,7 @@ if not os.path.exists(WORKFLOW_SCRIPT_PATH):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await neo4j_service.connect()
+    init_cql_batch_service()
     yield 
     await neo4j_service.close()
 
@@ -65,19 +69,25 @@ app.add_middleware(
 
 
 app.include_router(
-    neo4j_router.router,
+    neo4j_router,
     prefix="/api/neo4j",
     tags=["Neo4j"]
 )
 
 app.include_router(
-    cql_router.router,
+    cql_router,
     prefix="/api/cql",
     tags=["cql"]
 ) 
 
 app.include_router(
-    ncbi_router.router,
+    cql_batch_router,
+    prefix="/api/cql-batch", 
+    tags=["CQL Batch"]
+)
+
+app.include_router(
+    ncbi_router,
     prefix="/api/ncbi",
     tags=["NCBI"]
 )
@@ -614,6 +624,10 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
     try:
         with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
+            
+        if any(full_path.endswith(ext) for ext in [".cql"]):
+            file_type = "cql"
+            content = content.replace('\\"', '"').replace('\\\\', '\\')
 
         if any(full_path.endswith(ext) for ext in [".newick", ".nwk", ".tree",".nexus"]):
             file_type = "newick"

@@ -433,7 +433,7 @@ const MSAViewer = ({ data, onSequenceSelect }) => {
     <Card
       title="Alignment"
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-      bodyStyle={{ flex: 1, overflow: 'hidden', padding: '16px' }}
+      styles={{ flex: 1, overflow: 'hidden', padding: '16px' }}
       extra={
         <Flex align="center" gap="large">
           <Space>

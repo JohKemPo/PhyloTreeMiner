@@ -99,7 +99,7 @@ const Highlights = () => {
                   "0 1px 2px rgba(0,0,0,0.03), 0 1px 6px rgba(0,0,0,0.03)",
                 transition: "all 0.3s ease",
               }}
-              bodyStyle={{
+              styles={{
                 padding: "24px",
                 height: "100%",
                 display: "flex",

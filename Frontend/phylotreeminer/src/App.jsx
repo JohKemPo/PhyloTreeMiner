@@ -75,7 +75,18 @@ function App() {
     ? currentPage.label.props.children
     : "Dashboard";
   return (
-    <ConfigProvider>
+    <ConfigProvider
+      heme={{
+        components: {
+          Notification: {
+            zIndexPopup: '9999 !important', 
+          },
+          Modal: {
+            zIndexBase: '1000 !important', 
+          },
+        },
+      }}
+    >
       <NotificationProvider>
         <Layout style={{ height: "100vh" }}>
           <Sider
@@ -162,10 +173,6 @@ function App() {
                   >
                     {pageTitle}
                   </Title>
-                </Space>
-                <Space align="center" size="middle">
-                  <Button shape="circle" icon={<SearchOutlined />} disabled />
-                  <Button shape="circle" icon={<BellOutlined />} disabled />
                 </Space>
               </Flex>
             </Header>

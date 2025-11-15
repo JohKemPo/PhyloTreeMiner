@@ -525,6 +525,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
             <CQLExecutor
               fileContent={modalContent}
               fileName={modalItem?.name}
+              projectName={selectedProject} 
               onClose={handleCloseModal}
             />
           </div>
