@@ -144,7 +144,7 @@ const TemporalInsights = ({ sequences }) => {
     <Card title="Time Series Analysis">
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={8}>
-          <Card size="small">
+          <Card size="small" style={{minHeight:'270px'}}>
             <Statistic title="Total Sequences" value={totalSequences} />
             <Statistic
               title="Period "
@@ -158,14 +158,14 @@ const TemporalInsights = ({ sequences }) => {
             />
           </Card>
 
-          <Card title="Timeline" size="small" style={{ marginTop: 16 }}>
+          {/* <Card title="Timeline" size="small" style={{ marginTop: 16 }}>
             <Timeline
               items={dates.slice(-100).map((item, index) => ({
                 children: (
                   <div>
                     <strong>
                       {" "}
-                      {item.month} / {item.year}
+                      {item.year}
                     </strong>
                     <div>{item.isolate ? `Isolate: ${item.isolate}` : ""}</div>
                     <Tag color="blue" size="small">
@@ -176,7 +176,7 @@ const TemporalInsights = ({ sequences }) => {
               }))}
               style={{ height: "400px", overflow: "auto", paddingTop: 16 }}
             />
-          </Card>
+          </Card> */}
         </Col>
 
         <Col xs={24} lg={16}>
@@ -184,13 +184,14 @@ const TemporalInsights = ({ sequences }) => {
             <Line {...config} height={200} />
           </Card>
 
-          <Card
+          {/* <Card
             title="Sequences by Year"
             size="small"
             style={{ marginTop: 16 }}
           >
             <List
               size="small"
+              style={{maxHeight:'400px', overflow:'auto'}}
               dataSource={Array.from(new Set(dates.map((d) => d.year))).sort()}
               renderItem={(year) => {
                 const yearCount = dates.filter((d) => d.year === year).length;
@@ -202,7 +203,7 @@ const TemporalInsights = ({ sequences }) => {
                 );
               }}
             />
-          </Card>
+          </Card> */}
         </Col>
       </Row>
     </Card>
