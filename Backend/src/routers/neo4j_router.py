@@ -79,26 +79,34 @@ async def get_predefined_queries():
         'all_trees': {
             'name': 'All Trees',
             'description': 'List all nodes with the label Tree.',
-            'type':'graph',
-            'query': 'MATCH (n:Tree {uid: $user_id}) RETURN n LIMIT 25'
+            'type': 'graph',
+            'query': 'MATCH (n:Tree) RETURN n LIMIT 25'
         },
         'all_subtrees': {
             'name': 'All Subtrees',
             'description': 'List all nodes with the label Subtree.',
-            'type':'graph',
-            'query': 'MATCH (n:Subtree {uid: $user_id}) RETURN n LIMIT 25'
+            'type': 'graph',
+            'query': 'MATCH (n:Subtree) RETURN n LIMIT 25'
         },
         'full_graph_pattern': {
             'name': 'Complete Pattern (Graph)',
-            'description': 'Shows the pattern Tree -> Subtree -> Metadata.',
-            'type':'graph',
-            'query': 'MATCH path = (t:Tree {uid: $user_id})-[:HAS_SUBTREE]->(s:Subtree)-[]->(m:Metadata) RETURN path LIMIT 10'
+            'description': 'Shows the pattern Tree -> Subtree -> Metadata -> Feature -> Qualifier.',
+            'type': 'graph',
+            # Ajustada para mostrar a profundidade do novo modelo até os Qualifiers
+            'query': 'MATCH path = (t:Tree)-[:HAS_SUBTREE]->(s:Subtree)-[:HAS_METADATA]->(m:Metadata)-[:HAS_FEATURE]->(f:Feature)-[:HAS_QUALIFIER]->(q:Qualifier) RETURN path LIMIT 5'
         },
-        'frequence_geograph':{
+        'frequence_geograph': {
             'name': 'Frequency by location',
-            'description':'Table with frequencies by location.',
-            'type':'query',
-            'query': 'MATCH (:Tree {uid: $user_id})-[:HAS_SUBTREE*]->(:Subtree)-[:HAS_METADATA]->(m:Metadata) WITH apoc.convert.fromJsonMap(m.value) AS meta WITH meta.metadata.features AS features UNWIND features AS f WITH f.qualifiers.geo_loc_name AS geo_loc UNWIND geo_loc AS location RETURN location, count(*) AS freq ORDER BY freq DESC'
+            'description': 'Table with frequencies by location based on Qualifier nodes.',
+            'type': 'query',
+            # Ajustada para navegar pelos nós Feature e Qualifier em vez de ler JSON
+            'query': '''
+                MATCH (m:Metadata)-[:HAS_FEATURE]->(f:Feature)-[:HAS_QUALIFIER]->(q:Qualifier)
+                WHERE q.key = "geo_loc_name"
+                UNWIND q.value AS location
+                RETURN location, count(*) AS freq
+                ORDER BY freq DESC
+            '''
         }
     }
     return {"success": True, "queries": queries}
