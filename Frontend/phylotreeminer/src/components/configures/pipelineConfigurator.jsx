@@ -657,6 +657,7 @@ const PipelineConfigurator = () => {
                 <Select
                   mode="multiple" 
                   placeholder="Select methods to ignore"
+                  defaultValue={['parsimony', 'mrbayes','raxml']}
                   allowClear
                 >
                   <Option value="distance">Distance</Option>
