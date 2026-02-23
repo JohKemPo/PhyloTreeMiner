@@ -494,6 +494,9 @@ async def get_tree_metadata(project_name: str):
     try:
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
+        
+        # with open(os.path.join(project_path,'out','outputs',"metadata_filtered.json"), 'w') as f:
+        #      json.dump([metadata[0][0]], f, indent=2)
 
         return [metadata[0][0]]
             
@@ -692,9 +695,9 @@ async def get_projects_status():
                 with open(latest_log, 'r', encoding='utf-8', errors='ignore') as f:
                     log_content = f.read()
 
-                if ("Histograma de frequência processado" in log_content):
+                if ("Completed successfully!" in log_content):
                     statuses[project_name] = "completed"
-                elif "ERROR" in log_content:
+                elif "ERROR" in log_content and "Completed successfully!" not in log_content:
                     statuses[project_name] = "failed"
                 else:
                     statuses[project_name] = "idle"
@@ -1186,8 +1189,8 @@ def interpret_similarity(similarity: float) -> str:
 @app.get("/api/tree/pattern-analysis/{project_name}")
 async def analyze_tree_patterns(
     project_name: str,
-    min_support: float = Query(0.3, ge=0.0, le=1.0),
-    max_support: float = Query(0.6, ge=0.0, le=1.0),
+    rare_threshold: float = Query(0.3, ge=0.0, le=1.0),
+    robust_threshold: float = Query(0.6, ge=0.0, le=1.0),
     min_pattern_size: int = Query(2, ge=1),
     max_pattern_size: int = Query(100, ge=1)
 ):
@@ -1210,7 +1213,7 @@ async def analyze_tree_patterns(
             metadata = json.load(f)
         
         analysis_result = analyze_patterns(
-            fpmax_df, metadata[0], min_support, max_support, 
+            fpmax_df, metadata[0], rare_threshold, robust_threshold, 
             min_pattern_size, max_pattern_size
         )
         
@@ -1219,7 +1222,7 @@ async def analyze_tree_patterns(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)}")
 
-def analyze_patterns(fpmax_df, metadata, min_support, max_support, min_size, max_size):
+def analyze_patterns(fpmax_df, metadata, rare_threshold, robust_threshold, min_size, max_size):
     """
     Analisa padrões do DataFrame FPMax e metadados.
     """
@@ -1236,11 +1239,13 @@ def analyze_patterns(fpmax_df, metadata, min_support, max_support, min_size, max
     for tree_data in metadata:
         if isinstance(tree_data, dict):
             for tree_name, subtrees in tree_data.items():
-                
                 for subtree_name, subtree_info in subtrees.items():
+                    terminals = [d.get("newick", "Unknown") for d in subtree_info.get('data_terminals', [])]
+                     
                     hash_to_subtree_info[subtree_info['List_terminals_hash']] = {
                         "tree_name": tree_name,
                         "subtree_name": subtree_name,
+                        "terminals": terminals, 
                         "nodes": {}
                     }
                     
@@ -1255,7 +1260,7 @@ def analyze_patterns(fpmax_df, metadata, min_support, max_support, min_size, max
             itemset = parse_frozenset(row['itemsets'])
             support = row['support']
             
-            if min_size <= len(itemset) <= max_size and min_support <= support <= max_support:
+            if min_size <= len(itemset) <= max_size:
                 patterns.append({
                     'itemset': itemset,
                     'support': support,
@@ -1266,27 +1271,38 @@ def analyze_patterns(fpmax_df, metadata, min_support, max_support, min_size, max
     
     # Encontrar padrões únicos (baixo suporte)
     unique_signatures = []
-    for pattern in patterns:
-        if pattern['support'] <= min_support:
-            node_names = []
-            for h in pattern['itemset']:
-                if h in hash_to_subtree_info:
-                    node_names.append(hash_to_subtree_info[h]["subtree_name"])
-                else:
-                    node_names.append(f"Unknown_{h}")
-            
-            unique_signatures.append({
-                'pattern': list(pattern['itemset']),
-                'node_names': node_names,
-                'support': pattern['support'],
-                'size': pattern['size']
-            })
     
+    method_sensitive_signatures = []
+    topologically_robust = []
+    
+    for pattern in patterns:
+        node_names = []
+        terminals_involved = set()
+        
+        for h in pattern['itemset']:
+            if h in hash_to_subtree_info:
+                node_names.append(hash_to_subtree_info[h]["subtree_name"])
+                terminals_involved.update(hash_to_subtree_info[h]["terminals"])
+            else:
+                node_names.append(f"Unknown_{h}")
+        
+        pattern_data = {
+            'pattern': list(pattern['itemset']),
+            'node_names': node_names,
+            'terminals': list(terminals_involved), # Nova informação adicionada
+            'support': pattern['support'],
+            'size': pattern['size']
+        }
+
+        if pattern['support'] <= rare_threshold:
+            method_sensitive_signatures.append(pattern_data)
+        elif pattern['support'] >= robust_threshold:
+            topologically_robust.append(pattern_data)
     
     # Encontrar padrões quase-invariantes (alto suporte)
     quasi_invariant = []
     for pattern in patterns:
-        if pattern['support'] >= max_support:
+        if pattern['support'] >= robust_threshold:
             node_names = []
             for h in pattern['itemset']:
                 if h in hash_to_subtree_info:
@@ -1321,9 +1337,9 @@ def analyze_patterns(fpmax_df, metadata, min_support, max_support, min_size, max
     tree_coverage = analyze_tree_coverage(patterns, metadata, hash_to_subtree_info)
     
     return {
-        'unique_signatures': unique_signatures,
-        'quasi_invariant_patterns': quasi_invariant,
-        'pattern_statistics': statistics,
+        'method_sensitive_signatures': method_sensitive_signatures,
+        'topologically_robust': topologically_robust,
+        'pattern_statistics': statistics, 
         'tree_coverage': tree_coverage
     }
 
