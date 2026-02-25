@@ -271,10 +271,10 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
         setModalContentType("image");
       } else {
         const textContent = await response.text();
-        
+
         try {
           const data = JSON.parse(textContent);
-          
+
           if (data && data.content !== undefined) {
             setModalContent(data.content);
             setModalContentType(data.type || "json");
@@ -285,9 +285,16 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
         } catch (parseError) {
           console.error("--- ERRO CRÍTICO DE REDE/BACK-END ---");
           console.error("O arquivo não foi totalmente entregue pelo servidor.");
-          console.error(`Tamanho do payload recebido: ${textContent.length} caracteres.`);
-          console.error("Últimos 100 caracteres do arquivo (veja onde cortou):", textContent.slice(-100));
-          throw new Error("JSON incompleto. O servidor interrompeu o envio do arquivo.");
+          console.error(
+            `Tamanho do payload recebido: ${textContent.length} caracteres.`,
+          );
+          console.error(
+            "Últimos 100 caracteres do arquivo (veja onde cortou):",
+            textContent.slice(-100),
+          );
+          throw new Error(
+            "JSON incompleto. O servidor interrompeu o envio do arquivo.",
+          );
         }
       }
 
@@ -556,9 +563,9 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
         return <Empty description="Could not load file contents." />;
       default:
         return (
-          <div 
-            style={{ 
-              maxHeight: "75vh", 
+          <div
+            style={{
+              maxHeight: "75vh",
               overflowY: "auto",
               borderRadius: "6px",
               padding: "16px"
@@ -567,7 +574,8 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
             <pre
               style={{
                 margin: 0,
-                fontFamily: "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
+                fontFamily:
+                  "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace",
                 fontSize: "13px",
                 lineHeight: "1.6",
                 whiteSpace: "pre-wrap",
@@ -750,11 +758,12 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       <Modal
         title={
           modalContentType === "comparison"
-            ? `Comparison: ${selectedItems[0]?.name} vs ${selectedItems[1]?.name}`
-            : modalItem
-              ? `Viewing: ${modalItem.name}`
-              : ""
+          ? `Comparison: ${selectedItems[0]?.name} vs ${selectedItems[1]?.name}`
+          : modalItem
+          ? `Viewing: ${modalItem.name}`
+          : ""
         }
+        centered
         open={isModalVisible}
         onCancel={handleCloseModal}
         footer={null}

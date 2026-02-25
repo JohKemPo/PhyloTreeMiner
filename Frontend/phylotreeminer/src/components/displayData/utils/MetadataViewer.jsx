@@ -155,7 +155,7 @@ const MetadataViewer = ({ data }) => {
       </div>
 
       <Row gutter={24}>
-        <Col span={7}>
+        <Col span={8}>
           <Card 
             style={{ padding: 0, height: "50vh", display: "flex", flexDirection: "column" }}
           >
@@ -195,9 +195,9 @@ const MetadataViewer = ({ data }) => {
           </Card>
         </Col>
 
-        <Col span={17}>
+        <Col span={16}>
           {selectedNodeData ? (
-            <Card style={{ height: "50vh", overflowY: "auto" }}>
+            <Card style={{ height: "50vh", width: "100%", overflowY: "auto" }}>
               <Row align="middle" justify="space-between" style={{ marginBottom: "24px" }}>
                 <Col>
                   <Title level={5} style={{ margin: 0 }}>

@@ -797,7 +797,7 @@ const PipelineConfigurator = () => {
           </Row>
 
           <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }}>
-            <Col span={8}>
+            {/* <Col span={8}>
               <Form.Item
                 name={["subtrees", "resume_infos"]}
                 valuePropName="checked"
@@ -805,7 +805,7 @@ const PipelineConfigurator = () => {
               >
                 <Checkbox> Save Subtree Metadata</Checkbox>
               </Form.Item>
-            </Col>
+            </Col> */}
             <Col span={8}>
               <Form.Item
                 name={["subtrees", "save_metadata"]}

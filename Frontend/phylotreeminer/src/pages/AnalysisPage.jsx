@@ -151,7 +151,7 @@ const AnalysisPage = () => {
                 )
               }
             >
-              <div style={{ height: "65vh" }}>{renderViewer()}</div>
+              <div style={{ height: "65vh",overflow: 'auto' }}>{renderViewer()}</div>
             </Card>
           </Col>
           <Col xs={24} lg={6}>
