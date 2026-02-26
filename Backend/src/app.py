@@ -3,15 +3,16 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Quer
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
+
 from typing import List, Dict, Literal, Optional, Any, Tuple
-import os, datetime, mimetypes, asyncio, re, psutil, json, random
-import glob, tempfile, zipfile, shutil
+import os, datetime, mimetypes, asyncio, re, psutil, json, ijson, random, glob, zipfile 
 import pandas as pd
 from collections import defaultdict, Counter
-
-from Bio import Phylo, SeqIO, Entrez
-from io import StringIO, BytesIO
+import threading
 import numpy as np
+
+from Bio import SeqIO, Entrez
+from io import StringIO, BytesIO
 from dendropy import Tree, TreeList, TaxonNamespace
 from dendropy.calculate import treecompare
 
@@ -19,7 +20,6 @@ from src.routers.neo4j_router import router as neo4j_router
 from src.routers.ncbi_router import router as ncbi_router
 from src.routers.cql_router import router as cql_router
 from src.routers.cql_batch_router import router as cql_batch_router
-
 from src.services.neo4j_services import neo4j_service
 from src.services.ncbi_acquisition import NCBIAcquisition
 from src.services.genericOWIDAnalyzer import GenericOWIDAnalyzer
@@ -51,6 +51,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+metadata_cache: Dict[str, Any] = {}
+cache_lock = threading.Lock()
+json_count_cache = {}
+json_count_lock = threading.Lock()
 
 ncbi_service = NCBIAcquisition(
     email="seu_email@example.com",  
@@ -480,6 +484,245 @@ async def get_owid_metadata(request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao processar JSON: {str(e)}")
 
+def build_metadata_index(metadata_path):
+
+    nodes = []
+    node_index = {}
+
+    host_index = defaultdict(list)
+    lineage_index = defaultdict(list)
+
+    hosts_count = defaultdict(int)
+    country_count = defaultdict(int)
+    timeline_count = defaultdict(int)
+
+    unique_lineages = set()
+
+    for node in iter_metadata_nodes(metadata_path):
+
+        _, annotations, features, qualifiers = get_metadata_node(node)
+        accession=node['newick'].split('.')[0]
+        info = get_node_information(annotations, features, qualifiers, accession=accession)
+
+        nodes.append(info)
+        node_index[info["accessionId"]] = info
+
+        host_index[info["host"]].append(info)
+        lineage_index[info["lineage"]].append(info)
+
+        hosts_count[info["host"]] += 1
+        country_count[info["country"]] += 1
+        timeline_count[info["year"]] += 1
+
+        if info["lineage"]:
+            unique_lineages.add(info["lineage"])
+
+    insights = {
+        "metrics": {
+            "totalNodes": len(nodes),
+            "uniqueLineages": len(unique_lineages),
+            "uniqueHosts": len(hosts_count),
+            "timeSpan": f"{min([y for y in timeline_count.keys() if y != 'Unknown Date'], default='N/A')} - {max([y for y in timeline_count.keys() if y != 'Unknown Date'], default='N/A')}"
+        },
+        "hostData": [{"name": k, "value": v} for k, v in hosts_count.items()],
+        "countryData": [{"country": k, "count": v} for k, v in country_count.items()],
+        "timelineData": [
+            {"year": k, "count": v}
+            for k, v in sorted(timeline_count.items())
+        ],
+    }
+
+    return {
+        "nodes": nodes,
+        "node_index": node_index,
+        "host_index": host_index,
+        "lineage_index": lineage_index,
+        "filters": {
+            "hosts": sorted(host_index.keys()),
+            "lineages": sorted(lineage_index.keys()),
+        },
+        "insights": insights,
+    }
+
+def get_metadata_cache(metadata_path: str):
+
+    file_mtime = os.path.getmtime(metadata_path)
+
+    with cache_lock:
+
+        cache_entry = metadata_cache.get(metadata_path)
+
+        # cache existe e arquivo NÃO mudou
+        if cache_entry and cache_entry["mtime"] == file_mtime:
+            return cache_entry["data"]
+
+        print(" Building metadata cache...")
+
+        data = build_metadata_index(
+            metadata_path
+        )
+
+        metadata_cache[metadata_path] = {
+            "mtime": file_mtime,
+            "data": data
+        }
+
+        return data
+    
+def iter_metadata_nodes(file_path: str, only_first: bool = True, iter_tree: bool = False):
+    accessions = set()
+    
+    with open(file_path, 'rb') as f:
+        for base_node in ijson.items(f, 'item.item'): 
+            if isinstance(base_node, dict):
+                if iter_tree: 
+                    yield base_node
+                    continue
+                for tree_name, tree_content in base_node.items():
+                    for subtree_name, subtree_content in tree_content.items():
+                        if isinstance(subtree_content, dict) and 'data_terminals' in subtree_content:
+                            for node in subtree_content['data_terminals']:
+                                accession = node['newick']
+                                if accession and accession not in accessions:
+                                    accessions.add(accession)
+                                    yield node
+                                
+            # elif isinstance(base_node, list):
+            #     for n in base_node:
+            #         yield n
+                    
+            if only_first: break
+                    
+def get_metadata_node(node: dict): 
+    """
+    Extrai campos 
+    """
+    metadata = node.get('metadata',{})
+    features_list = metadata.get("features") or []
+    features = features_list[0] if features_list else {}
+    annotations = metadata.get('annotations',{})
+    qualifiers = features.get('qualifiers',{})
+    
+    return  metadata, annotations, features, qualifiers
+    
+
+
+def get_node_information (annotations, features, qualifiers, accession: str):
+    """
+    Retorna informações do nó
+    
+    Return
+    ----
+    accessionId,
+    lineage,
+    host,
+    country,
+    year
+    """
+    accessionIdAux = annotations.get('accessions',['Unknown'])
+    accessionId = accessionIdAux[0] if isinstance(accessionIdAux, list) else accessionIdAux
+    if accessionId == 'Unknown':
+        accessionId = accession
+        
+    lineage = annotations.get("organism", 'Unknown') or annotations.get("source", 'Unknown')
+
+    isolate = qualifiers.get("", ["Unknown"])
+
+    host_list = qualifiers.get("host", ["Unknown"])
+    host = host_list[0] if isinstance(host_list, list) else host_list
+
+    geo_loc = qualifiers.get("geo_loc_name", [None])[0]
+    
+    strain_info = qualifiers.get("strain", [""])[0]
+    if not geo_loc:
+        # Fallback: Tenta extrair do 'strain' via Regex se geo_loc_name falhar
+        # Regex para buscar algo como "Brazil/2016" ou "[Brazil 2016]"
+        match = re.search(r'([a-zA-Z\s]+)', strain_info)
+        country = match.group(1).strip() if match else "Unknown"
+    else:
+        # geo_loc_name geralmente vem como "Country: State/City"
+        country = geo_loc.split(':')[0].strip()
+
+
+    coll_date = qualifiers.get("collection_date", [None])[0]
+    raw_date = coll_date if coll_date else strain_info
+    
+    
+    year = "Unknown Date"
+    if raw_date:
+        year_match = re.search(r'\d{4}', raw_date)
+        year = year_match.group(0) if year_match else "Unknown Date"
+        
+    return {
+        "accessionId":accessionId,
+        "lineage":lineage,
+        "host":host,
+        "country":country,
+        "year":year,
+        "isolate": isolate
+    }
+
+@app.get("/api/tree/{project_name}/search-nodes")
+async def search_tree_nodes(
+    project_name: str,
+):
+    """Retorna apenas os IDs dos nós que correspondem aos filtros."""
+    metadata_path = os.path.join(PROJECTS_ROOT, project_name, 'out', 'outputs', "metadata.json")
+    if not os.path.exists(metadata_path):
+        raise HTTPException(status_code=404, detail="Metadata not found")
+
+    try:
+        cache = get_metadata_cache(metadata_path)
+        nodes = cache["nodes"]
+
+        return nodes
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/tree/{project_name}/node/{node_id}")
+async def get_node_details(project_name: str, node_id: str):
+    """Busca os detalhes de um único nó."""
+    metadata_path = os.path.join(PROJECTS_ROOT, project_name, 'out', 'outputs', "metadata.json")
+    if not os.path.exists(metadata_path):
+        raise HTTPException(status_code=404, detail="Metadata not found")
+
+    try:
+
+        cache = get_metadata_cache(metadata_path)
+
+        node = cache["node_index"].get(node_id)
+
+        if not node:
+            raise HTTPException(status_code=404, detail="Node not found in metadata")
+
+        return node
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/tree/{project_name}/insights")
+async def get_tree_insights(project_name: str):
+    """Processa agregações e métricas de forma iterativa no servidor."""
+    metadata_path = os.path.join(PROJECTS_ROOT, project_name, 'out', 'outputs', "metadata.json")
+    if not os.path.exists(metadata_path):
+        raise HTTPException(status_code=404, detail="Metadata not found")
+
+    total_nodes = 0
+    hosts_count = {}
+    country_count = {}
+    timeline_count = {}
+    unique_lineages = set()
+
+    try:
+
+        cache = get_metadata_cache(metadata_path)
+
+        return cache["insights"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/tree/metadata/{project_name}", status_code=202)
 async def get_tree_metadata(project_name: str):
     """
@@ -593,6 +836,77 @@ async def inputs_data_path(path: str = Query("", description="O caminho relativo
             last_modified=datetime.datetime.fromtimestamp(os.path.getmtime(full_item_path))
         ))
     return items
+
+
+def get_json_total_items(file_path: str):
+    """
+    Obtém o total de itens de um JSON iterável.
+    Usa cache baseado no tempo de modificação do arquivo para evitar reprocessamento.
+    """
+    file_mtime = os.path.getmtime(file_path)
+    
+    with json_count_lock:
+        cache_entry = json_count_cache.get(file_path)
+        
+        if cache_entry and cache_entry["mtime"] == file_mtime:
+            return cache_entry["total_items"]
+    
+    print(f"    Construindo cache de contagem para {file_path}...")
+    total = 0
+    with open(file_path, 'rb') as f:
+        for _ in ijson.items(f, 'item.item'):
+            total += 1
+            
+    with json_count_lock:
+        json_count_cache[file_path] = {
+            "mtime": file_mtime,
+            "total_items": total
+        }
+        
+    return total
+
+@app.get("/api/file/paginated")
+async def get_paginated_json(
+    path: str = Query(..., description="Caminho relativo do arquivo."),
+    index: int = Query(0, description="Índice do item no array JSON (0-based).")
+):
+    """
+    Retorna apenas o item específico do array JSON usando leitura iterativa e cache de contagem.
+    """
+    full_path = os.path.abspath(os.path.join(PROJECTS_ROOT, path))
+    
+    if not full_path.startswith(PROJECTS_ROOT):
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+
+    try:
+        total_items = get_json_total_items(full_path)
+        
+        if total_items == 0:
+            raise HTTPException(status_code=404, detail="O arquivo JSON está vazio ou não é um array válido.")
+        if index >= total_items or index < 0:
+            raise HTTPException(status_code=404, detail=f"Índice {index} fora dos limites (0 a {total_items - 1}).")
+
+        target_item = None
+        
+        with open(full_path, 'rb') as f:
+            for i, item in enumerate(ijson.items(f, 'item.item')):
+                if i == index:
+                    target_item = item
+                    break 
+        
+        if target_item is None:
+            raise HTTPException(status_code=404, detail="Índice não encontrado no arquivo.")
+            
+        return {
+            "content": target_item,
+            "currentIndex": index,
+            "totalItems": total_items
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao ler JSON de forma paginada: {e}")
 
 @app.get("/file")
 async def get_file_content(path: str = Query(..., description="Caminho relativo do arquivo.")):
@@ -1214,12 +1528,20 @@ async def analyze_tree_patterns(
             raise HTTPException(status_code=404, detail="Arquivo de metadados não encontrado")
         
         fpmax_df = pd.read_csv(fpmax_path)
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
+               
+        hash_subtrees_infos = dict()
+        analysis_result = dict()
+        
+        for metadata in iter_metadata_nodes(metadata_path, iter_tree=True):
+            hash_subtrees_infos.update(get_hash_to_subtree(metadata))
         
         analysis_result = analyze_patterns(
-            fpmax_df, metadata[0], rare_threshold, robust_threshold, 
-            min_pattern_size, max_pattern_size
+            fpmax_df=fpmax_df, 
+            rare_threshold=rare_threshold, 
+            robust_threshold=robust_threshold, 
+            min_size=min_pattern_size, 
+            max_size=max_pattern_size, 
+            hash_to_subtree_info=hash_subtrees_infos
         )
         
         return analysis_result
@@ -1227,7 +1549,34 @@ async def analyze_tree_patterns(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)}")
 
-def analyze_patterns(fpmax_df, metadata, rare_threshold, robust_threshold, min_size, max_size):
+def get_hash_to_subtree(metadata):
+    """_summary_
+
+    Args:
+        metadata (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    hash_to_subtree_info = {}
+    if isinstance(metadata, dict):
+        for tree_name, subtrees in metadata.items():
+            for subtree_name, subtree_info in subtrees.items():
+                terminals = [d.get("newick", "Unknown") for d in subtree_info.get('data_terminals', [])]
+                    
+                hash_to_subtree_info[subtree_info['List_terminals_hash']] = {
+                    "tree_name": tree_name,
+                    "subtree_name": subtree_name,
+                    "terminals": terminals, 
+                    "nodes": {}
+                }
+                
+                get_newick = lambda h: next((d["newick"] for d in  subtree_info['data_terminals'] if d["terminal_hash"] == h), None)
+                for terminal_hash in subtree_info['Terminals']:
+                    hash_to_subtree_info[subtree_info['List_terminals_hash']]['nodes'][terminal_hash] = get_newick(terminal_hash)
+    return hash_to_subtree_info
+
+def analyze_patterns(fpmax_df, rare_threshold, robust_threshold, min_size, max_size, hash_to_subtree_info = {}):
     """
     Analisa padrões do DataFrame FPMax e metadados.
     """
@@ -1237,27 +1586,7 @@ def analyze_patterns(fpmax_df, metadata, rare_threshold, robust_threshold, min_s
             items = cleaned.split(', ')
             return set(int(item) for item in items if item.strip())
         except:
-            return set()
-    
-    hash_to_subtree_info = {}
-    
-    for tree_data in metadata:
-        if isinstance(tree_data, dict):
-            for tree_name, subtrees in tree_data.items():
-                for subtree_name, subtree_info in subtrees.items():
-                    terminals = [d.get("newick", "Unknown") for d in subtree_info.get('data_terminals', [])]
-                     
-                    hash_to_subtree_info[subtree_info['List_terminals_hash']] = {
-                        "tree_name": tree_name,
-                        "subtree_name": subtree_name,
-                        "terminals": terminals, 
-                        "nodes": {}
-                    }
-                    
-                    get_newick = lambda h: next((d["newick"] for d in  subtree_info['data_terminals'] if d["terminal_hash"] == h), None)
-                    for terminal_hash in subtree_info['Terminals']:
-                        hash_to_subtree_info[subtree_info['List_terminals_hash']]['nodes'][terminal_hash] = get_newick(terminal_hash)
-    
+            return set()  
     
     patterns = []
     for _, row in fpmax_df.iterrows():
@@ -1339,7 +1668,7 @@ def analyze_patterns(fpmax_df, metadata, rare_threshold, robust_threshold, min_s
         }
     }
     
-    tree_coverage = analyze_tree_coverage(patterns, metadata, hash_to_subtree_info)
+    tree_coverage = analyze_tree_coverage(patterns, hash_to_subtree_info)
     
     return {
         'method_sensitive_signatures': method_sensitive_signatures,
@@ -1348,7 +1677,7 @@ def analyze_patterns(fpmax_df, metadata, rare_threshold, robust_threshold, min_s
         'tree_coverage': tree_coverage
     }
 
-def analyze_tree_coverage(patterns, metadata, hash_to_subtree_info):
+def analyze_tree_coverage(patterns, hash_to_subtree_info):
     """
     Analisa a cobertura dos padrões nas árvores.
     """
