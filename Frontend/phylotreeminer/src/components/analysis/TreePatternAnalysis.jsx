@@ -10,7 +10,6 @@ import {
   Statistic,
   Row,
   Col,
-  Progress,
   Collapse,
   List,
   Button,
@@ -19,7 +18,11 @@ import {
   Tooltip,
   Popover,
 } from "antd";
-import { ClusterOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import {
+  ClusterOutlined,
+  InfoCircleOutlined,
+  ExportOutlined,
+} from "@ant-design/icons";
 
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
@@ -201,7 +204,19 @@ const TreePatternAnalysis = ({ projectName }) => {
           }}
         >
           {record.terminals?.map((taxa, idx) => (
-            <Tag key={idx}>{taxa}</Tag>
+            <Tag key={idx} >
+              {
+                <a
+                  href={`https://www.ncbi.nlm.nih.gov/nuccore/${taxa}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button icon={<ExportOutlined />} size='small' type="link" style={{fontSize:10}}>
+                    {taxa}
+                  </Button>
+                </a>
+              }
+            </Tag>
           ))}
         </div>
       </div>
@@ -391,21 +406,21 @@ const TreePatternAnalysis = ({ projectName }) => {
             <ul style={{ paddingLeft: 20, margin: 0 }}>
               <li>
                 <b>Pattern Count:</b> The total number of clades (patterns)
-                identified in this specific tree. 
+                identified in this specific tree.
                 {/* A highly discrepant number may
                 indicate that the algorithm forces unrealistic groupings or,
                 conversely, fails to properly resolve the topology. */}
               </li>
               <li>
                 <b>Average Support:</b> Indicates the overall reliability of
-                this tree's topology. 
+                this tree's topology.
                 {/* Higher values mean that the clades
                 produced by this method are strongly supported by the other
                 trees in the project. */}
               </li>
               <li>
                 <b>Size Range:</b> Shows the range of recovered clade sizes.
-                 {/* It
+                {/* It
                 helps determine whether the method performs better at resolving
                 small, recent groups (smaller sizes) or only major ancestral
                 divisions (larger sizes). */}

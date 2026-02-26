@@ -124,20 +124,20 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
 
     setIsLoading(true);
     setError(null);
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/tree/metadata/${projectName}`,
-      );
-      if (!response.ok) throw new Error("Failed to fetch metadata.");
+    // try {
+    //   const response = await fetch(
+    //     `${API_BASE_URL}/api/tree/metadata/${projectName}`,
+    //   );
+    //   if (!response.ok) throw new Error("Failed to fetch metadata.");
 
-      const data = await response.json();
-      setMetadata(data);
-    } catch (err) {
-      setError(err.message);
-      setMetadata({});
-    } finally {
-      setIsLoading(false);
-    }
+    //   const data = await response.json();
+    //   setMetadata(data);
+    // } catch (err) {
+    //   setError(err.message);
+    //   setMetadata({});
+    // } finally {
+    //   setIsLoading(false);
+    // }
   }, []);
 
   const fetchOWIDMetadata = useCallback(async (metadata) => {
@@ -238,8 +238,24 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       return;
     }
 
+
     if (item.type === "directory") {
       setCurrentPath(item.path);
+      return;
+    }
+
+    if (item.name.endsWith(".json")) {
+      setModalItem(item);
+      setIsModalVisible(true);
+      setModalContent({ path: item.path });
+      setModalContentType("json_paginated");
+      
+      setLoadingItemPath(null);
+      setLoadingItems((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(item.path);
+        return newSet;
+      });
       return;
     }
 
@@ -489,7 +505,8 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
               <TreePatternAnalysis projectName={selectedProject} />
 
               <PhylogeneticInsights
-                treeData={[metadata[0]]}
+                projectName={selectedProject}
+                // treeData={[metadata[0]]}
                 owidMetadata={dadosOWID}
                 loading={isLoading}
                 error={null}
@@ -537,8 +554,8 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
         );
       case "table":
         return <TableView content={modalContent} />;
-      case "json": {
-        return <PaginatedJsonViewer rawContent={modalContent} />;
+      case "json_paginated": {
+        return <PaginatedJsonViewer filePath={modalContent?.path} />;
       }
       case "image":
         return (
@@ -568,7 +585,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
               maxHeight: "75vh",
               overflowY: "auto",
               borderRadius: "6px",
-              padding: "16px"
+              padding: "16px",
             }}
           >
             <pre
@@ -758,17 +775,17 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       <Modal
         title={
           modalContentType === "comparison"
-          ? `Comparison: ${selectedItems[0]?.name} vs ${selectedItems[1]?.name}`
-          : modalItem
-          ? `Viewing: ${modalItem.name}`
-          : ""
+            ? `Comparison: ${selectedItems[0]?.name} vs ${selectedItems[1]?.name}`
+            : modalItem
+              ? `Viewing: ${modalItem.name}`
+              : ""
         }
         centered
         open={isModalVisible}
         onCancel={handleCloseModal}
         footer={null}
         width="90vw"
-        style={{  maxWidth: "90vw" }}
+        style={{ maxWidth: "90vw" }}
         // destroyOnClose
       >
         {renderModalContent()}

@@ -1,29 +1,53 @@
-import React, { useState, useMemo } from "react";
-import { Card, Button } from "antd";
+import React, { useState, useEffect, useMemo } from "react";
+import { Card, Button, Spin, message, Alert } from "antd";
 import MetadataViewer from "./MetadataViewer";
 
-const PaginatedJsonViewer = ({ rawContent }) => {
+const PaginatedJsonViewer = ({ filePath }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentData, setCurrentData] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // useMemo garante que o parse pesado ocorra apenas na primeira renderização
-  const parsedData = useMemo(() => {
-    try {
-      if (!rawContent) return null;
+  const [totalItems, setTotalItems] = useState(1);
 
-      const parsed =
-        typeof rawContent === "string" ? JSON.parse(rawContent) : rawContent;
+  useEffect(() => {
+    if (!filePath) return;
 
-      if (parsed && parsed.content && typeof parsed.content === "string") {
-        return JSON.parse(parsed.content);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const API_BASE_URL = "http://localhost:8000";
+        const response = await fetch(
+          `${API_BASE_URL}/api/file/paginated?path=${encodeURIComponent(filePath)}&index=${currentIndex}`,
+        );
+
+        if (!response.ok) {
+          throw new Error("Falha ao carregar os dados paginados.");
+        }
+
+        const result = await response.json();
+        setCurrentData(result.content);
+        setTotalItems(result.totalItems);
+      } catch (error) {
+        console.error("Erro ao buscar página JSON:", error);
+        message.error("Erro ao carregar o índice solicitado.");
+        setCurrentData(null);
+      } finally {
+        setLoading(false);
       }
-      return parsed;
-    } catch (error) {
-      console.error("Erro de Parse no JSON:", error);
-      return null;
-    }
-  }, [rawContent]);
+    };
 
-  if (!parsedData) {
+    fetchData();
+  }, [filePath, currentIndex]);
+
+  if (loading && !currentData) {
+    return (
+      <Card style={{ marginTop: "16px", padding: "50px", textAlign: "center" }}>
+        <Spin size="large" tip="Carregando árvore..." />
+      </Card>
+    );
+  }
+
+  if (!currentData && !loading) {
     return (
       <Card
         style={{
@@ -33,16 +57,11 @@ const PaginatedJsonViewer = ({ rawContent }) => {
           backgroundColor: "#ffebee",
         }}
       >
-        <strong>Erro:</strong> Não foi possível processar os metadados. O
-        arquivo pode estar corrompido ou incompleto.
+        <strong>Erro:</strong> Não foi possível processar os metadados ou o
+        arquivo está vazio.
       </Card>
     );
   }
-
-  // Verifica se é um array de árvores para paginar, caso contrário, renderiza o objeto único
-  const isArray = Array.isArray(parsedData);
-  const dataToRender = isArray ? parsedData[currentIndex] : parsedData;
-  const totalItems = isArray ? parsedData.length : 1;
 
   const handlePrev = () => setCurrentIndex((prev) => Math.max(0, prev - 1));
   const handleNext = () =>
@@ -50,49 +69,51 @@ const PaginatedJsonViewer = ({ rawContent }) => {
 
   return (
     <Card style={{ marginTop: "16px", padding: "16px" }}>
-      {isArray && totalItems >= 1 && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "16px",
-            paddingBottom: "16px",
-            borderBottom: "1px solid #eee",
-          }}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "16px",
+          paddingBottom: "16px",
+          borderBottom: "1px solid #eee",
+        }}
+      >
+        <Button
+          onClick={handlePrev}
+          disabled={currentIndex === 0 || loading}
+          style={{ padding: "6px 12px" }}
         >
-          <Button
-            onClick={handlePrev}
-            disabled={currentIndex === 0}
-            style={{
-              padding: "6px 12px",
-              cursor: currentIndex === 0 ? "not-allowed" : "pointer",
-            }}
-          >
-            Back
-          </Button>
+          Back
+        </Button>
 
-          <span style={{ fontWeight: "bold" }}>
-            Tree {currentIndex + 1} of {totalItems}
-          </span>
+        <span style={{ fontWeight: "bold" }}>
+          Tree {currentIndex + 1} of {totalItems}
+        </span>
 
-          <Button
-            onClick={handleNext}
-            disabled={currentIndex === totalItems - 1}
-            style={{
-              padding: "6px 12px",
-              cursor:
-                currentIndex === totalItems - 1 ? "not-allowed" : "pointer",
-            }}
-          >
-            Next
-          </Button>
-        </div>
-      )}
-
-      <div style={{ overflowX: "auto", maxHeight: "60vh" }}>
-        <MetadataViewer data={dataToRender} />
+        <Button
+          onClick={handleNext}
+          disabled={currentIndex === totalItems - 1 || loading}
+          style={{ padding: "6px 12px" }}
+        >
+          Next
+        </Button>
       </div>
+
+      <Spin spinning={loading}>
+        <div style={{ overflowX: "auto", maxHeight: "60vh" }}>
+          {loading ? (
+            <Alert
+              message="Loading"
+              description="This may take a while."
+              type="info"
+              showIcon
+            />
+          ) : (
+            <MetadataViewer data={currentData} />
+          )}
+        </div>
+      </Spin>
     </Card>
   );
 };

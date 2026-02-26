@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from "react";
-import { Layout, Spin, Alert, Table, Card, Button } from "antd";
+import React, { useState, useEffect, useMemo } from "react";
+import { Layout, Spin, Alert, Table, Card, Button, Space, Tag } from "antd";
 import { ExportOutlined } from "@ant-design/icons";
 import GeographicDistribution from "./GeographicDistribution";
 import TemporalInsights from "./TemporalInsights";
@@ -7,227 +7,106 @@ import OWIDAnalysisDashboard from "./OWIDAnalysisDashboard";
 
 const { Content } = Layout;
 
-const parseStrainFallback = (strainValue) => {
-  if (!strainValue) return { geoFallback: null, dateFallback: null };
+const PhylogeneticInsights = ({ 
+  projectName, 
+  owidMetadata, 
+  loading: parentLoading, 
+  error: parentError 
+}) => {  
+  const [insightsData, setInsightsData] = useState(null);
+  const [isInsightsLoading, setIsInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState(null);
+  const [sequences, setSequences] = useState([]);
+  const [isSequencesLoading, setIsSequencesLoading] = useState(false);
 
-  // Garante que é uma string (trata caso venha como ["Brazil 1966..."])
-  const strainStr = Array.isArray(strainValue) ? strainValue[0] : strainValue;
-  if (typeof strainStr !== "string")
-    return { geoFallback: null, dateFallback: null };
-
-  let geoFallback = null;
-  let dateFallback = null;
-
-  // 1. Garimpar o Ano: Busca por 4 dígitos começando com 18, 19 ou 20
-  // Ex: Pega "1948" de "China Horn 1948; Sabin Lab"
-  const yearMatch = strainStr.match(/\b(18|19|20)\d{2}\b/);
-  if (yearMatch) {
-    dateFallback = yearMatch[0];
-  }
-
-  // 2. Garimpar a Localização: Busca o texto antes do ano (letras e espaços)
-  // Ex: Pega "Germany" de "Germany-1958", "Brazil" de "Brazil 1966"
-  const geoMatch = strainStr.match(/^([a-zA-Z\s]+)[-\s]*\b(18|19|20)\d{2}\b/);
-  if (geoMatch && geoMatch[1]) {
-    geoFallback = geoMatch[1].trim();
-  } else if (!yearMatch) {
-    // Se não tiver ano nenhum, chuta que a primeira palavra inteira (maior que 3 letras) é o local
-    // Ex: "Kinshasa_variant_X" -> "Kinshasa"
-    const firstWordMatch = strainStr.match(/^([a-zA-Z]{3,})/);
-    if (firstWordMatch) geoFallback = firstWordMatch[1];
-  }
-
-  return { geoFallback, dateFallback };
-};
-
-const extractMeta = (metadata, key) => {
-  if (!metadata) return null;
-
-  if (key === "geoLoc") {
-    return (
-      metadata?.features?.[0]?.qualifiers?.geo_loc_name?.[0] ||
-      metadata?.country ||
-      null
-    );
-  }
-  if (key === "date") {
-    const raw = metadata?.features?.[0]?.qualifiers?.collection_date?.[0];
-
-    if (!raw) return null;
-
-    if (/^\d{4}/.test(raw)) {
-      return raw.split("-")[0];
-    }
-    if (/^\d{2}-[a-zA-Z]{3}-\d{4}$/.test(raw)) {
-      return raw.split("-")[2];
-    }
-    if (raw.includes("-")) {
-      const parts = raw.split("-");
-      const lastPart = parts[parts.length - 1];
-      if (/^\d{4}$/.test(lastPart)) {
-        return lastPart;
+  useEffect(() => {
+    const fetchInsights = async () => {
+      if (!projectName) return;
+      
+      setIsInsightsLoading(true);
+      setInsightsError(null);
+      
+      try {
+        const response = await fetch(`http://localhost:8000/api/tree/${projectName}/insights`);
+        if (!response.ok) throw new Error("Falha ao buscar insights do projeto.");
+        
+        const data = await response.json();
+        setInsightsData(data);
+      } catch (err) {
+        console.error("Erro ao carregar insights:", err);
+        setInsightsError(err.message);
+      } finally {
+        setIsInsightsLoading(false);
       }
-    }
-
-    return raw;
-  }
-  if (key === "isolate") {
-    return (
-      metadata?.features?.[0]?.qualifiers?.isolate?.[0] ||
-      metadata?.strain ||
-      metadata?.features?.[0]?.qualifiers?.strain?.[0] ||
-      null
-    );
-  }
-  if (key === "strain_raw") {
-    return (
-      metadata?.features?.[0]?.qualifiers?.strain || metadata?.strain || null
-    );
-  }
-
-  return null;
-};
-
-const processPhylogeneticTree = (treeData) => {
-  if (!treeData || treeData.length === 0) return [];
-
-  const terminalsList = [];
-  const metadataRegistry = {};
-
-  const registerMetadata = (id, metadataObj) => {
-    if (!id || id === "Unknown") return;
-
-    if (!metadataRegistry[id]) {
-      metadataRegistry[id] = {
-        geoLoc: null,
-        collectionDate: null,
-        isolate: null,
-      };
-    }
-
-    const extractedGeo = extractMeta(metadataObj, "geoLoc");
-    const extractedDate = extractMeta(metadataObj, "date");
-    const extractedIsolate = extractMeta(metadataObj, "isolate");
-
-    const rawStrain = extractMeta(metadataObj, "strain_raw");
-    const { geoFallback, dateFallback } = parseStrainFallback(rawStrain);
-    const finalGeo = extractedGeo || geoFallback;
-    const finalDate = dateFallback || extractedDate;
-
-    if (!metadataRegistry[id].geoLoc && finalGeo)
-      metadataRegistry[id].geoLoc = finalGeo;
-    if (!metadataRegistry[id].collectionDate && finalDate)
-      metadataRegistry[id].collectionDate = finalDate;
-    if (!metadataRegistry[id].isolate && extractedIsolate)
-      metadataRegistry[id].isolate = extractedIsolate;
-  };
-
-  const traverseTree = (node) => {
-    if (!node || typeof node !== "object") return;
-
-    if (node.data_terminals && typeof node.data_terminals === "object") {
-      Object.entries(node.data_terminals).forEach(([id, meta]) => {
-        registerMetadata(id, meta);
-      });
-    }
-
-    if (node.data_terminals && Array.isArray(node.data_terminals)) {
-      node.data_terminals.forEach((terminal) => {
-        const metadata = terminal.metadata || {};
-        const id = metadata.id || terminal.name || "Unknown";
-
-        registerMetadata(id, metadata);
-
-        terminalsList.push({
-          raw: terminal,
-          id: id,
-          newick: terminal.newick,
-        });
-      });
-    }
-
-    if (node.metadata && (node.metadata.id || node.name)) {
-      registerMetadata(node.metadata.id || node.name, node.metadata);
-    }
-
-    const ignoredKeys = [
-      "List_terminals_hash",
-      "metadata",
-      "supports",
-      "newick",
-      "name",
-    ];
-
-    Object.keys(node).forEach((key) => {
-      if (
-        !ignoredKeys.includes(key) &&
-        typeof node[key] === "object" &&
-        node[key] !== null
-      ) {
-        traverseTree(node[key]);
-      }
-    });
-  };
-
-  const rootObj = treeData[0] || treeData;
-  traverseTree(rootObj);
-
-  const enrichedSequences = terminalsList.map((term) => {
-    const meta = metadataRegistry[term.id] || {};
-    return {
-      ...term,
-      geoLoc: meta.geoLoc || null,
-      collectionDate: meta.collectionDate || null,
-      isolate: meta.isolate || "Unknown",
     };
-  });
 
-  const uniqueSequences = Array.from(
-    new Map(enrichedSequences.map((item) => [item.id, item])).values(),
-  );
+    fetchInsights();
+  }, [projectName]);
 
-  return uniqueSequences;
-};
+  useEffect(() => {
+    const fetchSequences = async () => {
+      if (!projectName) return;
+      
+      setIsSequencesLoading(true);
+      
+      try {
+        const idsResponse = await fetch(`http://localhost:8000/api/tree/${projectName}/search-nodes`);
+        if (!idsResponse.ok) throw new Error("Falha ao buscar IDs das sequências.");
+        
+        const nodeIds = await idsResponse.json();
+        
+        setSequences(nodeIds);
+      } catch (err) {
+        console.error("Erro na orquestração de sequências:", err);
+      } finally {
+        setIsSequencesLoading(false);
+      }
+    };
 
-const PhylogeneticInsights = ({ treeData, owidMetadata, loading, error }) => {
-  const sequences = useMemo(
-    () => processPhylogeneticTree(treeData),
-    [treeData],
-  );
-  if (loading) {
-    return (
-      <div style={{ textAlign: "center", padding: "50px" }}>
-        <Spin size="large" tip="Loading data..." />
-      </div>
-    );
-  }
+    fetchSequences();
+  }, [projectName]);
 
-  if (error) {
-    return (
-      <Alert
-        message="Erro"
-        description={
-          error.message || "An error occurred while loading the data."
-        }
-        type="error"
-        showIcon
-      />
-    );
-  }
+  const metrics = insightsData?.metrics || { 
+    totalNodes: 0, 
+    uniqueLineages: 0, 
+    uniqueHosts: 0, 
+    timeSpan: "N/A" 
+  };
+  
+  // Processamento de dados de cruzamento com OWID
+  const timelineData = useMemo(() => {
+    const baseTimeline = insightsData?.timelineData || [];
+    if (!owidMetadata || Object.keys(owidMetadata).length === 0) return baseTimeline;
 
-  if (!treeData) {
-    return (
-      <Alert
-        message="No data"
-        description="No phylogenetic data available for analysis."
-        type="warning"
-        showIcon
-      />
-    );
-  }
+    return baseTimeline.map(item => {
+      const owidInfo = owidMetadata[item.year] || {}; 
+      return {
+        ...item,
+        total_cases: owidInfo.total_cases || 0,
+        new_cases: owidInfo.new_cases || 0
+      };
+    });
+  }, [insightsData, owidMetadata]);
+
+  const countryData = useMemo(() => {
+    const baseCountry = insightsData?.countryData || [];
+    if (!owidMetadata || Object.keys(owidMetadata).length === 0) return baseCountry;
+
+    return baseCountry.map(item => {
+      const owidInfo = Object.values(owidMetadata).find(
+        owidItem => owidItem.location === item.country
+      ) || {};
+
+      return {
+        ...item,
+        population: owidInfo.population || null,
+        total_cases: owidInfo.total_cases || null
+      };
+    });
+  }, [insightsData, owidMetadata]);
 
   const countryFilters = useMemo(() => {
-    const countries = new Set(sequences.map((s) => s.geoLoc).filter(Boolean));
+    const countries = new Set(sequences.map((s) => s.country).filter(Boolean));
     return Array.from(countries)
       .sort()
       .map((c) => ({ text: c, value: c }));
@@ -235,7 +114,7 @@ const PhylogeneticInsights = ({ treeData, owidMetadata, loading, error }) => {
 
   const dateFilters = useMemo(() => {
     const dates = new Set(
-      sequences.map((s) => s.collectionDate).filter(Boolean),
+      sequences.map((s) => s.year).filter(Boolean),
     );
     return Array.from(dates)
       .sort()
@@ -244,45 +123,61 @@ const PhylogeneticInsights = ({ treeData, owidMetadata, loading, error }) => {
 
   const accessionFilters = useMemo(() => {
     const accessions = new Set(
-      sequences.map((s) => s.id).filter(Boolean)
+      sequences.map((s) => s.accessionId).filter(Boolean)
     );
     return Array.from(accessions)
       .sort()
-      .map((id) => ({ text: id, value: id }));
+      .map((accessionId) => ({ text: accessionId, value: accessionId }));
   }, [sequences]);
 
-  const sequenceColumns = [
+  const columns = useMemo(() => [
     {
       title: "Accession ID",
-      dataIndex: "id",
-      key: "id",
-      width: "350px",
-      sorter: (a, b) => (a.id || "").localeCompare(b.id || ""),
+      dataIndex: "accessionId",
+      key: "accessionId",
+      width: "250px",
+      sorter: (a, b) => (a.accessionId || "").localeCompare(b.accessionId || ""),
       filters: accessionFilters,
       filterSearch: true,
-      onFilter: (value, record) => record.id === value,
+      onFilter: (value, record) => record.accessionId === value,
+      render: (text) => <Tag color="blue">{text}</Tag>
     },
     {
       title: "Collection Date",
-      dataIndex: "collectionDate",
-      key: "collectionDate",
-      width: "350px",
+      dataIndex: "year",
+      key: "year",
+      width: "250px",
       filters: dateFilters,
       filterSearch: true,
-      onFilter: (value, record) => record.collectionDate === value,
-      render: (text) => text || "Unknown",
+      onFilter: (value, record) => record.year === value,
+      render: (text) => text === "Unknown Date" ? '-' : text,
       sorter: (a, b) =>
-        (a.collectionDate || "").localeCompare(b.collectionDate || ""),
+        (a.year || "").localeCompare(b.year || ""),
     },
     {
       title: "Country",
-      dataIndex: "geoLoc",
-      key: "geoLoc",
+      dataIndex: "country",
+      key: "country",
+      width: "150px",
       filters: countryFilters,
       filterSearch: true,
       onFilter: (value, record) => record.geoLoc === value,
-      render: (text) => text || "Unknown",
+      render: (text) => text === "Unknown" ? '-' : text,
       sorter: (a, b) => (a.geoLoc || "").localeCompare(b.geoLoc || ""),
+    },
+    {
+      title: "Host",
+      dataIndex: "host",
+      key: "host",
+      width: "150px",
+      render: (text) => text === "Unknown" ? '-' : text,
+    },
+    {
+      title: "Lineage",
+      dataIndex: "lineage",
+      key: "lineage",
+      width: "150px",
+      render: (text) => text === "Unknown" ? '-' : text,
     },
     {
       title: "NCBI Link",
@@ -290,8 +185,8 @@ const PhylogeneticInsights = ({ treeData, owidMetadata, loading, error }) => {
       align: "center",
       width: "250px",
       render: (_, record) => {
-        const accession_id = record.id ? record.id.split(".")[0] : "";
-        if (!accession_id || accession_id === "Unknown") return "-";
+        const accession_id = record.accessionId && record.accessionId !== "Unknown" ? record.accessionId.split(".")[0] : "";
+        if (!accession_id) return "-";
 
         return (
           <a
@@ -306,29 +201,102 @@ const PhylogeneticInsights = ({ treeData, owidMetadata, loading, error }) => {
         );
       },
     },
-  ];
+  ], [accessionFilters, dateFilters, countryFilters]);
+
+  const isLoading = parentLoading || isInsightsLoading || isSequencesLoading;
+  const error = parentError || insightsError;
+
+  if (isLoading) {
+    return (
+      <Layout style={{ padding: "24px", background: "#fff" }}>
+        <Content style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
+          <Spin size="large" tip="Loading phylogenetic insights..." />
+        </Content>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout style={{ padding: "24px", background: "#fff" }}>
+        <Content>
+          <Alert
+            message="Error Loading Insights"
+            description={error}
+            type="error"
+            showIcon
+          />
+        </Content>
+      </Layout>
+    );
+  }
 
   return (
     <Layout style={{ padding: "24px", background: "#fff" }}>
       <Content>
-        <Card title="Sequences Dataset" style={{ marginBottom: 24 }}>
+        {/* Cards de Métricas */}
+        {/* <Space size="middle" style={{ marginBottom: 24, width: "100%", flexWrap: "wrap" }}>
+          <Card size="small" style={{ flex: 1, minWidth: 150 }}>
+            <Statistic title="Total Nodes" value={metrics.totalNodes} />
+          </Card>
+          <Card size="small" style={{ flex: 1, minWidth: 150 }}>
+            <Statistic title="Unique Lineages" value={metrics.uniqueLineages} />
+          </Card>
+          <Card size="small" style={{ flex: 1, minWidth: 150 }}>
+            <Statistic title="Unique Hosts" value={metrics.uniqueHosts} />
+          </Card>
+          <Card size="small" style={{ flex: 1, minWidth: 150 }}>
+            <Statistic title="Time Span" value={metrics.timeSpan} />
+          </Card>
+        </Space> */}
+
+        <Card 
+          title={
+            <Space>
+              <span>Sequences Dataset</span>
+              <Tag color="green">{sequences.length} sequences</Tag>
+            </Space>
+          } 
+          style={{ marginBottom: 24 }}
+        >
           <Table
-            columns={sequenceColumns}
+            columns={columns}
             dataSource={sequences.map((seq, index) => ({
               ...seq,
               key: seq.id || index,
             }))}
-            // pagination={{ pageSize: 10 }}
+            pagination={{ 
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`
+            }}
             size="small"
             scroll={{ x: "max-content" }}
           />
         </Card>
-        <GeographicDistribution sequences={sequences} />
-        <TemporalInsights sequences={sequences} />
-        {owidMetadata && <OWIDAnalysisDashboard analysisData={owidMetadata} />}
+
+        <GeographicDistribution 
+          sequences={sequences} 
+          countryData={countryData}
+        />
+        
+        <TemporalInsights 
+          sequences={sequences} 
+          timelineData={timelineData}
+        />
+        
+        {owidMetadata && Object.keys(owidMetadata).length > 0 && (
+          <OWIDAnalysisDashboard analysisData={owidMetadata} />
+        )}
       </Content>
     </Layout>
   );
 };
+
+const Statistic = ({ title, value }) => (
+  <div>
+    <div style={{ fontSize: 14, color: "#8c8c8c" }}>{title}</div>
+    <div style={{ fontSize: 24, fontWeight: "bold" }}>{value}</div>
+  </div>
+);
 
 export default PhylogeneticInsights;

@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { Card, Row, Col, Tag, List, Spin, Space } from "antd";
+import { Card, Row, Col, Tag, List, Spin, Space, Button } from "antd";
 import {
   getCoordinatesForCountryWithFallback,
   isValidCoordinates,
 } from "./useGeocoding";
+import { ExportOutlined } from "@ant-design/icons";
 import { MapContainer, TileLayer, Circle, Popup, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -91,20 +92,19 @@ const useGeoDataProcessing = (sequences) => {
 
       for (const sequence of sequences) {
         try {
-          const { geoLoc, id, isolate, collectionDate, newick } = sequence;
+          const { country, accessionId, isolate, year } = sequence;
 
-          if (geoLoc && geoLoc !== "Unidentified") {
-            uniqueCountries.add(geoLoc);
+          if (country && country !== "Unknown") {
+            uniqueCountries.add(country);
 
-            if (!sequencesByCountry[geoLoc]) {
-              sequencesByCountry[geoLoc] = [];
+            if (!sequencesByCountry[country]) {
+              sequencesByCountry[country] = [];
             }
 
-            sequencesByCountry[geoLoc].push({
-              id,
+            sequencesByCountry[country].push({
+              id: accessionId,
               isolate,
-              collectionDate,
-              newick,
+              collectionDate: year,
             });
           }
         } catch (error) {
@@ -129,7 +129,7 @@ const useGeoDataProcessing = (sequences) => {
             const result = await processor(item);
             results[currentIndex] = result;
 
-            await new Promise(resolve => setTimeout(resolve, 1100));
+            await new Promise((resolve) => setTimeout(resolve, 1100));
           } catch (error) {
             results[currentIndex] = { error, country: item };
             console.warn(`Error processing country ${item}:`, error);
@@ -366,14 +366,29 @@ const GeographicDistribution = ({ sequences }) => {
                               backgroundColor: "#f8f9fa",
                             }}
                           >
-                            <div>
-                              <strong>{seq.isolate || "N/A"}</strong>
+                            <div style={{ fontSize: "12px", color: "#666" }}>
+                              Isolate: <i>{seq.isolate === "Unknown" ? seq.isolate : '-' }</i>
                             </div>
                             <div style={{ fontSize: "12px", color: "#666" }}>
                               ID: {seq.id}
                             </div>
                             <div style={{ fontSize: "12px", color: "#666" }}>
                               Date: {seq.collectionDate || "N/A"}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "#78B2FF" }}>
+                              <a
+                                href={`https://www.ncbi.nlm.nih.gov/nuccore/${seq.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Button
+                                  icon={<ExportOutlined />}
+                                  size="small"
+                                  type="link"
+                                >
+                                  More info
+                                </Button>
+                              </a>
                             </div>
                           </div>
                         ))}
@@ -417,7 +432,7 @@ const GeographicDistribution = ({ sequences }) => {
                               key={idx}
                               style={{ fontSize: "12px", marginTop: "4px" }}
                             >
-                              {seq.isolate || seq.id}
+                              {seq.id || seq.isolate }
                             </div>
                           ))}
                           {item.sequences.length > 3 && (
