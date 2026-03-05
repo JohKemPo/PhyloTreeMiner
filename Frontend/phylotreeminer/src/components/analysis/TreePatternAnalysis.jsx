@@ -18,13 +18,14 @@ import {
   Tooltip,
   Popover,
   Badge,
-  Dropdown
+  Dropdown,
 } from "antd";
 import {
   ClusterOutlined,
   InfoCircleOutlined,
   ExportOutlined,
 } from "@ant-design/icons";
+import TableExporter from "../../utils/TableExporter";
 
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
@@ -425,7 +426,7 @@ const TreePatternAnalysis = ({ projectName }) => {
                       boxShadow:
                         "0 6px 16px 0 rgba(0,0,0,0.08), 0 3px 6px -4px rgba(0,0,0,0.12)",
                       border: "1px solid #0B7DCF34",
-                      width: "600px", 
+                      width: "600px",
                     }}
                   >
                     <div
@@ -500,7 +501,7 @@ const TreePatternAnalysis = ({ projectName }) => {
                 >
                   <Space>
                     <InfoCircleOutlined style={{ color: "#126BCA" }} />
-                    <Text  style={{ color: "#126BCA" }}>
+                    <Text style={{ color: "#126BCA" }}>
                       View Shared Sequences ({sharedSensitiveSequences.length})
                     </Text>
                   </Space>
@@ -508,6 +509,12 @@ const TreePatternAnalysis = ({ projectName }) => {
               </Dropdown>
             </div>
           )}
+
+          <TableExporter
+            columns={patternColumns}
+            dataSource={method_sensitive_signatures}
+            filename="MethodSensitiveSignatures.csv"
+          />
           <Table
             columns={patternColumns}
             dataSource={method_sensitive_signatures.map((item, index) => ({
@@ -540,7 +547,7 @@ const TreePatternAnalysis = ({ projectName }) => {
                       boxShadow:
                         "0 6px 16px 0 rgba(0,0,0,0.08), 0 3px 6px -4px rgba(0,0,0,0.12)",
                       border: "1px solid #0B7DCF34",
-                      width: "600px", 
+                      width: "600px",
                     }}
                   >
                     <div
@@ -615,7 +622,7 @@ const TreePatternAnalysis = ({ projectName }) => {
                 >
                   <Space>
                     <InfoCircleOutlined style={{ color: "#457A10" }} />
-                    <Text  style={{ color: "#457A10" }}>
+                    <Text style={{ color: "#457A10" }}>
                       View Shared Sequences ({sharedSensitiveSequences.length})
                     </Text>
                   </Space>
@@ -623,6 +630,11 @@ const TreePatternAnalysis = ({ projectName }) => {
               </Dropdown>
             </div>
           )}
+          <TableExporter
+            columns={patternColumns}
+            dataSource={topologically_robust}
+            filename="TopologicallyRobustSignatures.csv"
+          />
           <Table
             columns={patternColumns}
             dataSource={topologically_robust.map((item, index) => ({

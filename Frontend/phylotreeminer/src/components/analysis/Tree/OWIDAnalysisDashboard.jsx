@@ -37,6 +37,7 @@ import {
   ZAxis,
 } from "recharts";
 import { InfoCircleOutlined } from "@ant-design/icons";
+import TableExporter from "../../../utils/TableExporter";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -195,8 +196,8 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
                   avgSupport > 0.7 && cases > 1000
                     ? "positive"
                     : avgSupport < 0.4 && cases > 1000
-                    ? "negative"
-                    : "neutral",
+                      ? "negative"
+                      : "neutral",
               });
             }
           }
@@ -318,7 +319,7 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
 
     if (selectedYear !== "All") {
       filtered = filtered.filter(
-        (item) => item.year === parseInt(selectedYear)
+        (item) => item.year === parseInt(selectedYear),
       );
     }
 
@@ -361,7 +362,7 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
         }, [])
         .sort((a, b) => a.year - b.year),
     }),
-    [aggregatedData, filteredData]
+    [aggregatedData, filteredData],
   );
 
   const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
@@ -398,7 +399,7 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
         (country) => ({
           text: country,
           value: country,
-        })
+        }),
       ),
       onFilter: (value, record) => record.country === value,
       width: 120,
@@ -627,8 +628,8 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
               value={formatSupport(
                 aggregatedData.sequences.reduce(
                   (sum, seq) => sum + (seq.support || 0),
-                  0
-                ) / aggregatedData.sequences.length
+                  0,
+                ) / aggregatedData.sequences.length,
               )}
               suffix="confidence"
             />
@@ -664,7 +665,7 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart
                 data={[...aggregatedData.countries].sort(
-                  (a, b) => b?.averageSupport - a?.averageSupport
+                  (a, b) => b?.averageSupport - a?.averageSupport,
                 )}
               >
                 <CartesianGrid strokeDasharray="3 3" />
@@ -692,7 +693,6 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
             </ResponsiveContainer>
           </Card>
         </Col>
-        
       </Row>
 
       {/* {aggregatedData.supportEpiCorrelation?.country_analysis && (
@@ -801,7 +801,7 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
         </Col> */}
 
         {aggregatedData.supportInsights.length != 0 && (
-          <Col  xs={24} lg={12}>
+          <Col xs={24} lg={12}>
             <Card size="small" title="Support vs Cases Correlation">
               <ResponsiveContainer width="100%" height={300}>
                 <ScatterChart data={aggregatedData.supportInsights}>
@@ -961,6 +961,11 @@ const OWIDAnalysisDashboard = ({ analysisData }) => {
           </Text>
         }
       >
+        <TableExporter
+          columns={sequenceColumns}
+          dataSource={filteredData}
+          filename="OWIDdata.csv"
+        />
         <Table
           columns={sequenceColumns}
           dataSource={filteredData.map((item, index) => ({

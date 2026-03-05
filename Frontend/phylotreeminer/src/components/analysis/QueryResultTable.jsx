@@ -1,5 +1,6 @@
 import { Table, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
+import TableExporter from '../../utils/TableExporter';
 
 
 const QueryResultTable = ({ results }) => {
@@ -43,13 +44,20 @@ const QueryResultTable = ({ results }) => {
   if (!results || results.length === 0) return null;
 
   return (
-    <Table 
+    <div>
+      <TableExporter 
+        columns={columns} 
+        dataSource={dataSource} 
+        filename="queryResults.csv" 
+      />
+      <Table 
         columns={columns} 
         dataSource={dataSource} 
         bordered
         size="small"
         scroll={{ x: 'max-content' }} 
     />
+    </div>
   );
 };
 

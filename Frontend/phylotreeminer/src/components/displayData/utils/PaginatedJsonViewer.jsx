@@ -57,8 +57,7 @@ const PaginatedJsonViewer = ({ filePath }) => {
           backgroundColor: "#ffebee",
         }}
       >
-        <strong>Erro:</strong> Não foi possível processar os metadados ou o
-        arquivo está vazio.
+        <strong>Erro:</strong> The metadata could not be processed or the file is empty.
       </Card>
     );
   }

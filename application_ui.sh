@@ -17,14 +17,35 @@ CONDA_ENV_NAME="Phylotreeminer"
 CONDA_ENV_PATH=""
 REQUIREMENTS_FILE="./requirements.txt"
 
-# NEW: Parse setup parameter
+# Parse setup parameter
 IS_SETUP="false"
 if [ "$1" == "--setup" ] || [ "$1" == "setup" ]; then
     IS_SETUP="true"
 fi
 
 # ==============================================================================
-# UTILITY FUNCTIONS (from provided file)
+# COLORS FOR BETTER VISUALIZATION
+# ==============================================================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
+
+# Icons for better visualization
+ICON_SUCCESS="${GREEN}✓${NC}"
+ICON_ERROR="${RED}✗${NC}"
+ICON_WARNING="${YELLOW}⚠${NC}"
+ICON_INFO="${BLUE}ℹ${NC}"
+ICON_ROCKET="${GREEN}RUNING...${NC}"
+ICON_GEAR="${CYAN}⚙${NC}"
+ICON_CHECK="${GREEN}✔${NC}"
+
+# ==============================================================================
+# UTILITY FUNCTIONS
 # ==============================================================================
 
 # Function to extract frontend port from log
@@ -48,16 +69,23 @@ get_frontend_port() {
 }
 
 cleanup() {
-    echo "Performing cleanup..."
+    echo -e "\n${YELLOW}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${YELLOW}                      PERFORMING CLEANUP                          ${NC}"
+    echo -e "${YELLOW}═══════════════════════════════════════════════════════════════════${NC}\n"
+    
     if [ ! -z "$BACKEND_PID" ]; then
+        echo -e "${ICON_INFO} Stopping backend (PID: $BACKEND_PID)..."
         kill $BACKEND_PID 2>/dev/null || true
     fi
     if [ ! -z "$FRONTEND_PID" ]; then
+        echo -e "${ICON_INFO} Stopping frontend (PID: $FRONTEND_PID)..."
         kill $FRONTEND_PID 2>/dev/null || true
     fi
     # Kill any remaining child processes
     pkill -f 'uvicorn src.app:app' 2>/dev/null || true
     pkill -f 'npm run dev' 2>/dev/null || true
+    
+    echo -e "\n${GREEN}${ICON_SUCCESS} Cleanup completed. Goodbye!\n  Thank you for choosing us.${NC}\n"
     exit 1
 }
 
@@ -66,7 +94,7 @@ trap 'cleanup' 1 2 3 15
 
 check_command() {
     if [ $? -ne 0 ]; then
-        echo "         ERROR: Failed to execute: $1"
+        echo -e "         ${RED}${ICON_ERROR} ERROR: Failed to execute: $1${NC}"
         cleanup
     fi
 }
@@ -77,16 +105,16 @@ check_port() {
     
     if command -v lsof >/dev/null 2>&1; then
         if lsof -Pi :$port_to_check -sTCP:LISTEN -t >/dev/null ; then
-            echo "          WARNING: Port $port_to_check is already in use. ($app_name will choose another if possible)"
+            echo -e "         ${YELLOW}${ICON_WARNING} Port $port_to_check is already in use. ($app_name will choose another if possible)${NC}"
             return 1
         fi
     elif command -v netstat >/dev/null 2>&1; then
         if netstat -tuln | grep ":$port_to_check " >/dev/null; then
-            echo "          WARNING: Port $port_to_check is already in use. ($app_name will choose another if possible)"
+            echo -e "         ${YELLOW}${ICON_WARNING} Port $port_to_check is already in use. ($app_name will choose another if possible)${NC}"
             return 1
         fi
     else
-        echo "WARNING: Could not check port $port_to_check (lsof and netstat not found)"
+        echo -e "${YELLOW}${ICON_WARNING} WARNING: Could not check port $port_to_check (lsof and netstat not found)${NC}"
     fi
     return 0
 }
@@ -97,46 +125,42 @@ wait_for_app() {
     local interval=$3
     local elapsed=0
     
-    echo "Waiting for $url to become available..."
+    echo -e "\n${ICON_INFO} Waiting for ${CYAN}$url${NC} to become available..."
     
     while [ $elapsed -lt $timeout ]; do
         if curl --silent --head --fail $url >/dev/null 2>&1; then
-            echo "✓ $url is available"
+            echo -e "   ${GREEN}${ICON_SUCCESS} $url is available${NC}"
             return 0
         fi
         sleep $interval
         elapsed=$((elapsed + interval))
-        echo "Waiting... ($elapsed/$timeout seconds)"
+        echo -e "   ${ICON_INFO} Waiting... ($elapsed/$timeout seconds)"
     done
     
-    echo "WARNING: Timeout waiting for $url"
+    echo -e "   ${YELLOW}${ICON_WARNING} Timeout waiting for $url${NC}"
     return 1
 }
 
-
 # ==============================================================================
-# NEW SETUP FUNCTIONS (Integrated from our conversation)
+# SETUP FUNCTIONS
 # ==============================================================================
 
 # Function to install Miniconda (Linux x86_64)
 install_miniconda() {
-    echo "------------------------------------------"
-    echo "         Attempting to install Miniconda (Linux x86_64)..."
-    echo "------------------------------------------"
-    echo ""
+    echo -e "\n${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${PURPLE}                ATTEMPTING TO INSTALL MINICONDA                    ${NC}"
+    echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}\n"
+    
     local MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
     local MINICONDA_SH="Miniconda3-latest-Linux-x86_64.sh"
     
     if ! command -v curl >/dev/null 2>&1; then
-        echo "         ERROR: 'curl' not found. Please install curl (sudo apt install curl) and try again."
+        echo -e "${RED}${ICON_ERROR} ERROR: 'curl' not found. Please install curl (sudo apt install curl) and try again.${NC}"
         exit 1
     fi
     
     if ! curl -O $MINICONDA_URL; then
-        echo ""
-        echo "         ERROR: Failed to download Miniconda. Please install it manually."
-        echo ""
-
+        echo -e "\n${RED}${ICON_ERROR} ERROR: Failed to download Miniconda. Please install it manually.${NC}\n"
         exit 1
     fi
     
@@ -144,47 +168,34 @@ install_miniconda() {
     bash $MINICONDA_SH -b -p $HOME/miniconda3
     rm $MINICONDA_SH
 
-    echo ""
-    echo "        Miniconda installed in ~/miniconda3"
-    echo ""
+    echo -e "\n${GREEN}${ICON_SUCCESS} Miniconda installed in ~/miniconda3${NC}\n"
     
     # Add to current session's PATH
     export PATH="$HOME/miniconda3/bin:$PATH"
     
     # Check if conda command now exists
     if ! command -v conda >/dev/null 2>&1; then
-        echo ""
-        echo "         ERROR: Conda installation failed. Check ~/miniconda3."
-        echo ""
-        
+        echo -e "\n${RED}${ICON_ERROR} ERROR: Conda installation failed. Check ~/miniconda3.${NC}\n"
         exit 1
     fi
     
     # Initialize conda for shell (required for 'conda activate')
     conda init bash
-    echo ""
-    echo "        Conda installed. You may need to 'source ~/.bashrc' or restart the terminal after this script."
-    echo ""
-
+    echo -e "\n${GREEN}${ICON_SUCCESS} Conda installed. You may need to 'source ~/.bashrc' or restart the terminal after this script.${NC}\n"
 }
 
 # Main setup function
 run_full_setup() {
-    echo ""
-    echo "=========================================="
-    echo "🚀 Starting complete setup process..."
-    echo "=========================================="
-    echo ""
-
+    echo -e "\n${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${PURPLE}${ICON_ROCKET}            COMPLETE SETUP PROCESS STARTING              ${NC}"
+    echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}\n"
     
     # 1. Check/Install Conda
     if ! command -v conda >/dev/null 2>&1; then
-        echo ""
-        echo "         Conda not found."
+        echo -e "${ICON_INFO} Conda not found. Installing..."
         install_miniconda
     else
-        echo ""
-        echo "        Conda found."
+        echo -e "${GREEN}${ICON_SUCCESS} Conda found.${NC}"
     fi
     
     # Update CONDA_BASE and CONDA_ENV_PATH variables
@@ -192,124 +203,106 @@ run_full_setup() {
     CONDA_ENV_PATH="$CONDA_BASE/envs/$CONDA_ENV_NAME"
     
     # 2. Configure Bioconda channels (essential!)
-    echo ""
-    echo "         Configuring Conda channels (bioconda, conda-forge)..."
+    echo -e "\n${ICON_GEAR} Configuring Conda channels (bioconda, conda-forge)..."
     export CONDA_ALWAYS_YES="true"
     conda update -n base -c conda-forge conda
     conda config --add channels defaults >/dev/null 2>&1
     conda config --add channels bioconda >/dev/null 2>&1
     conda config --add channels conda-forge >/dev/null 2>&1
-    echo ""
-
+    echo -e "${GREEN}${ICON_SUCCESS} Channels configured${NC}\n"
     
     # 3. Create Conda environment (if it doesn't exist)
-    echo ""
-    echo "🐍 Checking Conda environment '$CONDA_ENV_NAME'..."
-    echo ""
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE} CONDA ENVIRONMENT SETUP${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}\n"
+    
     if [ ! -d "$CONDA_ENV_PATH" ]; then
-        echo "         Creating environment '$CONDA_ENV_NAME' with Python 3.10..."
+        echo -e "${ICON_INFO} Creating environment '$CONDA_ENV_NAME' with Python 3.10..."
         if ! conda create -n $CONDA_ENV_NAME python=3.10; then
-            echo "         ERROR: Failed to create conda environment."
-            echo ""
-
+            echo -e "${RED}${ICON_ERROR} ERROR: Failed to create conda environment.${NC}\n"
             exit 1
         fi
-        echo "        Environment created."
-        echo ""
-
+        echo -e "${GREEN}${ICON_SUCCESS} Environment created.${NC}\n"
     else
-        echo "        Environment '$CONDA_ENV_NAME' already exists."
-        echo ""
-
+        echo -e "${GREEN}${ICON_SUCCESS} Environment '$CONDA_ENV_NAME' already exists.${NC}\n"
     fi
     
     # Activate environment for next commands
-    echo "Activating environment for package installation..."
-    echo ""
-
+    echo -e "${ICON_INFO} Activating environment for package installation...\n"
     export PATH="$CONDA_ENV_PATH/bin:$PATH"
     export CONDA_PREFIX="$CONDA_ENV_PATH"
     export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
     
     # 4. Install Python dependencies (pip)
-    echo "         Installing Python dependencies from $REQUIREMENTS_FILE..."
-    echo ""
-
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE} PYTHON DEPENDENCIES${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}\n"
+    
+    echo -e "${ICON_INFO} Installing Python dependencies from $REQUIREMENTS_FILE...\n"
     if [ ! -f "$REQUIREMENTS_FILE" ]; then
-        echo "         ERROR: File $REQUIREMENTS_FILE not found!"
-        echo ""
-
+        echo -e "${RED}${ICON_ERROR} ERROR: File $REQUIREMENTS_FILE not found!${NC}\n"
         exit 1
     fi
     if ! pip install -r "$REQUIREMENTS_FILE"; then
-         echo "         ERROR: Failed to install Python dependencies."
-        echo ""
-
+         echo -e "${RED}${ICON_ERROR} ERROR: Failed to install Python dependencies.${NC}\n"
          exit 1
     fi
-    echo ""
-    echo "        Python dependencies installed."
-    echo "------------------------------------------"
-    echo ""
+    echo -e "\n${GREEN}${ICON_SUCCESS} Python dependencies installed.${NC}\n"
     
-
-
     # 5. Install phylogeny tools (Bioconda)
-    echo "         Installing phylogeny tools (Bioconda)..."
-    echo ""
-
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE} PHYLOGENY TOOLS (BIOCONDA)${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}\n"
+    
     # Required packages (conda package names):
     # clustalo, mafft, iq-tree, fasttree, raxml-ng, mrbayes
     local tools_list=("clustalo" "mafft" "iqtree" "fasttree" "raxml-ng" "mrbayes")
-
     
-    echo "Installing: ${tools_list[*]}"
-    echo ""
-
+    echo -e "${ICON_INFO} Installing: ${YELLOW}${tools_list[*]}${NC}\n"
     if ! conda install -n $CONDA_ENV_NAME -c bioconda ${tools_list[@]}; then
-        echo "         ERROR: Failed to install one or more phylogeny tools."
-        echo "Try manually: conda install -n $CONDA_ENV_NAME -c bioconda ${tools_list[*]}"
-        echo ""
-
+        echo -e "${RED}${ICON_ERROR} ERROR: Failed to install one or more phylogeny tools.${NC}"
+        echo -e "${YELLOW}Try manually: conda install -n $CONDA_ENV_NAME -c bioconda ${tools_list[*]}${NC}\n"
         exit 1
     fi
-    echo "        Phylogeny tools installed."
-    echo ""
-
-
+    echo -e "\n${GREEN}${ICON_SUCCESS} Phylogeny tools installed.${NC}\n"
+    
     # 6. Install Frontend dependencies (npm)
-    echo "         Installing Frontend dependencies (npm)..."
-    cd Frontend/phylotreeminer || { echo "         ERROR: Frontend/phylotreeminer directory not found!"; exit 1; }
-    echo ""
-
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}🌐 FRONTEND DEPENDENCIES (NPM)${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}\n"
+    
+    cd Frontend/phylotreeminer || { 
+        echo -e "${RED}${ICON_ERROR} ERROR: Frontend/phylotreeminer directory not found!${NC}"
+        exit 1
+    }
     
     # Check if npm is installed
     if ! command -v npm >/dev/null 2>&1; then
-        echo "         ERROR: npm (Node.js) is not installed."
-        echo "Please install Node.js manually (ex: 'sudo apt install nodejs npm') and run setup again."
+        echo -e "${RED}${ICON_ERROR} ERROR: npm (Node.js) is not installed.${NC}"
+        echo -e "${YELLOW}Please install Node.js manually (ex: 'sudo apt install nodejs npm') and run setup again.${NC}"
         cd ../..
         exit 1
     fi
     
     if [ ! -f "package.json" ]; then
-        echo "         ERROR: package.json not found!"
+        echo -e "${RED}${ICON_ERROR} ERROR: package.json not found!${NC}"
         cd ../..
         exit 1
     fi
     
-    echo "         Cleaning old frontend dependencies..."
+    echo -e "${ICON_INFO} Cleaning old frontend dependencies..."
     rm -rf node_modules package-lock.json
     
-    echo "         Running npm install..."
+    echo -e "${ICON_INFO} Running npm install...\n"
     if ! npm install; then
-        echo "         ERROR: Failed to install npm dependencies."
+        echo -e "${RED}${ICON_ERROR} ERROR: Failed to install npm dependencies.${NC}"
         cd ../..
         exit 1
     fi
     
     # Config creation logic (from your script) moved here
     if [ ! -f "vite.config.js" ]; then
-        echo "         vite.config.js not found, creating a basic one..."
+        echo -e "${ICON_INFO} vite.config.js not found, creating a basic one..."
         cat > vite.config.js <<EOL
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -321,7 +314,7 @@ EOL
     fi
 
     if [ ! -f "tsconfig.json" ] && [ ! -f "jsconfig.json" ]; then
-        echo "         tsconfig.json/jsconfig.json not found, creating jsconfig.json..."
+        echo -e "${ICON_INFO} tsconfig.json/jsconfig.json not found, creating jsconfig.json..."
         cat > jsconfig.json <<EOL
 {
   "compilerOptions": {
@@ -331,16 +324,13 @@ EOL
 EOL
     fi
     
-    echo "        Frontend dependencies and configs installed."
+    echo -e "\n${GREEN}${ICON_SUCCESS} Frontend dependencies and configs installed.${NC}"
     cd ../..
 
-    echo ""
-    echo ""
-    echo "=========================================="
-    echo "              Setup complete!  "
-    echo "=========================================="
-    echo "Continuing to start applications..."
-    echo ""
+    echo -e "\n${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${PURPLE}${ICON_ROCKET}                 SETUP COMPLETE!                         ${NC}"
+    echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
+    echo -e "\n${GREEN}${ICON_INFO} Continuing to start applications...${NC}\n"
 }
 
 # ==============================================================================
@@ -348,13 +338,9 @@ EOL
 # ==============================================================================
 
 # INITIAL VERIFICATION
-echo ""
-echo ""
-echo "=========================================="
-echo "          Checking prerequisites..."
-echo "=========================================="
-echo ""
-
+echo -e "\n${CYAN}═══════════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}                 CHECKING PREREQUISITES                           ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}\n"
 
 # If setup is requested, run it
 if [ "$IS_SETUP" == "true" ]; then
@@ -366,41 +352,50 @@ fi
 if command -v conda >/dev/null 2>&1; then
     CONDA_BASE=$(conda info --base 2>/dev/null)
     if [ $? -ne 0 ] || [ -z "$CONDA_BASE" ]; then
-        echo "Error: Conda not found or not initialized"
+        echo -e "${RED}${ICON_ERROR} Error: Conda not found or not initialized${NC}"
         exit 1
     fi
     CONDA_ENV_PATH="$CONDA_BASE/envs/$CONDA_ENV_NAME"
 else
     # If conda is still not found (and not setup), fail
-    echo "         ERROR: Conda is not installed or not in PATH."
-    echo "Install Miniconda/Anaconda: https://docs.conda.io/en/latest/miniconda.html"
-    echo "Or run this script with '--setup' to try automatic installation."
+    echo -e "${RED}${ICON_ERROR} ERROR: Conda is not installed or not in PATH.${NC}"
+    echo -e "${YELLOW}Install Miniconda/Anaconda: https://docs.conda.io/en/latest/miniconda.html${NC}"
+    echo -e "${YELLOW}Or run this script with '--setup' to try automatic installation.${NC}"
     exit 1
 fi
 
 # Critical check: Does the 'ic' environment exist?
 if [ ! -d "$CONDA_ENV_PATH" ]; then
-    echo "         ERROR: Conda environment '$CONDA_ENV_NAME' not found."
-    echo "Please run this script with the '--setup' parameter first:"
-    echo "   bash $0 --setup"
+    echo -e "${RED}${ICON_ERROR} ERROR: Conda environment '$CONDA_ENV_NAME' not found.${NC}"
+    echo -e "${YELLOW}Please run this script with the '--setup' parameter first:${NC}"
+    echo -e "   ${WHITE}bash $0 --setup${NC}\n"
     exit 1
 fi
 
-echo "        Conda environment '$CONDA_ENV_NAME' found at $CONDA_ENV_PATH"
-echo ""
+echo -e "${GREEN}${ICON_SUCCESS} Conda environment '$CONDA_ENV_NAME' found at $CONDA_ENV_PATH${NC}\n"
 
 # Check ports
-echo " Checking ports..."
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}                      PORT CHECK                                   ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}\n"
+
+echo -e "${ICON_INFO} Checking ports..."
 check_port 8000 "Backend"
 check_port 5179 "Frontend (Vite)"
+echo ""
 
 # Start Backend
-echo ""
-echo "         Starting backend in background..."
-cd Backend || { echo "         ERROR: Backend directory not found!"; exit 1; }
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}                      STARTING BACKEND                             ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}\n"
+
+cd Backend || { 
+    echo -e "${RED}${ICON_ERROR} ERROR: Backend directory not found!${NC}"
+    exit 1
+}
 
 # Manually activate conda environment
-echo "         Activating conda environment '$CONDA_ENV_NAME'..."
+echo -e "${ICON_INFO} Activating conda environment '$CONDA_ENV_NAME'..."
 export PATH="$CONDA_ENV_PATH/bin:$PATH"
 export CONDA_PREFIX="$CONDA_ENV_PATH"
 export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
@@ -409,136 +404,138 @@ export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
 if command -v python >/dev/null 2>&1; then
     PYTHON_PATH=$(command -v python)
     PYTHON_VERSION=$(python --version 2>&1)
-    echo "         Using Python: $PYTHON_PATH"
-    echo "         Version: $PYTHON_VERSION"
+    echo -e "${GREEN}${ICON_SUCCESS} Using Python: $PYTHON_PATH${NC}"
+    echo -e "${GREEN}${ICON_SUCCESS} Version: $PYTHON_VERSION${NC}"
 else
-    echo "         ERROR: Python not found in environment!"
+    echo -e "${RED}${ICON_ERROR} ERROR: Python not found in environment!${NC}"
     cleanup
 fi
       
-echo "------------------------------------------"
 echo ""
 
 # Check if uvicorn is available
 if ! command -v uvicorn >/dev/null 2>&1; then
-    echo "         ERROR: uvicorn not found in environment!"
-    echo "The pip dependencies seem to not be installed. Try running with '--setup'."
+    echo -e "${RED}${ICON_ERROR} ERROR: uvicorn not found in environment!${NC}"
+    echo -e "${YELLOW}The pip dependencies seem to not be installed. Try running with '--setup'.${NC}"
     cleanup
 fi
 
-echo "         Starting backend server (Uvicorn)..."
+echo -e "${ICON_INFO} Starting backend server (Uvicorn)..."
 uvicorn src.app:app --reload --reload-dir src --host 0.0.0.0 --port 8000 > ../$LOG_FILE_BACKEND 2>&1 &
 BACKEND_PID=$!
 cd ..
 
-echo "         Backend started with PID: $BACKEND_PID"
-echo "         Backend Logs: $LOG_FILE_BACKEND"
-echo "------------------------------------------"
-echo ""
+echo -e "${GREEN}${ICON_SUCCESS} Backend started with PID: ${YELLOW}$BACKEND_PID${NC}"
+echo -e "${ICON_INFO} Backend Logs: ${CYAN}$LOG_FILE_BACKEND${NC}\n"
 
 # Start Frontend
-echo "         Starting frontend in background..."
-cd Frontend/phylotreeminer || { echo "         ERROR: Frontend/phylotreeminer directory not found!"; cleanup; }
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}                     STARTING FRONTEND                             ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}\n"
+
+cd Frontend/phylotreeminer || { 
+    echo -e "${RED}${ICON_ERROR} ERROR: Frontend/phylotreeminer directory not found!${NC}"
+    cleanup
+}
 
 # Check if npm is available (don't try to install, just check)
 if ! command -v npm >/dev/null 2>&1; then
-    echo "         ERROR: npm (Node.js) is not installed. Please install it manually."
+    echo -e "${RED}${ICON_ERROR} ERROR: npm (Node.js) is not installed. Please install it manually.${NC}"
     cleanup
 fi
 
 # Check if dependencies are installed (node_modules)
 if [ ! -d "node_modules" ]; then
-    echo "         ERROR: 'node_modules' directory not found."
-    echo "Frontend dependencies are not installed. Try running with '--setup'."
+    echo -e "${RED}${ICON_ERROR} ERROR: 'node_modules' directory not found.${NC}"
+    echo -e "${YELLOW}Frontend dependencies are not installed. Try running with '--setup'.${NC}"
     cleanup
 fi
 
-echo "         Starting frontend server (Vite)..."
+echo -e "${ICON_INFO} Starting frontend server (Vite)..."
 npm run dev > ../../$LOG_FILE_FRONTEND 2>&1 &
 FRONTEND_PID=$!
 cd ../..
 
-echo "         Frontend started with PID: $FRONTEND_PID"
-echo "         Frontend Logs: $LOG_FILE_FRONTEND"
+echo -e "${GREEN}${ICON_SUCCESS} Frontend started with PID: ${YELLOW}$FRONTEND_PID${NC}"
+echo -e "${ICON_INFO} Frontend Logs: ${CYAN}$LOG_FILE_FRONTEND${NC}\n"
 
 # Wait for apps to start
-echo ""
-echo "Waiting for applications to start..."
-echo "=========================================="
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}              WAITING FOR APPLICATIONS TO START                   ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════════${NC}\n"
 
 # Give frontend time to choose a port
-echo "Waiting for frontend to define port..."
+echo -e "${ICON_INFO} Waiting for frontend to define port..."
 sleep 5
 
 # Detect actual frontend port
 FRONTEND_PORT=$(get_frontend_port)
 FRONTEND_URL="http://localhost:$FRONTEND_PORT"
 
-echo "         Frontend using port: $FRONTEND_PORT"
-echo ""
+echo -e "${GREEN}${ICON_SUCCESS} Frontend using port: ${YELLOW}$FRONTEND_PORT${NC}\n"
 
 # Check if curl is available to check URLs
 if ! command -v curl >/dev/null 2>&1; then
-    echo "WARNING: curl not found, skipping URL verification"
-    echo "   Backend probably at: $BACKEND_URL"
-    echo "   Frontend probably at: $FRONTEND_URL"
+    echo -e "${YELLOW}${ICON_WARNING} curl not found, skipping URL verification${NC}"
+    echo -e "   ${ICON_INFO} Backend probably at: ${CYAN}$BACKEND_URL${NC}"
+    echo -e "   ${ICON_INFO} Frontend probably at: ${CYAN}$FRONTEND_URL${NC}"
 else
     if wait_for_app $BACKEND_URL 10 2; then
-        echo "        Backend running at: $BACKEND_URL"
-        echo "   - API: $BACKEND_URL/docs (Swagger/OpenAPI)"
-        echo "   - Health check: $BACKEND_URL/health"
+        echo -e "\n${GREEN}${ICON_SUCCESS} Backend running at: ${CYAN}$BACKEND_URL${NC}"
+        echo -e "   ${ICON_INFO} API: ${CYAN}$BACKEND_URL/docs${NC} (Swagger/OpenAPI)"
+        echo -e "   ${ICON_INFO} Health check: ${CYAN}$BACKEND_URL/health${NC}"
     else
-        echo "         Failed to connect to backend"
-        echo "   Check logs: tail -f $LOG_FILE_BACKEND"
-        echo "   Expected URL: $BACKEND_URL"
+        echo -e "\n${RED}${ICON_ERROR} Failed to connect to backend${NC}"
+        echo -e "   ${ICON_INFO} Check logs: ${CYAN}tail -f $LOG_FILE_BACKEND${NC}"
+        echo -e "   ${ICON_INFO} Expected URL: ${CYAN}$BACKEND_URL${NC}"
     fi
 
     if wait_for_app $FRONTEND_URL 15 3; then
-        echo "        Frontend running at: $FRONTEND_URL"
+        echo -e "\n${GREEN}${ICON_SUCCESS} Frontend running at: ${CYAN}$FRONTEND_URL${NC}"
     else
-        echo "          Failed to connect to frontend"
-        echo "   Check logs: tail -f $LOG_FILE_FRONTEND"
-        echo "   Detected URL: $FRONTEND_URL"
+        echo -e "\n${RED}${ICON_ERROR} Failed to connect to frontend${NC}"
+        echo -e "   ${ICON_INFO} Check logs: ${CYAN}tail -f $LOG_FILE_FRONTEND${NC}"
+        echo -e "   ${ICON_INFO} Detected URL: ${CYAN}$FRONTEND_URL${NC}"
     fi
 fi
 
-echo ""
-echo "=========================================="
-echo " Applications started!"
-echo ""
-echo "   Logs:"
-echo "   Backend:  tail -f $LOG_FILE_BACKEND"
-echo "   Frontend: tail -f $LOG_FILE_FRONTEND"
-echo ""
-echo "   To stop both applications:"
-echo "   Use Ctrl+C in this terminal"
-echo "(Or manually: pkill -f 'uvicorn src.app:app' && pkill -f 'npm run dev')"
-echo ""
-echo "   To check if they are running:"
-echo "   ps aux | grep -E '(uvicorn|npm)'"
-echo ""
-echo "   URLs:"
-echo "   Frontend: $FRONTEND_URL"
-echo "   Backend:  $BACKEND_URL"
-echo "   API Docs: $BACKEND_URL/docs"
-echo ""
-echo "=========================================="
+echo -e "\n${PURPLE}═══════════════════════════════════════════════════════════════════${NC}"
+echo -e "${PURPLE}${ICON_ROCKET}               APPLICATIONS STARTED!                      ${NC}"
+echo -e "${PURPLE}═══════════════════════════════════════════════════════════════════${NC}\n"
+
+echo -e "${WHITE} SUMMARY${NC}"
+echo -e "${BLUE}───────────────────────────────────────────────────────────────────${NC}"
+echo -e "   ${ICON_INFO} ${WHITE}Logs:${NC}"
+echo -e "      ${GREEN}Backend:${NC}  tail -f $LOG_FILE_BACKEND"
+echo -e "      ${GREEN}Frontend:${NC} tail -f $LOG_FILE_FRONTEND\n"
+
+echo -e "   ${ICON_INFO} ${WHITE}Commands:${NC}"
+echo -e "      ${GREEN}Stop both:${NC}    Use Ctrl+C in this terminal"
+echo -e "      ${GREEN}Check running:${NC} ps aux | grep -E '(uvicorn|npm)'\n"
+
+echo -e "   ${ICON_INFO} ${WHITE}URLs:${NC}"
+echo -e "      ${GREEN}Frontend:${NC}  ${CYAN}$FRONTEND_URL${NC}"
+echo -e "      ${GREEN}Backend:${NC}   ${CYAN}$BACKEND_URL${NC}"
+echo -e "      ${GREEN}API Docs:${NC}  ${CYAN}$BACKEND_URL/docs${NC}"
+echo -e "${BLUE}───────────────────────────────────────────────────────────────────${NC}\n"
 
 # Function to check if processes are still running
 check_processes() {
     if ! kill -0 $BACKEND_PID 2>/dev/null; then
-        echo "         Backend stopped unexpectedly!"
+        echo -e "\n${RED}${ICON_ERROR} Backend stopped unexpectedly!${NC}"
         return 1
     fi
     if ! kill -0 $FRONTEND_PID 2>/dev/null; then
-        echo "         Frontend stopped unexpectedly!"
+        echo -e "\n${RED}${ICON_ERROR} Frontend stopped unexpectedly!${NC}"
         return 1
     fi
     return 0
 }
 
-echo ""
-echo -e "\e[31mPress Ctrl+C to stop applications...\e[0m"
+echo -e "\n${RED}═══════════════════════════════════════════════════════════════════${NC}"
+echo -e "${RED}                Press Ctrl+C to stop applications                   ${NC}"
+echo -e "${RED}═══════════════════════════════════════════════════════════════════${NC}\n"
+
 while check_processes; do
     sleep 5
 done
