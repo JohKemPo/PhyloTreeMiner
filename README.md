@@ -5,7 +5,7 @@
 ⚠️ **To clone the repository and its submodules:** ⚠️
 
 ```bash
-git clone --recurse-submodules <URL-do-repositorio>
+git clone --recursive https://github.com/UFFeScience/phylotreeminer.git
 ```
  
 
