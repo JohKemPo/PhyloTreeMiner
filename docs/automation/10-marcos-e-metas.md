@@ -311,7 +311,7 @@ Cada um foi achado por acaso, ao investigar outra coisa. **Nenhum método foi au
 # 1. toda chamada de ferramenta está no manifesto, com semente e paralelização
 python - <<'EOF'
 import json; m = json.load(open('.../out/outputs/manifest.json'))
-assert set(m['tools_invoked']) >= {'iqtree2','raxml-ng','FastTree','mb'}
+assert set(m['tools_invoked']) >= {'iqtree','raxml-ng','fasttree','mrbayes'}
 assert all('seed' in v for v in m['tools_invoked'].values())
 EOF
 

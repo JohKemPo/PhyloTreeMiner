@@ -32,28 +32,57 @@ Detalhe e tabelas de diff: DEC-016, DEC-018 a DEC-023 no [log de execução](07-
 | Componente | Versão | Como conferir |
 |---|---|---|
 | CPU / RAM | i5-11400H, 6 núcleos físicos / 12 lógicos, 31 GB | `nproc`, `free -g` |
-| Python | 3.10.19 (conda `Phylotreeminer`) | `python -V` |
+| Python | 3.10.19 | `python -V` |
 | Node | v22.22.3 | `node -v` |
 | Docker | 28.3.3 | `docker --version` |
-| MAFFT | v7.490 | `mafft --version` |
-| Clustal Omega | 1.2.4 | `clustalo --version` |
-| MUSCLE | **3.8.1551** (não é o MUSCLE5) | `muscle -version` |
-| FastTree | **2.1.11** | `FastTree` (primeira linha) |
-| IQ-TREE | 2.2.2.6 | `iqtree2 --version` |
-| RAxML-NG | **1.1.0** | `raxml-ng --version` |
-| MrBayes | **ausente** | `command -v mrbayes` |
 
-### 2.2 Divergências de versão — bloqueiam replicação exata
+Para as ferramentas de bioinformática, **a versão depende de onde o binário for
+encontrado** — ver §2.2. O comando que responde é sempre o mesmo:
 
-Os artefatos em `BioComp_UFF/projects/**` foram gerados em **outra máquina** (i9-13900KF, 24 núcleos, 125 GB, usuário `hilai360`), com versões diferentes:
+```bash
+bash scripts/check_dependencies.sh
+```
 
-| Ferramenta | Nos logs dos artefatos | Na máquina de desenvolvimento |
+| Ferramenta | No env do projeto | No PATH do sistema |
 |---|---|---|
+| MAFFT | 7.525 | v7.490 |
+| Clustal Omega | 1.2.4 | 1.2.4 |
+| MUSCLE | *ausente* | **3.8.1551** (não é o MUSCLE5) |
 | FastTree | **2.2.0** | 2.1.11 |
+| IQ-TREE | **3.0.1** (binário `iqtree3`) | 2.2.2.6 (binário `iqtree2`) |
 | RAxML-NG | **1.2.2** | 1.1.0 |
-| IQ-TREE | 2.2.2.6 | 2.2.2.6 (coincide) |
+| MrBayes | 3.2.7 | 3.2.7 |
 
-**Antes de qualquer reexecução, decida e registre:** ou se pinam as versões de origem, ou se declara a versão nova como a do experimento e se reexecuta tudo. Um conjunto misto não é replicação. É o item aberto de [`08-ficha-de-fatos §1`](08-ficha-de-fatos.md).
+### 2.2 Não havia divergência entre máquinas — havia sombreamento de PATH
+
+**Correção de um registro errado.** Este documento afirmou, por vários dias, que
+os artefatos em `BioComp_UFF/projects/**` tinham sido gerados com FastTree 2.2.0
+e RAxML-NG 1.2.2 enquanto a máquina de desenvolvimento tinha 2.1.11 e 1.1.0, e
+que essa diferença bloqueava a replicação exata. **Isso estava errado.**
+
+O env conda do projeto *sempre* teve FastTree 2.2.0 e RAxML-NG 1.2.2 — as mesmas
+versões dos logs dos artefatos. O que acontecia é que, com o env não ativado, o
+PATH resolvia `/usr/bin/FastTree` 2.1.11 e `/usr/local/bin/raxml-ng` 1.1.0. Eu
+media o binário do sistema e registrava o resultado como "a versão do projeto".
+
+O que isso muda:
+
+- **Não há decisão pendente** sobre pinar versões ou reexecutar tudo. O item
+  correspondente de [`08-ficha-de-fatos §1`](08-ficha-de-fatos.md) está resolvido:
+  as versões coincidem.
+- **A causa real é operacional e reaparece em qualquer máquina** onde as
+  ferramentas existam também fora do conda. É o que `check_dependencies.sh`
+  agora sinaliza como *"fora do env"*.
+- **O nome do binário não é estável.** O pacote `iqtree` do bioconda instalava
+  `iqtree2` na série 2.x e passou a instalar `iqtree`/`iqtree3` na 3.x, sem
+  `iqtree2`. O pipeline chamava `iqtree2` fixo: quem seguisse a receita do
+  projeto instalava o IQ-TREE com sucesso e mesmo assim não conseguia rodar.
+  Resolvido em `workflow/utils/external_tools.py`, que é o único lugar que sabe
+  os nomes possíveis de cada ferramenta.
+
+**A lição que fica:** medir a ferramenta errada produz um fato falso que se
+propaga por todo o registro. Antes de anotar uma versão, confira **de onde** o
+binário veio, não só o número que ele imprime.
 
 ### 2.3 Registre o ambiente da máquina de validação aqui
 

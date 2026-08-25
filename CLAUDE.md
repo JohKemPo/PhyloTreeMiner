@@ -38,6 +38,22 @@ A memória externa do projeto é [`docs/`](docs/README.md), e ela foi escrita pa
 | `Frontend/phylotreeminer/` | React + vite + vitest |
 | `docs/science/scripts/` | oráculos independentes: `audit_variola.py`, `oraculo_rf_dendropy.py` |
 
+## Ambiente
+
+O projeto tem ambiente conda **próprio**; nada é instalado no `base` nem no
+ambiente geral da máquina. O gestor de pacotes do frontend é o **pnpm**.
+
+```bash
+make setup                           # cria/atualiza o env conda e instala o frontend
+bash scripts/check_dependencies.sh   # confere as 7 ferramentas DENTRO do env
+bash scripts/cleanup_env.sh          # diagnostica o que foi parar no 'base' (não apaga sem --apply)
+conda activate Phylotreeminer
+```
+
+Sem o env ativo, o PATH pode resolver binários do sistema em versões
+diferentes das da receita. `check_dependencies.sh` acusa toda ferramenta
+resolvida **fora do env**; não ignore esse aviso antes de medir qualquer coisa.
+
 ## Verificação
 
 ```bash
@@ -50,7 +66,8 @@ cd BioComp_UFF && python -m unittest \
   workflow.tests.test_stability workflow.tests.test_subtree_mining \
   workflow.tests.test_tree_identity workflow.tests.test_rf_bipartition \
   workflow.tests.test_manifest workflow.tests.test_rooting \
-  workflow.tests.test_taxonomy workflow.tests.test_aligners             # 138 tests, OK
+  workflow.tests.test_taxonomy workflow.tests.test_aligners \
+  workflow.tests.test_external_tools                                    # 150 tests, OK
 
 cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py  # 137 pares, 0 divergências
 cd BioComp_UFF && python ../docs/science/scripts/audit_variola.py --secao 3
@@ -66,6 +83,8 @@ make reference-check                 # PORTÃO CIENTÍFICO: invariante 3/3; cód
 - **Os artefatos em disco são anteriores às correções de M1.** O pipeline foi corrigido; `metadata.json`, `all_results_fpmax.csv` e relatórios em `BioComp_UFF/projects/**` ainda têm os números antigos. Só a reexecução materializa o número certo.
 - **O submódulo já vinha sujo** antes deste trabalho (`workflow/stability/`, `docs/`, READMEs). O `git status` de lá não é linha de base limpa.
 - **Não rode pipeline pesado sem combinar.** A execução pesada é feita numa máquina dedicada — ver o handoff de validação. O conjunto de validação (`Zika_21seq_validacao`, 14 pipelines, ~11 min) é leve e roda aqui: ver a skill [`validar-workflow`](docs/skills/validar-workflow/SKILL.md).
+- **O nome do binário não acompanha o do pacote.** O `iqtree` 3.x instala `iqtree`/`iqtree3` e **não** `iqtree2`; o FastTree é `FastTree` ou `fasttree`; o MrBayes é `mb`. Nunca fixe um nome: use `workflow.utils.external_tools.require_tool`.
+- **`npm` não é o gestor deste projeto.** É `pnpm`, e o lockfile versionado é o `pnpm-lock.yaml`. Rodar `npm install` cria um `package-lock.json` concorrente.
 - **Use `mode: "advanced"`, nunca `auto`.** O modo `auto` roda só distância e parcimônia, e encerra dizendo `Completed successfully!` (D18).
 
 ## Estilo

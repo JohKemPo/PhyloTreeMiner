@@ -1,0 +1,6 @@
+# A partir do pnpm 10 esta configuração saiu do package.json; no pnpm 11 a
+# chave passou a ser `allowBuilds`. O esbuild resolve o próprio binário num
+# postinstall: sem esta autorização o pnpm o ignora e o vite quebra ao rodar,
+# não ao instalar — falha que aparece longe da causa.
+allowBuilds:
+  esbuild: true

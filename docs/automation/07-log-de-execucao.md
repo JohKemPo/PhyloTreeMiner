@@ -1078,6 +1078,94 @@ npm run build · npm run lint:ratchet                                 → ✓ ·
 
 **Write-lock:** `BioComp_UFF/workflow/alignment/aligners.py`, `BioComp_UFF/workflow/tests/test_aligners.py`, `Backend/src/app.py`, `Frontend/.../AlignerSelect.jsx`, `docs/respostasUteis/r2.md`, `docs/automation/12-portabilidade-e-migracao.md` (novo), `CLAUDE.md`, `docs/automation/10-marcos-e-metas.md`. **Reversível:** sim.
 
+### DEC-043 · 2026-08-25 · Ambiente isolado, binário resolvido por nome — e a **retratação** de um fato que nunca existiu
+
+**Gatilho:** o IQ-TREE falhava ao instalar na máquina nova, e o usuário pediu um env conda próprio do projeto, separado do ambiente geral da máquina.
+
+#### O fato retratado
+
+Este log, [`11-handoff`](11-handoff-maquina-de-validacao.md) e [`12-portabilidade`](12-portabilidade-e-migracao.md) afirmaram, em três lugares e por vários dias, que havia **divergência de versão entre máquinas** — FastTree 2.2.0 × 2.1.11, RAxML-NG 1.2.2 × 1.1.0 — e que isso **bloqueava a replicação exata**, exigindo uma decisão entre pinar as versões de origem ou reexecutar tudo.
+
+**Não havia divergência.** O env conda do projeto sempre teve FastTree **2.2.0**, RAxML-NG **1.2.2** e IQ-TREE **3.0.1** — as mesmas versões dos logs dos artefatos. Com o env não ativado, o PATH resolvia `/usr/bin/FastTree` 2.1.11 e `/usr/local/bin/raxml-ng` 1.1.0, e eu registrava o binário do sistema como se fosse "a versão do projeto".
+
+O que a retratação muda:
+
+- **A decisão pendente não existe.** O item correspondente de [`08-ficha-de-fatos §1`](08-ficha-de-fatos.md) está resolvido: as versões coincidem.
+- **A linha do ledger de 2026-08-24** ("Divergência de versão do RAxML-NG entre máquinas… **Bloqueia replicação exata**") fica **retratada** — mantida no registro porque o histórico de crença faz parte da auditoria, com a correção anotada na própria linha.
+- **A causa real é operacional e reaparece em qualquer máquina** onde as ferramentas existam também fora do conda.
+
+**A lição:** medir a ferramenta errada produz um fato falso que se propaga por todo o registro. Antes de anotar uma versão, confira **de onde** o binário veio, não só o número que ele imprime.
+
+#### O defeito de instalação
+
+O pacote `iqtree` do bioconda instalava `iqtree2` na série 2.x e passou a instalar `iqtree` e `iqtree3` na 3.x — **sem `iqtree2`**. O pipeline chamava `'iqtree2'` fixo em `builder.py`, e o manifesto procurava por esse mesmo nome. Consequência: quem seguisse a receita do projeto **instalava o IQ-TREE com sucesso e mesmo assim não conseguia rodar**, e o manifesto gravava `"iqtree2": null` numa máquina onde a ferramenta estava instalada — o mesmo erro que já tinha tirado o MrBayes do conjunto de validação ([D20](../science/02-defeitos-que-alteram-resultado.md#d20)).
+
+**Correção:** `workflow/utils/external_tools.py` passa a ser o **único lugar** que sabe os nomes possíveis de cada ferramenta (`iqtree3`/`iqtree2`/`iqtree`, `FastTree`/`fasttree`/`FastTreeMP`, `mb`/`mrbayes`). Pipeline e manifesto consultam a mesma tabela — duas listas divergindo seria [D5](../science/02-defeitos-que-alteram-resultado.md#d5) em outro assunto.
+
+#### O ambiente isolado
+
+Correção de rota: **`application_ui.sh` sempre criou o env `Phylotreeminer` e instalou com `-n`** — nunca contaminou o `base`. O `conda install` sem `-n` estava só no helper `scripts/check_dependencies.sh --install`, acrescentado por mim em `4214c36`. O `cleanup_env.sh` mediu esta máquina: **o `base` está limpo, não há nada a desfazer.**
+
+O defeito real do instalador era outro, e é o que explica o erro do IQ-TREE na máquina nova:
+
+```bash
+conda config --add channels defaults    # ← reescreve o ~/.condarc GLOBAL
+conda config --add channels bioconda
+conda config --add channels conda-forge
+```
+
+Duas coisas erradas de uma vez. Primeira: `conda config` mexe na configuração **global do usuário**, o oposto de manter o projeto separado — quem rodasse o setup levava os canais do PhyloTreeMiner para todo trabalho seu em conda. Segunda: `defaults` **conflita com o bioconda** na resolução e passou a exigir aceite dos termos de serviço da Anaconda; numa máquina nova, essa combinação é o que faz a instalação do IQ-TREE falhar.
+
+Além disso, a lista de ferramentas do instalador (`clustalo mafft iqtree fasttree raxml-ng mrbayes`) **não tinha MUSCLE** — duas listas para a mesma coisa, já divergindo.
+
+**Correção:** `application_ui.sh` delega a criação do ambiente a `scripts/setup_env.sh` e a verificação a `scripts/check_dependencies.sh --install`. Os canais passam a ser fixados **por ambiente**, dentro do `environment.yml`, e o `~/.condarc` do usuário não é mais tocado. A lista de ferramentas passa a existir num lugar só.
+
+| Artefato | O que passa a garantir |
+|---|---|
+| `environment.yml` | Receita completa: python 3.10, as 7 ferramentas (incluindo **muscle**), pyqt, e `pip: -r requirements-dev.txt` como fonte única das dependências Python. Canais conda-forge + bioconda; `defaults` fica de fora |
+| `scripts/setup_env.sh` | Cria ou atualiza o env do projeto; **recusa** ter o `base` como alvo; `--recreate`; diagnóstico ordenado quando a resolução falha (ARM sem build no bioconda, prioridade de canal, solver) |
+| `scripts/cleanup_env.sh` | Diagnostica e desfaz o que foi parar no `base`. **Não apaga nada sem `--apply`** e confirma antes |
+| `scripts/lib_env.sh` | Resolve o nome do env num lugar só, **sem diferenciar maiúsculas** — esta base tinha um env `Phylotreeminer` anterior à receita, e procurar `phylotreeminer` exato faria os scripts criarem um segundo env em vez de reaproveitar o existente |
+| `check_dependencies.sh` | Procura em `PTM_BIN` > env do projeto > PATH (com aviso ruidoso), usa **lista de candidatos** por ferramenta, sinaliza toda ferramenta resolvida **fora do env** e a inclui na lista de instalação — presente no sistema não é presente no projeto. Instala sempre com `-n` |
+| `application_ui.sh` | Deixa de configurar canais globalmente e de manter a própria lista de ferramentas; chama os dois scripts acima |
+| `scripts/lib_node.sh` | Detecção e instalação assistida do pnpm num lugar só, usada por `start.sh` e `application_ui.sh` |
+
+**Estado desta máquina, medido:** o `base` está **limpo** (nada a desfazer); o env `Phylotreeminer` tem 6 das 7 ferramentas; **MUSCLE** só existe em `/usr/bin` (3.8.1551) e agora é oferecido para instalação no env.
+
+#### pnpm no lugar do npm
+
+Pedido do usuário, por ser mais rápido e mais leve em disco. `pnpm import` converteu o `package-lock.json` preservando as versões resolvidas; o lockfile antigo saiu, junto com um `package-lock.json` vazio que tinha sobrado na raiz do repositório.
+
+Três coisas que a migração obrigou a arrumar:
+
+- **`allowBuilds`** em `pnpm-workspace.yaml`: o pnpm 10 parou de rodar scripts de build de dependências por padrão e o 11 renomeou a chave. Sem autorizar o `esbuild`, o pnpm o ignora **em silêncio** e o vite quebra ao *rodar*, não ao instalar — falha que aparece longe da causa.
+- **`"test": "vitest run"`**: o script era `vitest` puro, e o modo watch só não travava porque o `npm run test -- --run` repassava a flag. O pnpm não repassa igual, e a chamada ficou pendurada. Depender de repasse de flag para não travar é frágil em qualquer gestor; o modo interativo virou `test:watch`.
+- **`--frozen-lockfile`** no instalador, no lugar de `rm -rf package-lock.json`: apagar o lockfile a cada setup significa que duas máquinas podem resolver árvores de dependência diferentes **do mesmo commit**.
+
+`scripts/lib_node.sh` faz a detecção assistida: tenta o **corepack** primeiro — vem com o Node e não exige administrador —, depois `npm install -g pnpm`, e só então pede ação do usuário, listando as três formas de instalar. `start.sh` confere o pnpm **antes** de subir o Neo4j, porque falhar depois de subir o banco e o backend é descobrir tarde. Os dois caminhos foram exercitados com o PATH podado: com corepack, resolve sozinho; sem Node, orienta e sai com código 1.
+
+| | npm | pnpm |
+|---|---|---|
+| `install` limpo | — | 2,6 s |
+| `build` | — | 19,0 s |
+| `test` | — | 0,8 s, 8 testes |
+| `lint:ratchet` | 68/68 · 27/27 | 68/68 · 27/27 (idêntico) |
+
+**Evidência de execução:**
+```
+bash scripts/cleanup_env.sh          → base LIMPO, nada a desfazer; 8 binários de sistema
+bash scripts/check_dependencies.sh   → env Phylotreeminer: MAFFT 7.525, Clustal 1.2.4,
+                                        FastTree 2.2.0, IQ-TREE 3.0.1 (iqtree3),
+                                        RAxML-NG 1.2.2, MrBayes 3.2.7
+                                        ⚠ MUSCLE fora do env (/usr/bin/muscle)
+python -m pytest workflow/tests/     → 150 passed
+pnpm install --frozen-lockfile       → Done in 2.6s
+pnpm run build · test · lint:ratchet → ✓ built in 19.03s · 8 passed · 68/68, 27/27
+bash -n application_ui.sh            → sem erro de sintaxe
+```
+
+**Write-lock:** `environment.yml`, `application_ui.sh`, `scripts/{setup_env,cleanup_env,check_dependencies,lib_env}.sh`, `BioComp_UFF/workflow/utils/{external_tools,manifest}.py`, `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow/tests/{test_external_tools,test_manifest}.py`, `Frontend/phylotreeminer/{package.json,pnpm-lock.yaml,pnpm-workspace.yaml}`, `Makefile`, `.github/workflows/ci.yml`, `README.md`, `docs/automation/{07,10,11,12}`. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1172,7 +1260,7 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-24 | O `git status` do submódulo já vinha sujo antes de DEC-020 (`workflow/stability/` e `docs/` **não rastreados**, READMEs modificados). Commitar ali exige separar o que é deste trabalho do que já estava | `BioComp_UFF/` | DEC-020 | Considerar antes do primeiro commit no submódulo |
 | 2026-08-24 | `report.py` e `audit_variola.py` foram ajustados para RF `None`; qualquer outro consumidor de `rf_matrix`/`factor_effects` fora do repositório vai receber `None` onde antes recebia `0.0` | `BioComp_UFF/workflow/stability/` | M1.3 / DEC-023 | Mudança de contrato declarada; nenhum consumidor conhecido fora dos dois ajustados |
 | 2026-08-24 | **D17** — `--threads auto` do RAxML-NG: `SIGSEGV` na máquina de origem e, mesmo onde roda, **RF = 8 entre duas execuções com a mesma semente** variando só o esquema de paralelização. Torna inatingível o item "figura reproduzível por script + commit + hash" | chamada do RAxML-NG no pipeline | DEC-025 | **M2.5** — fixar `--threads N --workers 1` e registrar no manifesto |
-| 2026-08-24 | Divergência de versão do **RAxML-NG** entre máquinas: 1.2.2 na de origem, 1.1.0 nesta. Soma-se à do FastTree (2.2.0 × 2.1.11) | `PATH` vs `*.raxml.log` | DEC-025 | **Bloqueia replicação exata** — pinar no ambiente |
+| 2026-08-24 | ~~Divergência de versão do **RAxML-NG** entre máquinas: 1.2.2 na de origem, 1.1.0 nesta. Soma-se à do FastTree (2.2.0 × 2.1.11)~~ **RETRATADO em DEC-043**: o env do projeto sempre teve 1.2.2 e 2.2.0 — o PATH resolvia os binários do sistema. Não havia divergência, havia sombreamento | `PATH` vs `*.raxml.log` | DEC-025 → **DEC-043** | ✅ **não bloqueia nada** — as versões coincidem |
 | 2026-08-24 | A exclusão de `raxml` do `ignore_mode` em VARV-49/52/121 pode ser **revertida**: o RAxML conclui nesses dados em ~4 min. Devolve `M` de 4 para 5 e elimina a incomparabilidade de `M` entre experimentos (DM-11) | `config_backup.json` | DEC-025 | **M2** — depende de reexecutar |
 | 2026-08-24 | Os experimentos **já executados** não têm e não terão manifesto: versões e sementes daquelas execuções nunca foram registradas. Só a reexecução fecha esse buraco | `BioComp_UFF/projects/**` | M2.5 / DEC-027 | Reexecução, na máquina de validação |
 | 2026-08-25 | **D18** — o modo `auto` não executa métodos avançados e encerra com `Completed successfully!`. `M` muda sem que nada além do `config_backup.json` registre | `treeBuilderController._process_auto_mode` | DEC-028 | **Aberto** — mínimo obrigatório: gravar no manifesto os métodos executados contra os disponíveis |
@@ -1190,3 +1278,9 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-25 | **MUSCLE é inviável em sequências de *Variola***: 19,4 GB e OOM em 52 seqs de 228 kb, numa máquina de 31 GB. Com Clustal também fora, **MAFFT é o único alinhador viável no VARV-49** — o fator alinhador não existe nesse conjunto | sonda medida | DEC-041 | Declarado em `expected.json`; o fator alinhador pertence ao Zika-21 |
 | 2026-08-25 | Nenhum método de **inferência** tem `ResourceModel`: só os alinhadores têm modelo de custo | `aligners.py` | DEC-041 | **M7.1 / M7.7** |
 | 2026-08-25 | O modelo de custo só prevê **memória**; D17 mostrou que núcleos mudam o **resultado** | `ResourceModel` | DEC-041 | **M7.8** (novo) |
+| 2026-08-25 | O pacote `iqtree` 3.x do bioconda instala `iqtree`/`iqtree3` e **não** instala `iqtree2`, que o pipeline chamava fixo: instalação correta da receita não conseguia rodar, e o manifesto gravava `null` para ferramenta presente | `builder.py`, `manifest.py` | DEC-043 | ✅ corrigido — `external_tools.resolve_tool` |
+| 2026-08-25 | `application_ui.sh` rodava `conda config --add channels defaults` — reescrevendo o **`~/.condarc` global do usuário** e adicionando um canal que conflita com o bioconda e exige aceite de termos. Causa provável da falha de instalação do IQ-TREE em máquina nova | `application_ui.sh` | DEC-043 | ✅ corrigido — canais fixados por ambiente no `environment.yml` |
+| 2026-08-25 | A lista de ferramentas do `application_ui.sh` (6 pacotes) **não tinha MUSCLE**, que a biblioteca de alinhadores exige desde DEC-036: duas listas para a mesma coisa, já divergindo | `application_ui.sh` | DEC-043 | ✅ corrigido — lista única no `environment.yml` |
+| 2026-08-25 | `check_dependencies.sh --install` rodava `conda install` **sem `-n`** (helper meu, `4214c36`; o instalador do projeto sempre usou `-n`). Medido: o `base` desta máquina está limpo | `scripts/check_dependencies.sh` | DEC-043 | ✅ corrigido; `cleanup_env.sh` diagnostica onde tiver ocorrido |
+| 2026-08-25 | O script `test` do frontend era `vitest` puro: só não travava porque o `npm run test -- --run` repassava a flag. Qualquer chamada não interativa sem esse repasse fica pendurada | `Frontend/.../package.json` | DEC-043 | ✅ corrigido — `test` é `vitest run`, watch virou `test:watch` |
+| 2026-08-25 | **MUSCLE não está no env do projeto** desta máquina — só em `/usr/bin` (3.8.1551). Toda medição de MUSCLE registrada até aqui usou o binário do sistema, não o da receita | `check_dependencies.sh` | DEC-043 | Instalar no env antes da próxima medição de alinhador |

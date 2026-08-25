@@ -11,6 +11,13 @@ FRONTEND_PID=""
 BACKEND_URL="http://localhost:8000"
 FRONTEND_URL=""
 
+# Repository root, so the helper scripts are found regardless of where this
+# was invoked from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# pnpm: detecção e instalação assistida num lugar só.
+source "$SCRIPT_DIR/scripts/lib_node.sh"
+
 # Conda paths (will be defined dynamically)
 CONDA_BASE=""
 CONDA_ENV_NAME="Phylotreeminer"
@@ -83,6 +90,7 @@ cleanup() {
     fi
     # Kill any remaining child processes
     pkill -f 'uvicorn src.app:app' 2>/dev/null || true
+    pkill -f 'pnpm run dev' 2>/dev/null || true
     pkill -f 'npm run dev' 2>/dev/null || true
     
     echo -e "\n${GREEN}${ICON_SUCCESS} Cleanup completed. Goodbye!\n  Thank you for choosing us.${NC}\n"
@@ -202,29 +210,25 @@ run_full_setup() {
     CONDA_BASE=$(conda info --base)
     CONDA_ENV_PATH="$CONDA_BASE/envs/$CONDA_ENV_NAME"
     
-    # 2. Configure Bioconda channels (essential!)
-    echo -e "\n${ICON_GEAR} Configuring Conda channels (bioconda, conda-forge)..."
     export CONDA_ALWAYS_YES="true"
-    conda update -n base -c conda-forge conda
-    conda config --add channels defaults >/dev/null 2>&1
-    conda config --add channels bioconda >/dev/null 2>&1
-    conda config --add channels conda-forge >/dev/null 2>&1
-    echo -e "${GREEN}${ICON_SUCCESS} Channels configured${NC}\n"
-    
-    # 3. Create Conda environment (if it doesn't exist)
+
+    # 2 + 3. Create the environment from the recipe.
+    #
+    # This used to run `conda config --add channels ...`, which rewrites the
+    # user's GLOBAL ~/.condarc — the opposite of keeping the project separate —
+    # and added `defaults`, which conflicts with bioconda during solving and
+    # now requires accepting Anaconda's terms of service. On a fresh machine
+    # that combination is what made IQ-TREE fail to install.
+    #
+    # environment.yml pins the channels PER ENVIRONMENT instead, and is the
+    # single place that lists the tools. See scripts/setup_env.sh.
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
     echo -e "${BLUE} CONDA ENVIRONMENT SETUP${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}\n"
-    
-    if [ ! -d "$CONDA_ENV_PATH" ]; then
-        echo -e "${ICON_INFO} Creating environment '$CONDA_ENV_NAME' with Python 3.10..."
-        if ! conda create -n $CONDA_ENV_NAME python=3.10; then
-            echo -e "${RED}${ICON_ERROR} ERROR: Failed to create conda environment.${NC}\n"
-            exit 1
-        fi
-        echo -e "${GREEN}${ICON_SUCCESS} Environment created.${NC}\n"
-    else
-        echo -e "${GREEN}${ICON_SUCCESS} Environment '$CONDA_ENV_NAME' already exists.${NC}\n"
+
+    if ! PTM_ENV="$CONDA_ENV_NAME" bash "$SCRIPT_DIR/scripts/setup_env.sh"; then
+        echo -e "${RED}${ICON_ERROR} ERROR: Failed to create conda environment.${NC}\n"
+        exit 1
     fi
     
     # Activate environment for next commands
@@ -249,24 +253,21 @@ run_full_setup() {
     fi
     echo -e "\n${GREEN}${ICON_SUCCESS} Python dependencies installed.${NC}\n"
     
-    # 5. Install phylogeny tools (Bioconda)
+    # 5. Verify the phylogeny tools.
+    #
+    # They are installed by environment.yml in step 3 — listing them a second
+    # time here would be two sources of truth for the same thing, and the two
+    # lists had already drifted: MUSCLE was missing from this one.
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE} PHYLOGENY TOOLS (BIOCONDA)${NC}"
+    echo -e "${BLUE} PHYLOGENY TOOLS${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}\n"
-    
-    # Required packages (conda package names):
-    # clustalo, mafft, iq-tree, fasttree, raxml-ng, mrbayes
-    local tools_list=("clustalo" "mafft" "iqtree" "fasttree" "raxml-ng" "mrbayes")
-    
-    echo -e "${ICON_INFO} Installing: ${YELLOW}${tools_list[*]}${NC}\n"
-    if ! conda install -n $CONDA_ENV_NAME -c bioconda ${tools_list[@]}; then
-        echo -e "${RED}${ICON_ERROR} ERROR: Failed to install one or more phylogeny tools.${NC}"
-        echo -e "${YELLOW}Try manually: conda install -n $CONDA_ENV_NAME -c bioconda ${tools_list[*]}${NC}\n"
+
+    if ! PTM_ENV="$CONDA_ENV_NAME" bash "$SCRIPT_DIR/scripts/check_dependencies.sh" --install; then
+        echo -e "${RED}${ICON_ERROR} ERROR: One or more phylogeny tools are missing.${NC}\n"
         exit 1
     fi
-    echo -e "\n${GREEN}${ICON_SUCCESS} Phylogeny tools installed.${NC}\n"
     
-    # 6. Install Frontend dependencies (npm)
+    # 6. Install Frontend dependencies (pnpm)
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
     echo -e "${BLUE}🌐 FRONTEND DEPENDENCIES (NPM)${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}\n"
@@ -276,10 +277,10 @@ run_full_setup() {
         exit 1
     }
     
-    # Check if npm is installed
-    if ! command -v npm >/dev/null 2>&1; then
-        echo -e "${RED}${ICON_ERROR} ERROR: npm (Node.js) is not installed.${NC}"
-        echo -e "${YELLOW}Please install Node.js manually (ex: 'sudo apt install nodejs npm') and run setup again.${NC}"
+    # pnpm is this project's package manager (package.json "packageManager").
+    # garantir_pnpm tries corepack first — it ships with Node and needs no
+    # administrator — then a global npm install, and only then asks the user.
+    if ! garantir_pnpm; then
         cd ../..
         exit 1
     fi
@@ -291,11 +292,15 @@ run_full_setup() {
     fi
     
     echo -e "${ICON_INFO} Cleaning old frontend dependencies..."
-    rm -rf node_modules package-lock.json
-    
-    echo -e "${ICON_INFO} Running npm install...\n"
-    if ! npm install; then
-        echo -e "${RED}${ICON_ERROR} ERROR: Failed to install npm dependencies.${NC}"
+    # pnpm-lock.yaml is NOT removed: it is what pins the exact versions. Wiping
+    # the lockfile on every setup means two machines can resolve different
+    # dependency trees from the same commit.
+    rm -rf node_modules
+
+    echo -e "${ICON_INFO} Running pnpm install...\n"
+    if ! pnpm install --frozen-lockfile; then
+        echo -e "${RED}${ICON_ERROR} ERROR: Failed to install frontend dependencies.${NC}"
+        echo -e "${YELLOW}If package.json changed on purpose, run 'pnpm install' to update the lockfile.${NC}"
         cd ../..
         exit 1
     fi
@@ -438,9 +443,9 @@ cd Frontend/phylotreeminer || {
     cleanup
 }
 
-# Check if npm is available (don't try to install, just check)
-if ! command -v npm >/dev/null 2>&1; then
-    echo -e "${RED}${ICON_ERROR} ERROR: npm (Node.js) is not installed. Please install it manually.${NC}"
+# Check if pnpm is available, enabling it through corepack when possible.
+if ! garantir_pnpm; then
+    echo -e "${RED}${ICON_ERROR} ERROR: pnpm is required to start the frontend.${NC}"
     cleanup
 fi
 
@@ -452,7 +457,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo -e "${ICON_INFO} Starting frontend server (Vite)..."
-npm run dev > ../../$LOG_FILE_FRONTEND 2>&1 &
+pnpm run dev > ../../$LOG_FILE_FRONTEND 2>&1 &
 FRONTEND_PID=$!
 cd ../..
 
@@ -511,7 +516,7 @@ echo -e "      ${GREEN}Frontend:${NC} tail -f $LOG_FILE_FRONTEND\n"
 
 echo -e "   ${ICON_INFO} ${WHITE}Commands:${NC}"
 echo -e "      ${GREEN}Stop both:${NC}    Use Ctrl+C in this terminal"
-echo -e "      ${GREEN}Check running:${NC} ps aux | grep -E '(uvicorn|npm)'\n"
+echo -e "      ${GREEN}Check running:${NC} ps aux | grep -E '(uvicorn|vite)'\n"
 
 echo -e "   ${ICON_INFO} ${WHITE}URLs:${NC}"
 echo -e "      ${GREEN}Frontend:${NC}  ${CYAN}$FRONTEND_URL${NC}"

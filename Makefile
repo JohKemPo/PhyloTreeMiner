@@ -2,14 +2,20 @@
 # PY aponta para o ambiente conda do projeto; sobrescreva se o seu difere.
 PY ?= python
 FRONT := Frontend/phylotreeminer
+# pnpm: `--dir` é o equivalente ao `--prefix` do npm.
+PNPM ?= pnpm --dir $(FRONT)
 
-.PHONY: help test test-backend test-frontend lint build golden oracle security \
+.PHONY: help setup test test-backend test-frontend lint build golden oracle security \
         reference-check reference-check-full reference-dataset taxonomy-audit \
         baseline snapshots-update check
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+setup: ## cria/atualiza o ambiente conda e instala o frontend
+	bash scripts/setup_env.sh
+	$(PNPM) install
 
 check: lint test build ## Tudo que a CI roda
 
@@ -19,13 +25,13 @@ test-backend: ## pytest do backend
 	cd Backend && $(PY) -m pytest tests
 
 test-frontend: ## vitest do frontend
-	npm --prefix $(FRONT) run test -- --run
+	$(PNPM) run test
 
 lint: ## catraca de lint — falha se o débito crescer
-	npm --prefix $(FRONT) run lint:ratchet
+	$(PNPM) run lint:ratchet
 
 build: ## build de produção do frontend
-	npm --prefix $(FRONT) run build
+	$(PNPM) run build
 
 golden: ## só os golden snapshots
 	cd Backend && $(PY) -m pytest tests/golden -m golden
@@ -56,7 +62,8 @@ reference-check-full: ## PORTÃO CIENTÍFICO completo — reexecuta o pipeline. 
 	@echo "  2. cd BioComp_UFF && $(PY) ../docs/science/scripts/reference_check.py \\"
 	@echo "       --trees projects/<projeto-reexecutado>/out/Trees"
 	@echo ""
-	@echo "Antes: resolver a divergência de versão (FastTree 2.2.0 vs 2.1.11)."
+	@echo "Antes: ative o env do projeto — 'bash scripts/check_dependencies.sh' não pode"
+	@echo "acusar nenhuma ferramenta 'fora do env'."
 	@exit 1
 
 reference-dataset: ## regenera Backend/tests/data/reference/ a partir do VARV-49

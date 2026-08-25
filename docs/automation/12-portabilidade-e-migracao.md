@@ -22,11 +22,21 @@ completa está em [R2](../respostasUteis/r2.md).
 | **Memória** | processo morto pelo OOM killer | Clustal Omega (código 137) em Zika479; MUSCLE, **19,4 GB** em 52×228 kb |
 | **Núcleos** | o esquema de paralelização muda **o resultado** | [D17](../science/02-defeitos-que-alteram-resultado.md#d17): **RF = 8** com a mesma semente |
 | **Núcleos** | autoconfiguração escolhe esquema que quebra | D17: `SIGSEGV` com `5 workers × 3 threads` |
-| **Versão da ferramenta** | algoritmo diferente sob o mesmo nome | FastTree 2.2.0 × 2.1.11; RAxML-NG 1.2.2 × 1.1.0; MUSCLE 3.8 × 5 |
+| **Versão da ferramenta** | algoritmo diferente sob o mesmo nome | MUSCLE 3.8 (`-in/-out`) × MUSCLE 5 (`-align/-output`) — interfaces incompatíveis |
+| **Origem do binário** | a mesma máquina dá duas versões conforme o PATH | env: FastTree 2.2.0, RAxML-NG 1.2.2, IQ-TREE 3.0.1 · sistema: 2.1.11, 1.1.0, 2.2.2.6 |
+| **Nome do binário** | o pacote instala, o pipeline não acha | `iqtree` 3.x instala `iqtree`/`iqtree3` e **não** instala `iqtree2` |
 
 **O fingerprint de execução é parte do resultado científico.** Se o número de
 núcleos muda a árvore, relatar a topologia sem relatar o esquema de
 paralelização é relatar metade do experimento.
+
+Os dois últimos eixos custaram caro antes de serem entendidos. A **origem do
+binário** fez este repositório registrar por dias uma "divergência de versões
+entre máquinas" que não existia: era o PATH resolvendo `/usr/bin` em vez do env
+(corrigido em [`11 §2.2`](11-handoff-maquina-de-validacao.md#22-não-havia-divergência-entre-máquinas--havia-sombreamento-de-path)).
+O **nome do binário** fez a instalação correta da receita não conseguir rodar,
+porque o pipeline chamava `iqtree2` fixo. Ambos são resolvidos por
+`workflow/utils/external_tools.py` e sinalizados por `check_dependencies.sh`.
 
 ---
 
@@ -35,6 +45,9 @@ paralelização é relatar metade do experimento.
 | Mecanismo | Onde | O que garante |
 |---|---|---|
 | **Manifesto de execução** | `workflow/utils/manifest.py` | Grava ambiente, núcleos, memória, versões das 7 ferramentas, semente, paralelização efetiva e SHA-256 de entradas e saídas. Sem *hostname*, usuário ou caminho absoluto |
+| **Resolução de binário** | `workflow/utils/external_tools.py` | Um lugar só sabe os nomes possíveis de cada ferramenta (`iqtree3`/`iqtree2`/`iqtree`, `FastTree`/`fasttree`, `mb`/`mrbayes`). Pipeline e manifesto consultam a mesma tabela |
+| **Ambiente isolado** | `environment.yml` + `scripts/setup_env.sh` | O projeto instala num env próprio e nunca no `base`. Os canais são fixados **por ambiente**, sem tocar o `~/.condarc` do usuário. `check_dependencies.sh` acusa toda ferramenta resolvida fora do env |
+| **Gestor do frontend fixado** | `packageManager` + `pnpm-lock.yaml` | pnpm com `--frozen-lockfile`: duas máquinas resolvem a mesma árvore de dependências do mesmo commit. `scripts/lib_node.sh` liga o pnpm pelo corepack quando ele falta |
 | **Semente e paralelização fixas** | `builder.reproducibility_settings` | `--threads N --workers 1` no RAxML e `-seed`/`-nt N` no IQ-TREE. Sem isso, a árvore muda com o número de núcleos |
 | **Modelo de custo por alinhador** | `workflow/alignment/aligners.py` | Requisito estimado × **orçamento lido da máquina em execução** — o mesmo código dá vereditos diferentes em máquinas diferentes, que é o correto |
 | **Falha observada vence estimativa** | `ResourceModel.blocking_failure` | Uma falha só condena máquinas de orçamento **igual ou menor**; numa maior, o veredito volta a ser do modelo |

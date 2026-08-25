@@ -27,7 +27,7 @@ These are the tools that your **Ubuntu** system must have **before** you run `./
 
   * **`git`**: To clone the repository and get project files.
   * **`curl`**: The script uses `curl` to download the Miniconda installer (if it doesn't find `conda`).
-  * **`nodejs` and `npm`**: The script uses `npm` to install frontend dependencies. It checks if `npm` exists but does not install it.
+  * **`nodejs`**: Node 22 or newer. Frontend dependencies are installed with **pnpm**, which ships with Node through `corepack` — the script enables it for you if it is missing. It checks that Node is present but does not install it.
 
 ###  Installation Command (Ubuntu)
 
@@ -36,6 +36,7 @@ To install all these prerequisites at once:
 ```bash
 sudo apt update
 sudo apt install git curl nodejs npm -y
+corepack enable        # makes pnpm available
 ```
 
 -----
@@ -65,14 +66,18 @@ If you run the script with the `--setup` flag, it will handle **all** of the fol
       * The script installs a suite of heavy-duty phylogeny tools using `bioconda`:
           * `clustalo`
           * `mafft`
-          * `iq-tree`
+          * `iqtree`
           * `fasttree`
           * `raxml-ng`
           * `mrbayes`
+          * `muscle`
 
-  * **Frontend Libraries (npm):**
+      * They come from `environment.yml`, which is the single list of tools and pins the channels **for this environment only** — the setup no longer edits your global `~/.condarc`.
+      * The environment is created by `scripts/setup_env.sh` and verified by `scripts/check_dependencies.sh`.
 
-      * The script runs `npm install` in the `Frontend/phylotreeminer` directory, installing packages like `react` and `vite` (listed in `package.json`).
+  * **Frontend Libraries (pnpm):**
+
+      * The script runs `pnpm install --frozen-lockfile` in the `Frontend/phylotreeminer` directory, installing packages like `react` and `vite` (listed in `package.json`, pinned by `pnpm-lock.yaml`).
 
 # Quick Start Guide
 

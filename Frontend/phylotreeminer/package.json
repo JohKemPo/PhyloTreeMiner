@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint:ratchet": "node scripts/lint-ratchet.mjs",
     "lint:baseline": "node scripts/lint-ratchet.mjs --write"
   },
@@ -48,5 +49,6 @@
     "vite": "^6.3.6",
     "vite-plugin-svgr": "^4.3.0",
     "vitest": "^2.1.9"
-  }
+  },
+  "packageManager": "pnpm@11.6.0"
 }

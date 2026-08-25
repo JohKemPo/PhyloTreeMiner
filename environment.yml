@@ -1,0 +1,44 @@
+# Ambiente conda do PhyloTreeMiner.
+#
+# Crie com `bash scripts/setup_env.sh` — não com `conda env create` direto, para
+# que a verificação de binários rode junto e o env nunca seja o `base`.
+#
+# Uma fonte só para as dependências Python: a seção `pip` aponta para
+# `requirements.txt`. Duplicar a lista aqui criaria duas verdades que divergem
+# no primeiro `pip install` — o mesmo defeito que D5 custou caro.
+#
+# Os canais são conda-forge e bioconda, nessa ordem, e `defaults` fica de fora:
+# ele conflita com bioconda na resolução e exige licença para uso organizacional.
+
+name: phylotreeminer
+
+channels:
+  - conda-forge
+  - bioconda
+
+dependencies:
+  - python=3.10
+  - pip
+
+  # ---------------------------------------------------------------- #
+  # Ferramentas externas de bioinformática.
+  #
+  # O nome do binário NÃO acompanha o nome do pacote de forma estável:
+  # `iqtree` 3.x instala `iqtree` e `iqtree3`, e **não** instala `iqtree2`.
+  # Por isso o código resolve o binário entre os nomes possíveis em vez de
+  # fixar um — ver workflow/utils/external_tools.py.
+  # ---------------------------------------------------------------- #
+  - mafft
+  - clustalo
+  - muscle
+  - fasttree
+  - iqtree
+  - raxml-ng
+  - mrbayes
+
+  # Precisa vir do conda: o wheel do PyQt5 não resolve em toda arquitetura,
+  # e o ete3 o exige para renderizar.
+  - pyqt
+
+  - pip:
+      - -r requirements-dev.txt
