@@ -1,0 +1,651 @@
+{
+  "method_sensitive_signatures": [
+    {
+      "node_names": [
+        "tree_dataset_final_clustalo_iqtree_Inner1",
+        "tree_dataset_final_clustalo_iqtree_Inner2",
+        "tree_dataset_final_clustalo_iqtree_Inner3",
+        "tree_dataset_final_clustalo_iqtree_Inner4"
+      ],
+      "pattern": [
+        13980,
+        1712,
+        19877,
+        31966
+      ],
+      "size": 4,
+      "support": 0.1,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.",
+        "NC_008030.",
+        "NC_008291."
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_clustalo_iqtree_Inner1": [
+          "DQ437591.1",
+          "DQ437592.1"
+        ],
+        "tree_dataset_final_clustalo_iqtree_Inner2": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1"
+        ],
+        "tree_dataset_final_clustalo_iqtree_Inner3": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611."
+        ],
+        "tree_dataset_final_clustalo_iqtree_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.",
+          "NC_008030.",
+          "NC_008291."
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_clustalo_iqtree_Inner1",
+        "tree_dataset_final_clustalo_iqtree_Inner2",
+        "tree_dataset_final_clustalo_iqtree_Inner3",
+        "tree_dataset_final_clustalo_iqtree_Inner4"
+      ],
+      "pattern": [
+        13980,
+        1712,
+        19877,
+        31966
+      ],
+      "size": 4,
+      "support": 0.2,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.",
+        "NC_008030.",
+        "NC_008291."
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_clustalo_iqtree_Inner1": [
+          "DQ437591.1",
+          "DQ437592.1"
+        ],
+        "tree_dataset_final_clustalo_iqtree_Inner2": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1"
+        ],
+        "tree_dataset_final_clustalo_iqtree_Inner3": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611."
+        ],
+        "tree_dataset_final_clustalo_iqtree_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.",
+          "NC_008030.",
+          "NC_008291."
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_clustalo_raxml_Inner1",
+        "tree_dataset_final_clustalo_raxml_Inner2",
+        "tree_dataset_final_clustalo_raxml_Inner3",
+        "tree_dataset_final_clustalo_raxml_Inner4"
+      ],
+      "pattern": [
+        33319,
+        36522,
+        46896,
+        58822
+      ],
+      "size": 4,
+      "support": 0.1,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.",
+        "NC_008030.",
+        "NC_008291."
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_clustalo_raxml_Inner1": [
+          "NC_008030.",
+          "NC_008291."
+        ],
+        "tree_dataset_final_clustalo_raxml_Inner2": [
+          "NC_001611.",
+          "NC_008030.",
+          "NC_008291."
+        ],
+        "tree_dataset_final_clustalo_raxml_Inner3": [
+          "L22579.1",
+          "NC_001611.",
+          "NC_008030.",
+          "NC_008291."
+        ],
+        "tree_dataset_final_clustalo_raxml_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.",
+          "NC_008030.",
+          "NC_008291."
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_clustalo_raxml_Inner1",
+        "tree_dataset_final_clustalo_raxml_Inner2",
+        "tree_dataset_final_clustalo_raxml_Inner3",
+        "tree_dataset_final_clustalo_raxml_Inner4"
+      ],
+      "pattern": [
+        33319,
+        36522,
+        46896,
+        58822
+      ],
+      "size": 4,
+      "support": 0.2,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.",
+        "NC_008030.",
+        "NC_008291."
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_clustalo_raxml_Inner1": [
+          "NC_008030.",
+          "NC_008291."
+        ],
+        "tree_dataset_final_clustalo_raxml_Inner2": [
+          "NC_001611.",
+          "NC_008030.",
+          "NC_008291."
+        ],
+        "tree_dataset_final_clustalo_raxml_Inner3": [
+          "L22579.1",
+          "NC_001611.",
+          "NC_008030.",
+          "NC_008291."
+        ],
+        "tree_dataset_final_clustalo_raxml_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.",
+          "NC_008030.",
+          "NC_008291."
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_clustalo_upgma_distance_Inner1",
+        "tree_dataset_final_clustalo_upgma_distance_Inner2",
+        "tree_dataset_final_clustalo_upgma_distance_Inner3",
+        "tree_dataset_final_clustalo_upgma_distance_Inner4",
+        "tree_dataset_final_clustalo_upgma_distance_Inner5"
+      ],
+      "pattern": [
+        3071,
+        41529,
+        50031,
+        6434,
+        7095
+      ],
+      "size": 5,
+      "support": 0.1,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.1",
+        "NC_008030.1",
+        "NC_008291.1"
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_clustalo_upgma_distance_Inner1": [
+          "DQ437591.1",
+          "DQ437592.1"
+        ],
+        "tree_dataset_final_clustalo_upgma_distance_Inner2": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "NC_001611.1"
+        ],
+        "tree_dataset_final_clustalo_upgma_distance_Inner3": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1"
+        ],
+        "tree_dataset_final_clustalo_upgma_distance_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_clustalo_upgma_distance_Inner5": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_clustalo_upgma_distance_Inner1",
+        "tree_dataset_final_clustalo_upgma_distance_Inner2",
+        "tree_dataset_final_clustalo_upgma_distance_Inner3",
+        "tree_dataset_final_clustalo_upgma_distance_Inner4",
+        "tree_dataset_final_clustalo_upgma_distance_Inner5"
+      ],
+      "pattern": [
+        3071,
+        41529,
+        50031,
+        6434,
+        7095
+      ],
+      "size": 5,
+      "support": 0.2,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.1",
+        "NC_008030.1",
+        "NC_008291.1"
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_clustalo_upgma_distance_Inner1": [
+          "DQ437591.1",
+          "DQ437592.1"
+        ],
+        "tree_dataset_final_clustalo_upgma_distance_Inner2": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "NC_001611.1"
+        ],
+        "tree_dataset_final_clustalo_upgma_distance_Inner3": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1"
+        ],
+        "tree_dataset_final_clustalo_upgma_distance_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_clustalo_upgma_distance_Inner5": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_mafft_fasttree_Inner1",
+        "tree_dataset_final_mafft_fasttree_Inner2",
+        "tree_dataset_final_mafft_fasttree_Inner3",
+        "tree_dataset_final_mafft_fasttree_Inner4"
+      ],
+      "pattern": [
+        10264,
+        25140,
+        31793,
+        49724
+      ],
+      "size": 4,
+      "support": 0.1,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.1",
+        "NC_008030.1",
+        "NC_008291.1"
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_mafft_fasttree_Inner1": [
+          "NC_008030.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_mafft_fasttree_Inner2": [
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_mafft_fasttree_Inner3": [
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_mafft_fasttree_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_mafft_fasttree_Inner1",
+        "tree_dataset_final_mafft_fasttree_Inner2",
+        "tree_dataset_final_mafft_fasttree_Inner3",
+        "tree_dataset_final_mafft_fasttree_Inner4"
+      ],
+      "pattern": [
+        10264,
+        25140,
+        31793,
+        49724
+      ],
+      "size": 4,
+      "support": 0.2,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.1",
+        "NC_008030.1",
+        "NC_008291.1"
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_mafft_fasttree_Inner1": [
+          "NC_008030.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_mafft_fasttree_Inner2": [
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_mafft_fasttree_Inner3": [
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_mafft_fasttree_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_mafft_fasttree_Inner1",
+        "tree_dataset_final_mafft_nj_distance_Inner2",
+        "tree_dataset_final_mafft_nj_distance_Inner3",
+        "tree_dataset_final_mafft_nj_distance_Inner4"
+      ],
+      "pattern": [
+        25140,
+        25999,
+        61634,
+        8540
+      ],
+      "size": 4,
+      "support": 0.1,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.1",
+        "NC_008030.1",
+        "NC_008291.1"
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_mafft_fasttree_Inner1": [
+          "NC_008030.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_mafft_nj_distance_Inner2": [
+          "L22579.1",
+          "NC_001611.1"
+        ],
+        "tree_dataset_final_mafft_nj_distance_Inner3": [
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1"
+        ],
+        "tree_dataset_final_mafft_nj_distance_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_mafft_fasttree_Inner1",
+        "tree_dataset_final_mafft_nj_distance_Inner2",
+        "tree_dataset_final_mafft_nj_distance_Inner3",
+        "tree_dataset_final_mafft_nj_distance_Inner4"
+      ],
+      "pattern": [
+        25140,
+        25999,
+        61634,
+        8540
+      ],
+      "size": 4,
+      "support": 0.2,
+      "terminals": [
+        "DQ437591.1",
+        "DQ437592.1",
+        "L22579.1",
+        "NC_001611.1",
+        "NC_008030.1",
+        "NC_008291.1"
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_mafft_fasttree_Inner1": [
+          "NC_008030.1",
+          "NC_008291.1"
+        ],
+        "tree_dataset_final_mafft_nj_distance_Inner2": [
+          "L22579.1",
+          "NC_001611.1"
+        ],
+        "tree_dataset_final_mafft_nj_distance_Inner3": [
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1"
+        ],
+        "tree_dataset_final_mafft_nj_distance_Inner4": [
+          "DQ437591.1",
+          "DQ437592.1",
+          "L22579.1",
+          "NC_001611.1",
+          "NC_008030.1",
+          "NC_008291.1"
+        ]
+      }
+    },
+    {
+      "node_names": [
+        "tree_dataset_final_mafft_fasttree_Inner1"
+      ],
+      "pattern": [
+        25140
+      ],
+      "size": 1,
+      "support": 0.3,
+      "terminals": [
+        "NC_008030.1",
+        "NC_008291.1"
+      ],
+      "terminals_by_node": {
+        "tree_dataset_final_mafft_fasttree_Inner1": [
+          "NC_008030.1",
+          "NC_008291.1"
+        ]
+      }
+    }
+  ],
+  "pattern_statistics": {
+    "avg_pattern_size": 3.6666666666666665,
+    "avg_support": 0.18333333333333332,
+    "discarded_by_size": 0,
+    "discarded_sizes": [],
+    "method_sensitive_count": 11,
+    "patterns_in_source": 12,
+    "size_distribution": {
+      "1": 2,
+      "4": 8,
+      "5": 2
+    },
+    "size_filter": {
+      "max": 100,
+      "min": 1
+    },
+    "support_distribution": {
+      "high": 0,
+      "low": 11,
+      "medium": 1
+    },
+    "support_schema": {
+      "corrected": false,
+      "support_means": "LIMIAR da varredura do FPMax, não o suporte real",
+      "warning": "Este projeto foi gerado antes da correção de D4 (M1.1). A coluna `support` guarda o limiar da varredura, não a fração de árvores, e o mesmo padrão pode aparecer em mais de uma linha. Reexecute o projeto para obter os valores corretos."
+    },
+    "topologically_robust_count": 0,
+    "total_patterns": 12,
+    "unreadable_rows": 0
+  },
+  "topologically_robust": [],
+  "tree_coverage": {
+    "tree_dataset_final_clustalo_fasttree": {
+      "avg_support": 0.18333333333333332,
+      "pattern_count": 12,
+      "size_range": {
+        "avg": 3.5,
+        "max": 4,
+        "min": 1
+      }
+    },
+    "tree_dataset_final_clustalo_iqtree": {
+      "avg_support": 0.15,
+      "pattern_count": 8,
+      "size_range": {
+        "avg": 4.0,
+        "max": 4,
+        "min": 4
+      }
+    },
+    "tree_dataset_final_clustalo_nj_distance": {
+      "avg_support": 0.18333333333333332,
+      "pattern_count": 12,
+      "size_range": {
+        "avg": 3.5,
+        "max": 4,
+        "min": 1
+      }
+    },
+    "tree_dataset_final_clustalo_raxml": {
+      "avg_support": 0.15,
+      "pattern_count": 8,
+      "size_range": {
+        "avg": 4.0,
+        "max": 4,
+        "min": 4
+      }
+    },
+    "tree_dataset_final_clustalo_upgma_distance": {
+      "avg_support": 0.14999999999999997,
+      "pattern_count": 10,
+      "size_range": {
+        "avg": 5.0,
+        "max": 5,
+        "min": 5
+      }
+    },
+    "tree_dataset_final_mafft_fasttree": {
+      "avg_support": 0.18333333333333332,
+      "pattern_count": 12,
+      "size_range": {
+        "avg": 3.5,
+        "max": 4,
+        "min": 1
+      }
+    },
+    "tree_dataset_final_mafft_iqtree": {
+      "avg_support": 0.15,
+      "pattern_count": 8,
+      "size_range": {
+        "avg": 4.0,
+        "max": 4,
+        "min": 4
+      }
+    },
+    "tree_dataset_final_mafft_nj_distance": {
+      "avg_support": 0.18333333333333332,
+      "pattern_count": 12,
+      "size_range": {
+        "avg": 3.5,
+        "max": 4,
+        "min": 1
+      }
+    },
+    "tree_dataset_final_mafft_raxml": {
+      "avg_support": 0.15,
+      "pattern_count": 8,
+      "size_range": {
+        "avg": 4.0,
+        "max": 4,
+        "min": 4
+      }
+    },
+    "tree_dataset_final_mafft_upgma_distance": {
+      "avg_support": 0.14999999999999997,
+      "pattern_count": 10,
+      "size_range": {
+        "avg": 5.0,
+        "max": 5,
+        "min": 5
+      }
+    }
+  }
+}

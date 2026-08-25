@@ -1,0 +1,38 @@
+{
+  "common_clades": 1,
+  "comparison_notes": {
+    "consistency": "Inconsistent results: RF and Quartet metrics show significant discrepancy",
+    "quartet_interpretation": "Non-binary trees detected",
+    "rf_interpretation": "Trees are very different",
+    "similarity_interpretation": "Trees have limited similarity"
+  },
+  "conflicting_clades": 4,
+  "quartet_distance": -1,
+  "rf_distance": 4,
+  "similarity_score": 33.33,
+  "taxon_count": 6,
+  "tree1_stats": {
+    "avg_branch_length": 0.088771,
+    "internal_nodes": 4,
+    "is_binary": false,
+    "leaf_nodes": 6,
+    "non_binary_nodes": [
+      null
+    ],
+    "politomy_count": 1,
+    "total_nodes": 10,
+    "tree_length": 0.88771
+  },
+  "tree2_stats": {
+    "avg_branch_length": 0.075631,
+    "internal_nodes": 4,
+    "is_binary": false,
+    "leaf_nodes": 6,
+    "non_binary_nodes": [
+      "Inner4"
+    ],
+    "politomy_count": 1,
+    "total_nodes": 10,
+    "tree_length": 0.75631
+  }
+}

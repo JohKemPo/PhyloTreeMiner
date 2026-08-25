@@ -1,0 +1,38 @@
+{
+  "countryData": [
+    {
+      "count": 1,
+      "country": "Zimbabwe"
+    },
+    {
+      "count": 5,
+      "country": "Unknown"
+    }
+  ],
+  "hostData": [
+    {
+      "name": "Nile crocodile",
+      "value": 1
+    },
+    {
+      "name": "Unknown",
+      "value": 5
+    }
+  ],
+  "metrics": {
+    "timeSpan": "2001 - 2001",
+    "totalNodes": 6,
+    "uniqueHosts": 2,
+    "uniqueLineages": 4
+  },
+  "timelineData": [
+    {
+      "count": 1,
+      "year": "2001"
+    },
+    {
+      "count": 5,
+      "year": "Unknown Date"
+    }
+  ]
+}

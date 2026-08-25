@@ -1,0 +1,92 @@
+{
+  "aligner_factor_present": false,
+  "composition": {
+    "VARV": 45,
+    "outgroup": 4
+  },
+  "dataset": "VARV-49",
+  "invariants": [
+    {
+      "bipartition": [
+        "AF438165",
+        "AY009089",
+        "DQ437593",
+        "DQ437594"
+      ],
+      "description": "Nenhum não-VARV cai dentro de VARV. Sob semântica de bipartição, isto é a MESMA afirmação que 'o grupo externo é monofilético': a bipartição é não ordenada, e o lado menor — o representante canônico — é o grupo externo de 4 táxons.",
+      "id": "monofilia_varv",
+      "required_support": "all"
+    },
+    {
+      "bipartition": [
+        "DQ441416",
+        "DQ441419",
+        "DQ441426",
+        "DQ441434",
+        "DQ441437",
+        "DQ441447"
+      ],
+      "description": "Clado P-II de Esposito et al. (2006) e Li et al. (2007): África Ocidental mais o isolado brasileiro de 1966 (São Paulo). É a assinatura de que o alastrim minor sul-americano descende da varíola oeste-africana.",
+      "id": "clado_p2",
+      "required_support": "all"
+    },
+    {
+      "bipartition": [
+        "AF438165",
+        "AY009089",
+        "DQ437593",
+        "DQ437594",
+        "DQ441416",
+        "DQ441419",
+        "DQ441426",
+        "DQ441434",
+        "DQ441437",
+        "DQ441447"
+      ],
+      "description": "Bipartição aninhada de 10 táxons — os 4 do grupo externo mais os 6 de P-II, contra os outros 39 VARV. Posiciona P-II como linhagem basal de VARV, que é a topologia publicada.",
+      "id": "p2_basal",
+      "required_support": "all"
+    }
+  ],
+  "n_taxa": 49,
+  "note_on_M": "O M alvo exige a biblioteca completa e só é alcançável depois da reexecução na máquina de validação. Decisão do usuário em 2026-08-25. Até lá, o portão rápido confere o invariante sobre os pipelines presentes e devolve código 2 — invariante válido, M incompleto.",
+  "outgroup": [
+    "AF438165",
+    "AY009089",
+    "DQ437593",
+    "DQ437594"
+  ],
+  "present_pipelines": [
+    "clustalo_fasttree",
+    "clustalo_iqtree",
+    "clustalo_nj_distance",
+    "clustalo_upgma_distance",
+    "mafft_fasttree",
+    "mafft_iqtree",
+    "mafft_nj_distance",
+    "mafft_upgma_distance"
+  ],
+  "source_project": "projects/Variola_Yu_li_2007",
+  "target_M": {
+    "aligners": [
+      "mafft"
+    ],
+    "aligners_excluded": {
+      "clustalo": "Inviável neste conjunto: morto pelo OOM killer em sequências longas. Decisão do usuário em 2026-08-25: fora de M.",
+      "muscle": "Inviável neste conjunto: **medido em 2026-08-25**, consumiu 19,4 GB e foi morto pelo OOM killer em 52 sequências de até 228 kb."
+    },
+    "inference": [
+      "fasttree",
+      "iqtree",
+      "raxml",
+      "nj_distance",
+      "upgma_distance"
+    ],
+    "note": "Para o VARV-49, **MAFFT é o único alinhador viável** — os outros dois foram medidos e estouram a memória em genomas de ~230 kb. Logo, o fator alinhador não existe neste conjunto, e o invariante do baseline sempre foi sobre os métodos de inferência, nunca sobre alinhadores: os 4/4 de Li et al. são FastTree, IQ-TREE, NJ e UPGMA, todos sobre o mesmo alinhamento. O fator alinhador pertence a um conjunto de sequências curtas — o Zika-21, onde os três rodam (medido: 4,9 s / 34,5 s / 64,0 s)."
+  },
+  "target_M_size": 5,
+  "tolerance": {
+    "mode": "invariant_only",
+    "rationale": "O portão afirma o invariante biológico e NÃO a topologia completa. D17 mediu RF = 8 entre duas execuções com a mesma semente, variando só a paralelização: exigir topologia idêntica reprovaria por troca de máquina, que não é mudança de biologia. Os hashes de topologia são registrados como impressão digital do ambiente — mudança neles é sinal para investigar, não reprovação."
+  }
+}
