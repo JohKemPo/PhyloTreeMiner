@@ -1,3 +1,4 @@
 [submodule "BioComp_UFF"]
 	path = BioComp_UFF
 	url = git@github.com:JohKemPo/BioComp_UFF.git
+	branch = rigor-cientifico-m1-m2
