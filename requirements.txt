@@ -19,3 +19,6 @@ owid-catalog
 ijson
 ete3
 PyQt5
+python-dotenv==1.0.1
+psutil==5.9.8
+httpx==0.28.1

@@ -2,6 +2,7 @@
 
 DOCKER_COMPOSE_FILE="docker-compose.yml"
 APP_SCRIPT="./application_ui.sh"
+DEPS_SCRIPT="./scripts/check_dependencies.sh"
 
 # ==============================================================================
 # COLORS FOR BETTER VISUALIZATION
@@ -44,8 +45,24 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-# 2. Iniciar o Banco de Dados (Neo4j)
-echo -e "\n${YELLOW}[1/3] Starting Neo4j via Docker...${NC}"
+# 2. Conferir as ferramentas de bioinformática
+# Falhar aqui é melhor que falhar no meio de um alinhamento de duas horas.
+echo -e "\n${YELLOW}[1/4] Checking bioinformatics dependencies...${NC}"
+if [ -f "$DEPS_SCRIPT" ]; then
+    if ! bash "$DEPS_SCRIPT"; then
+        echo -e "${YELLOW}Continue anyway? The pipeline will fail for methods that need what is missing. [y/N]${NC}"
+        read -r resposta
+        case "$resposta" in
+            [yY]*) echo -e "${YELLOW}Continuing with missing tools.${NC}" ;;
+            *) echo -e "${BLUE}Install with: bash $DEPS_SCRIPT --install${NC}"; exit 1 ;;
+        esac
+    fi
+else
+    echo -e "${YELLOW}$DEPS_SCRIPT not found; skipping dependency check.${NC}"
+fi
+
+# 3. Iniciar o Banco de Dados (Neo4j)
+echo -e "\n${YELLOW}[2/4] Starting Neo4j via Docker...${NC}"
 docker compose -f "$DOCKER_COMPOSE_FILE" up -d
 
 if [ $? -eq 0 ]; then
@@ -56,7 +73,7 @@ else
 fi
 
 # 3. Aguardar o Neo4j
-echo -e "${YELLOW}[2/3] Waiting for Bolt (Neo4j) to respond at door 7687...${NC}"
+echo -e "${YELLOW}[3/4] Waiting for Bolt (Neo4j) to respond at door 7687...${NC}"
 if command -v nc >/dev/null 2>&1; then
     until nc -z localhost 7687 > /dev/null 2>&1; do
       echo -n "."
@@ -69,7 +86,7 @@ fi
 echo -e "\n${GREEN}✓ Neo4j ready for connections!${NC}"
 
 # 4. Iniciar a Interface e Backend
-echo -e "${YELLOW}[3/3] Starting application services...${NC}"
+echo -e "${YELLOW}[4/4] Starting application services...${NC}"
 echo -e "${BLUE}Tip: Press Ctrl+C to stop everything (App + Docker)${NC}\n"
 
 bash "$APP_SCRIPT" "$@"
