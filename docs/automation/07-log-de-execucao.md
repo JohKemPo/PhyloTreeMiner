@@ -1,0 +1,1191 @@
+# Log de execução — decisões, evidências e handoffs
+
+[← Automação](README.md) · **Documento vivo.** Dono: [orquestrador](../agents/00-orquestrador.md). Grave aqui **antes** de responder ao usuário.
+
+Este é o arquivo que a próxima janela de contexto lê para saber o que já aconteceu e por quê. Complementa [`../audit/10-progresso-execucao.md`](../audit/10-progresso-execucao.md), que registra *o que mudou no código*; aqui ficam **decisões, medições e pareceres**.
+
+## Estado
+
+| Campo | Valor |
+|---|---|
+| Marco corrente | **M2 — Baseline replicado** — **6 de 7 lotes**: M2.2, M2.3, M2.4, M2.5, M2.6 e M2.7 entregues. Falta **M2.1** e a **reexecução** que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
+| Última atualização | 2026-08-25 — **independência de hardware vira requisito de projeto** (DEC-041): limites deixam de ser escalares e passam a ser requisito × orçamento da máquina; M2.6 e M2.7 entregues (DEC-042). Antes, no mesmo dia: política de alinhador (DEC-039), relatório de gargalos (DEC-040), MUSCLE e fim da substituição silenciosa (DEC-037) |
+| Lotes em andamento | nenhum. **M2 em 6 de 7**; o portão científico existe e devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ⚠️ **Migração para máquina robusta em curso**: ver [`12-portabilidade-e-migracao.md`](12-portabilidade-e-migracao.md) |
+| Write-locks ativos | nenhum |
+| Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Nada pendente |
+
+## Decisões (ADR-lite)
+
+Formato: `DEC-nnn · data · decisão · motivo · consequência · reversível?`
+
+### DEC-001 · 2026-07 · Fase "infra agnóstica" fora do roadmap P0-P4
+**Motivo:** custo alto, ganho nulo no horizonte da publicação. **Consequência:** blueprint preservado em [`../audit/99-futuro-infra-agnostica.md`](../audit/99-futuro-infra-agnostica.md); retomar após W4. **Reversível:** sim.
+
+### DEC-002 · 2026-07 · ~~`S-1` e `F-3` adiados até existir autenticação~~ — **SUPERADA por DEC-004**
+**Motivo original:** tornar todo Cypher read-only quebraria o ingest em lote (`/api/cql-batch` executa `CREATE`/`MERGE`). **Situação atual:** a premissa de que a solução exigia autenticação estava errada. `S-1` se resolve por **separação de credenciais** + `$user_id` parametrizado, sem login. Ver DEC-004 e [A12 §5](../agents/12-neo4j-grafo.md).
+
+### DEC-003 · 2026-07 · Nenhum commit sem pedido explícito do usuário
+**Motivo:** controle do autor sobre o histórico do repositório da sua pesquisa. **Consequência:** mudanças ficam no worktree; agentes nunca fazem `git add`/`commit`/`push` por iniciativa própria. **Reversível:** sim.
+
+### DEC-004 · 2026-07-29 · **Não haverá login.** Demo anônimo com limites rígidos; token só nas rotas administrativas
+**Decisão do usuário.** O demo em `phylotreeminer.ic.uff.br` roda numa máquina da universidade para **avaliação por bancas** durante a submissão do artigo; o `X-User-ID` particiona sessões, não autentica. Um avaliador precisa conseguir *rodar* o pipeline — fechar a escrita atrás de credencial destruiria o propósito do demo.
+
+**Consequências:**
+- Escrita de usuário (upload, run, ingest) permanece **anônima**, defendida por limites: tamanho/tipo de upload, `resolve_within`, rate limiting, lock de concorrência, TTL + purga.
+- Rotas **administrativas** (reconfigurar conexão e afins) exigem `ADMIN_TOKEN`, ou são removidas.
+- `S-1` **destravado sem autenticação**: credencial somente-leitura + sessão `READ_ACCESS` + `$user_id` como parâmetro; credencial de escrita server-side usada só pelo ingest, que consome CQL gerado pelo pipeline a partir de caminho no servidor (não texto do cliente). Supera DEC-002.
+- Governança se desloca de "quem entra" para "o que se aceita, por quanto tempo, com que aviso" — `G6` (aviso operante antes do upload) passa a ser o controle central. O README já declara que a ferramenta é só para demonstração; o trabalho é tornar isso operante.
+- **Dado sensível real não deve ser processado no demo, por decisão de projeto.**
+
+**Reversível:** sim — se um dia houver necessidade de login, nada aqui impede.
+
+### DEC-005 · 2026-07-29 · W0 (bootstrap de verificação) precede P2 em diante
+**Motivo:** o repositório não tem nenhum teste automatizado; as regras "golden test antes de mover" e "medir antes/depois" da própria auditoria são inexequíveis sem harness. **Consequência:** atraso de uma onda antes das mudanças de performance/estrutura, em troca de refatoração verificável. Inclui escrever testes retroativos para o que P0/P1-batch1 já alterou. **Reversível:** não faz sentido reverter.
+
+### DEC-006 · 2026-07-29 · Infra plugável (nuvem do usuário ou execução local) é a direção futura confirmada
+**Contexto do usuário:** a ferramenta evoluirá para que o usuário conecte serviços de nuvem que forneçam ao pipeline a arquitetura de execução e o armazenamento de resultados, ou clone o repositório e rode na infra local. **Consequência:** [`../audit/99-futuro-infra-agnostica.md`](../audit/99-futuro-infra-agnostica.md) deixa de ser hipótese e passa a ser roteiro pós-auditoria (atualiza DEC-001); W4 — containerização, camadas, configuração por env — é o pré-requisito. **Retomar:** só depois de fechadas todas as fases previstas na auditoria. **Reversível:** sim.
+
+### DEC-007 · 2026-07-29 · Três agentes especializados adicionados (A11, A12, A13)
+**Motivo:** o elenco original cobria engenharia e correção, mas não a **validade da inferência filogenética**, a **modelagem de grafo** nem a **produção do manuscrito** — três competências centrais para o objetivo de publicação. **Consequência:** [A11](../agents/11-bioinformatica-inferencia.md) (veto sobre escolhas de inferência e interpretação; audita o submódulo `BioComp_UFF` sem editá-lo), [A12](../agents/12-neo4j-grafo.md) (assume o *write-lock* de `neo4j_services.py`, esquema e consultas; A3 mantém driver/DI), [A13](../agents/13-escrita-cientifica.md) (só `docs/paper/**`, paralelizável com qualquer onda). Fronteiras registradas em [`../agents/README.md`](../agents/README.md). **Reversível:** sim.
+
+### DEC-008 · 2026-08-19 · **O ambiente de desenvolvimento executa o stack completo** — premissa antiga invalidada
+**Contexto.** Todo o protocolo de orquestração foi escrito supondo uma máquina Windows sem conda, node, npm ou Docker; daí as regras "agentes não podem afirmar que funciona" e "gate que exige executar o stack → escalar ao humano".
+
+**Fato verificado** (comandos e versões em [`08-ficha-de-fatos.md §1`](08-ficha-de-fatos.md)): a máquina Linux atual tem conda com o ambiente `Phylotreeminer` completo (biopython 1.81, pandas 2.2.2, mlxtend 0.23.1, fastapi 0.121.0, neo4j 5.20.0), Node v22.22.3, Docker 28.3.3 com `phylotree_neo4j` **de pé**, e a cadeia bioinformática inteira (MAFFT 7.490, Clustal Omega 1.2.4, IQ-TREE 2.2.2.6, FastTree 2.1.11, RAxML-NG, MUSCLE 3.8.1551). Mais: **dendropy 4.6.1 e ete3 3.1.3**, que são os oráculos independentes exigidos por [`04-rigor-cientifico §3`](04-rigor-cientifico.md#3-protocolo-de-mudança-na-zona-sagrada). O script `docs/science/scripts/audit_variola.py` **executa** e reproduz a seção 1 exatamente como documentado.
+
+**Consequências:** (a) nasce o papel **Validador**, que executa e prova — ver DEC-009; (b) "o gate exige executar o stack" **deixa de ser motivo de escalonamento** ao humano; (c) o protocolo de mudança na zona sagrada passa a ser executável hoje, sem instalar nada; (d) `../agents/10-revisor.md §5` e `02-protocolo §1` ficam desatualizados nesse ponto e são substituídos por [`09-arquitetura-de-agentes.md`](09-arquitetura-de-agentes.md).
+
+**Achado colateral:** os logs de VARV registram **FastTree 2.2.0**; a máquina tem **2.1.11**. Reexecutar hoje não reproduz as árvores FastTree em disco — instância concreta de [D11](../science/02-defeitos-que-alteram-resultado.md#d11). Resolver antes de M2. **Reversível:** não é uma escolha, é um fato.
+
+### DEC-009 · 2026-08-19 · Hierarquia de cinco papéis com validação cruzada
+**Decisão.** Separar os papéis fundidos: A0 vira **Planejador** (marcos, gates) + **Gerenciador** (lotes, locks, ledger); A10 vira **Revisor de Código** (diff, escopo, diretrizes) + **Validador** (executa e prova). O **Desenvolvedor** escreve dentro do lock.
+
+**Motivo.** Quem planeja não é adversário do próprio plano; e "aprovado estaticamente" não é "funciona". Com DEC-008, a validação por execução deixa de ser gargalo humano.
+
+**Consequência.** Os treze agentes de [`../agents/`](../agents/README.md) **não são descartados**: viram *perfis* que os papéis assumem, preservando todos os contratos já escritos. Vetos de A6/A8/A11 inalterados. Matriz de validação cruzada fechada (ninguém se autoaprova) em [`09-arquitetura-de-agentes.md §3`](09-arquitetura-de-agentes.md#3-validação-cruzada--quem-valida-quem), com regra explícita de resolução quando R e V divergem. **Reversível:** sim.
+
+### DEC-010 · 2026-08-19 · O baseline de Li *et al.* (2007) é o teste de regressão da refatoração
+**Decisão.** O invariante científico — monofilia de VARV e clado P-II a **4/4** métodos, mais a bipartição aninhada de 10 táxons — vira **gate executável** (`make reference-check`) exigido em todo marco a partir de M2.
+
+**Motivo.** Golden snapshot congela o comportamento atual, bugs inclusive: detecta regressão de *implementação*, não de *significado*. O invariante do baseline é externamente validado pela literatura (Li *et al.* 2007 PNAS 104:15787-92; Esposito *et al.* 2006 Science 313:807-812) e não pode mudar — se a monofilia de VARV cair, a refatoração quebrou a ciência. Os dois gates são complementares e ambos ficam.
+
+**Ponto de partida:** a replicação já existe, comentada, em `BioComp_UFF/workflow/workflow_dataAcquisition.py:798-884`, com as 48 accessions explícitas (`DQ437580`–`DQ437594`, `DQ441416`–`DQ441448`) e o grupo externo Taterapox+Camelpox. Falta filtro `txid10242`, enraizamento explícito e manifesto — é o marco M2.
+
+**Consequência.** M2 produz `Backend/tests/data/reference/` e institui o gate. **Risco aceito e declarado:** entre M0 e M2 a única rede é o golden snapshot. **Reversível:** não é desejável.
+
+### DEC-011 · 2026-08-19 · ~~**PENDENTE**~~ — conflito de protocolo sobre o submódulo `BioComp_UFF` — **RESOLVIDO por [DEC-020](#dec-020--2026-08-24--decisão-6-tomada-escrita-liberada-no-submódulo-biocomp_uff-com-lock-próprio-e-histórico-separado)**
+**Situação.** [`02-protocolo §3`](02-protocolo-de-orquestracao.md#3-write-lock-por-arquivo) determina que ninguém edita `BioComp_UFF/**`. Mas as correções **D3** (`stability.py`), **D4** (`miner.py`), **D5** (`treeUtils.py`) e **D10** (propagação de UFBoot) vivem **todas** dentro do submódulo. Sob a regra atual, metade das correções científicas é inexecutável.
+
+**Recomendação:** liberar a escrita com write-lock próprio e commit separado no repositório do submódulo. A alternativa de replicar a lógica científica no `Backend/` institucionalizaria exatamente o defeito D5 (dois universos de identidade paralelos).
+
+**Aguardando decisão do usuário.** Bloqueia M1.1-M1.3, M2 inteiro e M3.1-M3.2.
+
+### DEC-012 · 2026-08-19 · Patch de P0/P1 portado para `main`, com teste que o prova
+**Contexto.** A verificação de portão descobriu que P0/P1 nunca chegou a `main` — ver [`08-ficha-de-fatos.md §2`](08-ficha-de-fatos.md). O patch existia só num diretório órfão.
+
+**Decisão.** Escrever primeiro os testes que falham em `main`, depois portar. 13 testes falhavam; após o porte, todos passam.
+
+**Aplicado:** `resolve_within` com guarda de `ValueError` (caminho cross-drive); CORS por `CORS_ORIGINS`; `run_workflow` com regex + `resolve_within` + `isdir` + **lock de concorrência reativado** (estava comentado); `browse_path`, `get_paginated_json`, `get_file_content` migrados; **o residual de `rerun_workflow`/`can_rerun_project`** que estava em fila para M4 foi fechado junto porque o teste exige zero `startswith`; `set_ncbi_email` sem o `try/except` que convertia `400` em `500`; filtro ZIP sem o `''` que casava qualquer nome; upload com `basename` + regex + `resolve_within`.
+
+**Fora do patch original, aplicado no mesmo lote:** `docker-compose.yml` com bind em `127.0.0.1`, `NEO4J_PASSWORD` obrigatória, healthcheck, `mem_limit`, e **remoção do APOC** — `apoc.*` não é usado por nenhuma consulta do projeto (`grep -rn "apoc\." Backend/ Frontend/` vazio) e `procedures_unrestricted` + import/export de arquivo davam leitura e escrita no host. `.env.example` criado. `python-dotenv` e `psutil` declarados em `requirements.txt` (eram importados sem estar lá).
+
+**Evidência de execução, no servidor de desenvolvimento do usuário (porta 8000, `--reload`):**
+```
+GET  /browse?path=../../etc          -> 403
+POST /api/ncbi/set-email email=xyz   -> 400
+GET  /api/system/health              -> 200
+```
+**Reversível:** sim — nada foi commitado; `git diff` mostra tudo.
+
+### DEC-013 · 2026-08-19 · `except HTTPException: raise` aplicado aos 17 blocos que engoliam o status
+**Motivo.** 17 blocos `try/except Exception` em `app.py` levantavam `HTTPException` dentro do `try` e a capturavam no handler genérico, convertendo `400`/`403`/`404` em `500`. Detectado por varredura AST, não por leitura.
+
+**Mudança de contrato:** endpoints que devolviam `500` para recurso ausente passam a devolver `404`. O frontend trata `!response.ok` como erro nos dois casos, então a UX não regride — melhora.
+
+**Evidência:** `tests/api/test_contrato_erros.py` — varredura AST assere zero blocos ofensores, e quatro rotas devolvem `404` para projeto inexistente. **Reversível:** sim.
+
+### DEC-014 · 2026-08-19 · Catraca de lint em vez de correção em massa
+**Contexto.** O frontend tem **69 erros e 27 avisos** de eslint pré-existentes. Corrigi-los é lote de M5/T4, não de M0.
+
+**Decisão.** `.eslint-baseline.json` fixa o débito atual; `npm run lint:ratchet` falha se o número **crescer** e avisa quando cai. A CI roda a catraca, não o lint cru.
+
+**Motivo:** mascarar com `continue-on-error` seria desonesto; corrigir 96 problemas agora estouraria o escopo de M0 e misturaria refatoração com mudança de comportamento. A catraca impede regressão sem fingir que o débito não existe. **Reversível:** sim.
+
+### DEC-015 · 2026-08-19 · Golden snapshots normalizam ordem; a instabilidade é defeito separado
+**Contexto.** Os snapshots divergiam entre execuções ([D14](../science/02-defeitos-que-alteram-resultado.md#d14)): a ordem de várias respostas vem de iteração sobre `set` de strings, cujo hash é aleatorizado por processo.
+
+**Decisão.** `_normalizar` em `Backend/tests/conftest.py` ordena antes de comparar, para que o snapshot detecte mudança de **conteúdo** enquanto D14 não é corrigido. Fixar `PYTHONHASHSEED` foi **recusado**: mascara o defeito e não sobrevive a um deploy que não controle a variável. **Reversível:** sim — some quando D14 for corrigido.
+
+### DEC-016 · 2026-08-19 · M1.4–M1.6 aplicados (D7, D8, D9) — trilha T2, sem tocar o submódulo
+**Contexto.** Três defeitos de apresentação em `analyze_patterns`/`analyze_tree_coverage` (`Backend/src/app.py`), todos fora do submódulo, portanto não bloqueados pela decisão 6.
+
+**D7 — truncamento silencioso.** `max_pattern_size=100` descartava padrões sem avisar. Agora o payload traz `patterns_in_source`, `discarded_by_size`, `discarded_sizes`, `unreadable_rows`, `size_filter`. Medido: VARV-6 não descarta nada (12/12); **VARV-121 descartava 8 de 20** — os tamanhos 118–120, exatamente os de maior conteúdo filogenético. Frontend (`TreePatternAnalysis.jsx`) ganhou um `Alert` que aparece só quando `discarded_by_size > 0`.
+
+**D8 — cobertura por árvore.** `get_hash_to_subtree` fazia `dict.update`, e a última árvore a escrever um hash vencia; um clado conservado (mesmo hash em várias árvores) ficava atribuído a uma só. Trocado por `merge_hash_to_subtree` (um-para-muitos: `entrada["trees"] = {tree_name: subtree_name, ...}`). Medido: VARV-6 foi de **5 para 10** árvores listadas (existem 10 em disco); VARV-121 foi a **8/8**.
+
+**D9 — números falsos e duplicados.** `unique_signatures` nunca recebia `.append` (contagem sempre 0); `quasi_invariant` recomputava exatamente `topologically_robust` com outro nome. Removidos os dois; a API agora expõe `method_sensitive_count`/`topologically_robust_count`, iguais ao `len()` das listas que já vinham no payload. Os dois `BaseModel` mortos que documentavam o contrato antigo (`TreeAnalysisRequest`, `PatternAnalysisResult` — nenhum dos dois usado em endpoint) foram removidos junto.
+
+**Tabela de diff (protocolo `04-rigor-cientifico §3`):**
+
+| Métrica | Antes | Depois | Δ | Afeta número publicado? |
+|---|---|---|---|---|
+| `total_patterns` (VARV-6) | 12 | 12 | 0 | não |
+| `avg_pattern_size`, `avg_support` | — | — | 0 | não |
+| `method_sensitive_signatures` / `topologically_robust` (conteúdo) | 11 / 0 | 11 / 0 | 0 | não |
+| `tree_coverage` (nº árvores, VARV-6) | 5 | 10 | **+5** | sim — mas é a correção; o "antes" já era o bug D8 |
+| `unique_signatures_count` | 0 (sempre) | campo removido | — | não — nunca foi um número real |
+
+Nenhum número científico publicável mudou; o que mudou foi a **apresentação** deixar de mentir sobre truncamento e cobertura. **Evidência de execução:** `pytest Backend/tests -q` → 77 passed, 5 xfailed (antes: 74 passed). Snapshots regravados com `UPDATE_SNAPSHOTS=1` e parecer aqui registrado, conforme exigido mesmo quando o snapshot muda por correção esperada.
+
+**Write-lock:** `Backend/src/app.py`, `Backend/tests/golden/**`, `Frontend/.../TreePatternAnalysis.jsx` — trilha T2/T4, sem tocar `BioComp_UFF/**`. **Reversível:** sim.
+
+### DEC-017 · 2026-08-19 · M1.7 (D12+D16) — **LOTE ABERTO, não commitado.** Estado exato para retomar
+
+**Por que os dois juntos.** [D16](../science/02-defeitos-que-alteram-resultado.md#d16) documenta que corrigir D12 (país deixa de ser fabricado do `strain`) sem corrigir D16 (a tabela região só cobre 14 países de Zika) não muda nada visível — o país correto simplesmente passa a cair em `Unknown` do mesmo jeito. Um lote, não dois.
+
+**Reverificação de escopo feita nesta sessão** (a regra "confirme antes de mandar corrigir" pegou uma imprecisão do parecer científico original): o C-5d fala em "três tabelas país/região divergentes". No código **atual** só existem **duas**, as duas em `Backend/src/utils/treePlot.py` — `REGION_MAPPING` (dict módulo) e o `color_map` local dentro de `render_annotated_tree` (região→cor, só 6 chaves). A suposta terceira tabela do frontend (`COUNTRY_DICTIONARY` em `useGeocoding.jsx`) é **geocodificação** (país→lat/lng para o mapa), não classificação região — é um problema *diferente*, já rastreado (política do Nominatim violada, item M5/W5/M-2), e **fora do escopo deste lote**.
+
+**Feito até agora:**
+- `Backend/src/data/regions.json` criado — fonte única, ~120 países em esquema UN M49 (sub-regiões), **com tabela de aliases** para nomenclatura histórica (`Dahomey`→Benin, `Zaire`→RDC, `USSR`→Rússia, `Sumatra`→Indonésia, `Ceylon`→Sri Lanka, `Negev`→Israel, ~40 entradas) — indispensável porque os isolados de *Variola* são de 1944-1977 e trazem o nome do país da época.
+- Confirmado por `grep`: `app.py:660` chama `map_country_to_region(country)`, importado de `treePlot.py` — é o único ponto de consumo no backend.
+- Testes de caracterização já existem e vão virar critério de aceite: `Backend/tests/unit/test_metadados_cientificos.py` (`defeito_conhecido` = `xfail(strict=True)` em 4 casos D12 + 2 casos D16).
+
+**NÃO feito — exatamente onde retomar:**
+
+1. Escrever `Backend/src/utils/regions.py` (ou função equivalente dentro de `treePlot.py`): carrega `regions.json` uma vez no import, resolve alias → nome canônico → região, cache em memória. Substituir `REGION_MAPPING`/`map_country_to_region` em `treePlot.py:4-42` para usar essa fonte. **Manter o nome público `map_country_to_region` e a assinatura** — é o que `app.py` e os testes importam.
+2. Corrigir o `color_map` local em `render_annotated_tree` (`treePlot.py`, dentro da função, hoje só 6 chaves) para cobrir as sub-regiões novas do `regions.json` — senão a árvore renderizada mostra quase tudo cinza (`Unknown`) depois da troca.
+3. `get_node_information` (`app.py:624-679`) — quatro edições independentes, mesmo bloco:
+   - **D12a (ano):** remover o fallback `raw_date = coll_date if coll_date else strain_info` — usar só `collection_date`; ausente = `"Unknown Date"`.
+   - **D12b (país):** remover o `re.search` sobre `strain_info` — usar só `geo_loc_name`; ausente = `"Unknown"`.
+   - **D12c (organismo):** `annotations.get("organism", 'Unknown') or annotations.get("source", 'Unknown')` → `annotations.get("organism") or annotations.get("source") or "Unknown"` (o bug é que o default `'Unknown'` do primeiro `.get` é truthy e o `or` nunca cai pro `source`; `source` **é** legítimo como alternativa — vem do mesmo tipo de informação, ao contrário de `strain`).
+   - **D12d (hospedeiro):** truncar em `;` — normaliza `"Camelus dromedarius; sex: male"` para `"Camelus dromedarius"` sem inventar sinonímia (`"camel"` continua distinto de `"Camelus dromedarius"`: unificar isso exigeria conhecimento taxonômico que não está no dado).
+4. Rodar `pytest Backend/tests/unit/test_metadados_cientificos.py -v` — os 6 casos com o decorador `defeito_conhecido` (`xfail(strict=True)`) devem virar `XPASS` (porque a correção os faz passar) → **remover o decorador** desses 6 testes específicos, não o arquivo inteiro (há outros `defeito_conhecido` fora do escopo deste lote — checar `test_paises_do_baseline_de_variola_nao_mapeiam` e `test_tabela_e_pequena_demais_para_o_dominio`, que são D16 puro e também devem cair).
+5. Medir D16 de verdade: rodar a introspecção de país→região sobre VARV-49 (48 táxons) antes/depois e produzir a tabela de diff (`% Unknown` deve cair de 97% para próximo de 0%).
+6. Golden snapshots: `pattern_analysis_varv6` não deve mudar (não usa metadados de país/região). `metadata_estrutura_varv6` pode precisar de `UPDATE_SNAPSHOTS=1` se a estrutura mudar — conferir que o `xfail` de D15 (vazamento de path) continua sendo o único xfail em metadata.
+7. Escrever a tabela de diff no ledger (mesmo formato do DEC-016 acima) e um novo `DEC-018`.
+8. `pytest Backend/tests -q` deve fechar em ~83 passed / ~2 xfailed (5 atuais − 6 do D12/D16 que passam a existir de verdade + o que sobrar de D15 e do resto de D12 não coberto por teste ainda).
+
+**Write-lock deste lote:** `Backend/src/utils/treePlot.py`, `Backend/src/app.py` (função `get_node_information` apenas), `Backend/src/data/regions.json` (novo), `Backend/tests/unit/test_metadados_cientificos.py`. **Não toca** `BioComp_UFF/**`.
+
+**Decisão do usuário já dada:** em resposta direta a "corrigir D12+D16 muda os painéis geográficos publicados, preciso do seu aval antes do merge" — usuário respondeu **"aprovado, pode seguir"**. Não é preciso perguntar de novo para fechar este lote.
+
+### DEC-018 · 2026-08-21 · M1.7 **fechado** (D12 a-d + D16) — a geografia de *Variola* é ausente, não desconhecida
+
+Conclui o lote aberto em [DEC-017](#dec-017--2026-08-19--m17-d12d16--lote-aberto-não-commitado-estado-exato-para-retomar), sob a aprovação já registrada ("aprovado, pode seguir"). Os passos 1-3 do plano de retomada já estavam em disco; esta sessão executou os passos 4-8.
+
+**O que foi aplicado.** `map_country_to_region` passa a ler `Backend/src/data/regions.json` (fonte única, UN M49) em vez da tabela de 14 países do estudo de Zika; o `color_map` de `render_annotated_tree` cobre as 19 sub-regiões; e `get_node_information` deixa de fabricar metadado — ano só de `collection_date`, país só de `geo_loc_name`, `organism` com fallback real para `source`, hospedeiro truncado em `;`.
+
+**Vão de cobertura fechado nesta sessão.** A varredura de `geo_loc_name` nos 18 projetos de `BioComp_UFF/projects` achou **68 países distintos**, dos quais **16 ainda caíam em `Unknown`** com o `regions.json` de 2026-08-19 — inclusive `Micronesia, Federated States of`, que é a forma longa do NCBI e nunca casou nem com a tabela antiga (que tinha só `"Micronesia"`). Foram acrescentados 15 países e 2 aliases (`Micronesia, Federated States of` → Micronesia; `Cabo Verde` → Cape Verde). A tabela vai de 121 para **136 países** e de 50 para **52 aliases**.
+
+**Tabela de diff** (protocolo `04-rigor-cientifico §3`) — % de táxons com país classificado em uma sub-região real:
+
+| Conjunto | Países distintos | ANTES (tabela de 14) | DEPOIS | Δ |
+|---|---:|---:|---:|---:|
+| VARV-49 (`Variola_Yu_li_2007`) | 1 | 0,0% | **100,0%** | +100,0 |
+| ZIKV-11 (`..._Medium_11seq`) | 6 | 45,2% | **100,0%** | +54,8 |
+| ZIKV-21 (`..._Large_21seq`) | 7 | 40,0% | **100,0%** | +60,0 |
+| ZIKV-480 (`..._Large_480seq`) | 54 | 66,8% | **100,0%** | +33,2 |
+| **todos os 18 projetos** | **68** | — | **0 não mapeados** | — |
+
+**O achado que muda a leitura do resultado.** Em VARV-49, "0% → 100%" descreve **um único registro** (Kazakhstan): dos 48 táxons, apenas um traz `geo_loc_name`. A varredura por accession em VARV-6 mostra o mesmo padrão — 5 dos 6 registros não têm `geo_loc_name` **nem** a chave legada `country`, só `strain`. Ou seja: os "Bangladesh / Sumatra / Syria" e os anos "1970 / 1972 / 1975" que apareciam em `/insights` **não eram dados do GenBank** — eram o regex de D12b lendo o nome da cepa. A correção não perdeu geografia; ela revelou que a geografia nunca esteve lá.
+
+**Efeito no snapshot `insights_varv6`** (regravado com `UPDATE_SNAPSHOTS=1`, parecer aqui conforme exigido):
+
+| Campo | Antes | Depois | Real? |
+|---|---|---|---|
+| `countryData` | Bangladesh 1, Sumatra 1, Syria 1, Unknown 3 | Unknown 6 | o "antes" era fabricado do `strain` |
+| `metrics.timeSpan` | `1970 - 1975` | `N/A - N/A` | idem |
+| `timelineData` | 1970, 1972, 1975, Unknown 3 | Unknown Date 6 | idem |
+| `totalNodes`, `uniqueLineages`, `uniqueHosts` | 6, 3, 1 | 6, 3, 1 | inalterado |
+
+**Consequência para o artigo:** todo painel geográfico e toda linha do tempo de *Variola* publicados a partir de `/insights` são **artefato do regex**, não observação. O texto precisa dizer que os genomas de *Variola* do baseline de Li et al. (2007) não carregam `geo_loc_name`/`collection_date` estruturados, e que a procedência, se for reportada, tem de vir da literatura ou do campo `strain` **declarado como tal**.
+
+**Um caso real de dado perdido, e não é D12.** `NC_008030` (*Nile crocodilepox virus*) **tem** `geo_loc_name: Zimbabwe`, `collection_date: 2001` e `host: Nile crocodile`, e mesmo assim sai como `Unknown`. Causa: **D13**. O `metadata.json` contém cada accession `NC_*` sob **dois** rótulos — o truncado em 10 caracteres pelo limite PHYLIP (`NC_008030.`, 10 ocorrências, **0 features**) e o íntegro (`NC_008030.1`, 14 ocorrências, 347 features). `iter_metadata_nodes` deduplica por `newick` e o rótulo truncado e vazio vence. Isso explica também por que `hostData` já era `Unknown 6` **antes** desta correção. Corrigir exige mexer em `iter_metadata_nodes`/`get_metadata_node`, fora do write-lock deste lote — registrado na fila de triagem com esta evidência.
+
+**Portão de regressão.** `test_todo_pais_presente_nos_projetos_mapeia` parametriza os 68 países observados e falha se qualquer um voltar a cair em `Unknown` — é o portão contra a regressão que originou D16 (uma tabela ajustada a um estudo só).
+
+**Evidência de execução:** `pytest Backend/tests` → **153 passed, 1 xfailed** (o xfail remanescente é D15, vazamento de path). Antes do lote: 84 passed, 1 failed (`insights_varv6`), 1 xfailed.
+
+**Write-lock:** `Backend/src/utils/treePlot.py`, `Backend/src/app.py` (`get_node_information`), `Backend/src/data/regions.json`, `Backend/tests/unit/test_metadados_cientificos.py`, `Backend/tests/golden/snapshots/insights_varv6.json`. **Não tocou** `BioComp_UFF/**`. **Reversível:** sim.
+
+
+### DEC-019 · 2026-08-24 · M1.8 — D13 (metade backend): o metadado de `NC_001611` sempre esteve no arquivo
+
+Primeiro lote da fila aberta por [DEC-018](#dec-018--2026-08-21--m17-fechado-d12-a-d--d16--a-geografia-de-variola-é-ausente-não-desconhecida). D13 tem duas metades: o pipeline **grava** `TaxLabels` truncados em 10 caracteres (limite de nome do PHYLIP, consumido por IQ-TREE e RAxML) e o backend **lê** esses arquivos mal. A primeira metade está no submódulo e segue congelada pela decisão 6; **este lote fecha a segunda**, que não depende dela.
+
+**Diagnóstico — o mecanismo não era o descrito.** `02-defeitos §D13` afirmava que só o bloco `TaxLabels` vinha truncado e que "o rótulo dentro da string da árvore permanece íntegro". **É falso** nos arquivos em disco: no `tree_dataset_final_mafft_iqtree.nexus` de VARV-6 a própria árvore traz `(NC_008030.:0.96191,...)`. O arquivo é internamente **consistente** e inconsistente com os demais — por isso a correção não podia ser "parsear com o próprio namespace e alinhar por rótulo": alinhar por rótulo produziria 9 táxons numa árvore de 6. O documento foi corrigido.
+
+**Onde o metadado real estava.** `iter_metadata_nodes` lia **uma única árvore** — a primeira do `metadata.json`, por `only_first=True`. Em VARV-6 a primeira é `clustalo_raxml`, e nela 3 dos 6 rótulos são truncados e trazem `features` vazio. Varredura do arquivo:
+
+| Acesso | Rótulo lido antes | features | Rótulo íntegro no mesmo arquivo | features |
+|---|---|---:|---|---:|
+| NC_001611 (**referência de VARV**) | `NC_001611.` | 0 | `NC_001611.1` | 395 |
+| NC_008030 | `NC_008030.` | 0 | `NC_008030.1` | 347 |
+| NC_008291 | `NC_008291.` | 0 | `NC_008291.1` | 451 |
+| DQ437591 / DQ437592 / L22579 | íntegro | 409/411/190 | — | — |
+
+Ou seja: 1.193 *features* do GenBank estavam no arquivo e eram descartadas por se ler só a primeira das 10 árvores.
+
+**O que foi aplicado.**
+1. `iter_metadata_nodes` passa a percorrer árvore a árvore guardando, por **acesso sem versão** (`accession_base`), o registro mais rico (`features`, depois `annotations`), e **para na primeira árvore em que nenhum táxon esteja vazio**. Quando a primeira árvore já está completa — todos os projetos de Zika, VARV-49, ZIKV-480 — lê-se exatamente o que se lia antes.
+2. `extract_trees_from_nexus` deixa de aceitar um `taxon_namespace` externo: impor o namespace da primeira árvore à segunda era o que fazia o dendropy abortar.
+3. `canonical_label_map` reconcilia truncado com íntegro **pelo acesso**, e `align_taxon_namespaces` aceita esse mapa. A reconciliação é recusada — devolvendo `None` — quando dois rótulos da mesma árvore dividem o acesso ou quando os conjuntos de acessos diferem: **nunca funde táxons distintos**, que é o modo de falha silencioso que D13 previa.
+4. `/api/tree/compare` passa a recusar explicitamente (400) árvores com conjuntos de táxons diferentes, para que a reconciliação não vire licença para calcular RF sobre folhas que não se correspondem.
+
+**Tabela de diff** (protocolo [`04-rigor-cientifico §3`](04-rigor-cientifico.md#3-protocolo-de-mudança-na-zona-sagrada)):
+
+| Métrica | Antes | Depois | Δ | Afeta número publicado? |
+|---|---|---|---|---|
+| Pares de árvores que comparam (VARV-6, 45 pares) | 21 | **45** | +24 | **Sim** — nenhuma comparação com IQ-TREE ou RAxML era possível |
+| Táxons de VARV-6 com organismo | 3 de 6 | **6 de 6** | +3 | **Sim** |
+| `uniqueLineages` (`/insights`) | 3 | **4** | +1 | **Sim** |
+| `uniqueHosts` | 1 | **2** | +1 | **Sim** |
+| `timeSpan` | `N/A - N/A` | **`2001 - 2001`** | — | **Sim** |
+| `countryData` | Unknown 6 | **Zimbabwe 1, Unknown 5** | — | **Sim** |
+| `hostData` | Unknown 6 | **Nile crocodile 1, Unknown 5** | — | **Sim** |
+| `totalNodes` | 6 | 6 | 0 | não |
+| `rf_distance` de FastTree × NJ (par saudável) | 4 | 4 | **0** | não — controle |
+| Snapshot `pattern_analysis_varv6` | — | idêntico | **0** | não — controle |
+| VARV-49, ZIKV-480 (`/insights`) | — | idênticos | **0** | não — nenhum rótulo truncado |
+
+**Achado que muda a leitura do resultado.** Os dois grupos externos do baseline de Li *et al.* (2007) chegavam ao painel como `Unknown` e eram **indistinguíveis dos genomas de *Variola***. Agora aparecem pelo que são: `NC_008291` = *Taterapox virus*, `NC_008030` = *Nile crocodilepox virus*. Um painel que mostrava "3 linhagens, 6 táxons de organismo majoritariamente desconhecido" descrevia mal um conjunto que é, de fato, 4 genomas de *Variola* mais 2 grupos externos de espécies distintas. `NC_008030` é também o **único** registro do conjunto com geografia e data estruturadas (`Zimbabwe`, `2001`, hospedeiro *Nile crocodile*) — e era exatamente o que DEC-018 registrou como "um caso real de dado perdido, e não é D12". Está recuperado.
+
+**Isso não reabre a conclusão de DEC-018.** Os 4 genomas de *Variola* de VARV-6 continuam **sem** `geo_loc_name` e **sem** `collection_date`. A geografia de *Variola* segue ausente; o que voltou é a geografia de um crocodilo do Zimbábue, que é grupo externo. Todo painel geográfico de *Variola* já publicado continua sendo artefato do regex sobre `strain`.
+
+**Escopo intocado.** Nenhuma mudança em `BioComp_UFF/**`. O caminho `iter_tree=True` (que alimenta `pattern-analysis`) é byte a byte o mesmo — verificado pelo snapshot `pattern_analysis_varv6` e pelo teste de D8: o `continue` do código anterior pulava o `break`, então esse ramo já percorria todas as árvores, e a reescrita preserva isso. `only_first` fica sem efeito e documentado como tal.
+
+**Mudança de contrato.** `/api/tree/compare` devolve **400** para árvores de conjuntos de táxons diferentes, com a lista dos rótulos exclusivos de cada lado. Antes o dendropy recusava esses casos por efeito colateral do namespace compartilhado — o cliente já via erro; agora vê o motivo. `projectExplorer.jsx:408` trata `!response.ok` e cai no modal de erro: nenhuma mudança de frontend é necessária, e os 24 pares que antes caíam nesse modal passam a abrir.
+
+**Oráculo independente.** `Backend/tests/oracle/test_rf_rotulos_truncados.py` recalcula a RF fora do backend: lê a string Newick do Nexus por regex (sem passar pelo leitor de Nexus, que é quem consulta o `TaxLabels` truncado), normaliza os rótulos por conta própria e chama `dendropy.calculate.treecompare.symmetric_difference` sobre árvores não enraizadas. Confere para os 3 pares truncados e para o par de controle, e verifica que o namespace reconciliado tem 6 táxons — se a normalização fundisse dois táxons, o oráculo veria 5.
+
+**Custo.** Mediana de 3 execuções de `build_metadata_index`:
+
+| Conjunto | Antes | Depois | Efeito |
+|---|---:|---:|---|
+| VARV-6 (28,6 MB, afetado) | 0,00 s | **0,10 s** | lê 3 árvores em vez de 1; recupera 3 táxons |
+| VARV-49 (821 MB) | 1,32 s | **1,40 s** | primeira árvore já completa — dentro do ruído |
+| ZIKV-480 (1,1 GB) | 1,05 s | **1,02 s** | idem |
+
+O pior caso teórico — um táxon que **nunca** tenha metadado no arquivo — força a leitura completa (~11 s em VARV-49). Não ocorre em nenhum dos 11 projetos varridos, e o resultado do cache é reaproveitado por `mtime`. Registrado na fila de triagem para `P-1`, que é quem tira essa leitura do event loop.
+
+**Reprodução da varredura:** `cd Backend && python scripts/varredura_rotulos_truncados.py` (sem argumentos varre os 9 projetos com `metadata.json` < 100 MB; passe o nome para incluir os grandes).
+
+**Evidência de execução:** `pytest Backend/tests` → **180 passed, 1 xfailed** (antes do lote: 153 passed, 1 xfailed; o xfail é D15). `vitest --run` → 8 passed.
+
+**Write-lock:** `Backend/src/app.py` (`iter_metadata_nodes`, `accession_base`, `_riqueza_metadado`, `build_metadata_index`, `extract_trees_from_nexus`, `leaf_labels`, `canonical_label_map`, `align_taxon_namespaces`, `compare_trees`), `Backend/tests/unit/test_rotulos_truncados.py` (novo), `Backend/tests/oracle/test_rf_rotulos_truncados.py` (novo), `Backend/tests/golden/test_golden_compare.py`, `Backend/tests/golden/test_golden_endpoints.py`, `Backend/tests/golden/snapshots/insights_varv6.json`, `Backend/scripts/varredura_rotulos_truncados.py` (novo), `docs/science/02-defeitos-que-alteram-resultado.md`. **Não tocou** `BioComp_UFF/**`. **Reversível:** sim.
+
+### DEC-020 · 2026-08-24 · **Decisão 6 tomada: escrita liberada no submódulo `BioComp_UFF`**, com lock próprio e histórico separado
+
+Resolve [DEC-011](#dec-011--2026-08-19--pendente--conflito-de-protocolo-sobre-o-submódulo-biocomp_uff), pendente desde 2026-08-19. Escolhida a saída **(a)** de [`08-ficha-de-fatos §6`](08-ficha-de-fatos.md#6-conflito-de-protocolo-detectado-precisa-de-decisão), que era a recomendada.
+
+**Motivo.** A saída (b) — correções em camada de pós-processamento no `Backend/` — institucionaliza exatamente o defeito [D5](../science/02-defeitos-que-alteram-resultado.md#d5): dois universos de identidade paralelos, um no pipeline e outro na API. A (c), absorver o submódulo, é decisão de produto e muda o modelo de distribuição.
+
+**Termos.**
+- Write-lock próprio para `BioComp_UFF/**`; **um lote não toca os dois repositórios**.
+- Nenhum commit e nenhum push no submódulo sem pedido explícito — [DEC-003](#dec-003--2026-07--nenhum-commit-sem-pedido-explícito-do-usuário) vale igual nos dois históricos.
+- O submódulo já tinha trabalho não commitado antes deste lote (`workflow/stability/`, `docs/`, READMEs): o `git status` de lá **não** é linha de base limpa e isso precisa ser considerado ao commitar.
+- [`02-protocolo §3`](02-protocolo-de-orquestracao.md#3-write-lock-por-arquivo) atualizado.
+
+**Consequência.** Destrava **M1.1, M1.2, M1.3, M2 inteiro e M3.1-M3.2** — as correções D3, D4, D5 e D10, que são metade das correções científicas. O caminho crítico da submissão (M0→M1→M2→M3→M6) volta a andar. **Reversível:** sim (nada commitado).
+
+---
+
+### DEC-021 · 2026-08-24 · M1.1 — D4: o `support` do FPMax deixa de ser o limiar da varredura
+
+Primeiro lote executado sob DEC-020. Escopo: **só** `BioComp_UFF/workflow/subtree_mining/miner.py` e o teste correspondente. Nenhum arquivo de `Backend/` tocado.
+
+**O defeito, na linha que o produzia.** `process_group`, modo `auto`, varria `np.arange(0.1, 1.1, 0.1)` e fazia `result_fpmax['support'] = support` — jogando fora o suporte devolvido pelo mlxtend e gravando o **limiar** no lugar. A coluna `support` do `all_results_fpmax.csv` nunca foi suporte.
+
+**O que foi aplicado.**
+1. A coluna `support` preserva o valor do mlxtend: a fração de árvores que contém o itemset.
+2. O limiar da varredura vai para coluna própria, `min_support_threshold`, arredondado a 2 casas (a grade produzia `0.30000000000000004` no CSV).
+3. `consolidate_fpmax_results` (novo, estático) deduplica por itemset ao fim da varredura e grava `support`, `min_support_threshold`, `max_support_threshold` e `n_trees`, em ordem determinística (suporte ↓, tamanho ↓, limiar ↑). O suporte é propriedade do itemset e não do limiar, então deduplicar **não perde informação** — e a função avisa no log se algum itemset aparecer com suportes divergentes entre limiares, o que não deve acontecer.
+4. O modo de suporte fixo passa a gravar as mesmas colunas — antes o CSV fixo não tinha nem o limiar registrado.
+5. `find_exact_subsets` passa a acumular em `subtree_data['supports']` (que vai para o `metadata.json` e para o grafo) o **suporte real**, não a lista de limiares em que o clado apareceu.
+
+**Tabela de diff** — recomputada sobre a matriz de subárvores real de cada experimento, sem reexecutar bioinformática. As colunas "linhas", ">1 suporte" e "2 tabelas" reproduzem exatamente os números publicados em [`02-defeitos §D4`](../science/02-defeitos-que-alteram-resultado.md#d4), o que valida a reconstrução:
+
+| Experimento | M | Linhas no CSV | Itemsets distintos | Com >1 "suporte" | Nas **duas** tabelas | Frágeis (≤0,3) | Robustos (≥0,6) |
+|---|---:|---|---:|---|---|---|---|
+| VARV-49 | 8 | 16 → **7** | 7 | 7 → **0** | 2 → **0** | 6 → **4** | 1 → 1 |
+| VARV-52 | 9 | 20 → **13** | 13 | 7 → **0** | 2 → **0** | 10 → **5** | 1 → 1 |
+| VARV-121 | 8 | 20 → **11** | 11 | 7 → **0** | 2 → **0** | 9 → **6** | 1 → 1 |
+| VARV-6 | 10 | 12 → **6** | 6 | 6 → **0** | 1 → **0** | 6 → **5** | 0 → 0 |
+
+**Oráculo independente — Δ = 0 em 37 de 37 itemsets.** `audit_variola.py --secao 5` reconstrói o suporte verdadeiro a partir do CSV antigo (o menor `k` tal que `k/M ≥` maior limiar observado). O `n_trees` que o miner corrigido grava **coincide com essa reconstrução em todos os itemsets dos quatro experimentos**:
+
+| Experimento | Itemsets | Suporte idêntico ao oráculo |
+|---|---:|---|
+| VARV-49 | 7 | **7/7** |
+| VARV-52 | 13 | **13/13** |
+| VARV-121 | 11 | **11/11** |
+| VARV-6 | 6 | **6/6** |
+
+É o critério de aceite declarado para M1 em [`10-marcos-e-metas §3`](10-marcos-e-metas.md#3-m1--verdade-dos-números): *"o pipeline de produção passa a concordar com o script"*. Para D4, passa.
+
+**Achado sobre a semântica do FPMax, que D4 apagava.** Limiar e suporte não variam juntos: no caso de teste, o itemset `{A}` tem suporte 1,0 e **só** é devolvido a partir do limiar 0,6 — abaixo disso ele não é *maximal*, porque `{A,B}` e `{A,D}` ainda são frequentes. Confundir os dois números não era só impreciso; era uma inversão em parte da faixa.
+
+**O que este lote NÃO faz.** Os `all_results_fpmax.csv` **já em disco continuam errados** — a correção é do pipeline, e os artefatos só mudam quando o experimento for reexecutado (decisão 5: corrigir e re-rodar). Enquanto isso, `/api/tree/pattern-analysis` sobre projeto antigo segue exibindo o limiar como suporte. Consequência registrada na fila de triagem.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_subtree_mining   → Ran 10 tests, OK
+cd BioComp_UFF && python -m unittest workflow.tests.test_stability        → Ran 16 tests, OK
+cd Backend     && pytest tests                                           → 180 passed, 1 xfailed
+```
+
+**Write-lock:** `BioComp_UFF/workflow/subtree_mining/miner.py`, `BioComp_UFF/workflow/tests/test_subtree_mining.py` (novo). **Não tocou** `Backend/**`. **Reversível:** sim.
+
+### DEC-022 · 2026-08-24 · M1.2 — D5: o pipeline passa a usar a identidade canônica de clado
+
+Segundo lote sob [DEC-020](#dec-020--2026-08-24--decisão-6-tomada-escrita-liberada-no-submódulo-biocomp_uff-com-lock-próprio-e-histórico-separado). Escopo: `BioComp_UFF/**` apenas.
+
+**O defeito.** `encode_list_to_int` calculava MD5 de 16 bits sobre `str(lista_de_hashes)` — a representação textual da lista **na ordem de travessia**. Dois efeitos somados e opostos: o mesmo clado recebia identificadores diferentes em árvores que ordenam filhos de modo distinto (**subestima** o suporte), e clados distintos colidiam em 65 536 valores (**fabrica** suporte). A identidade correta já existia em `workflow/stability/clade_identity.py` e o pipeline nunca a usou — os *dois universos de identidade paralelos* que o próprio D5 descreve.
+
+**O que foi aplicado.**
+1. `canonical_item_id` (novo, em `clade_identity.py`): o digest canônico de 128 bits truncado em `ITEM_ID_BITS`, para uso onde a identidade precisa ser inteiro — chave do `metadata.json`, item do FPMax, propriedade de nó no Neo4j.
+2. `encode_clade_to_int` (novo, em `treeUtils.py`): identidade de clado a partir dos **nomes** dos terminais, normalizados, em qualquer ordem. `SubtreeBuilder.build` passa a gravá-la em `List_terminals_hash`.
+3. O valor legado continua gravado, agora em `List_terminals_hash_legacy`, e **nunca** é usado como item — é o que D5 pede: `legacy` só para auditoria.
+4. `strip_accession_version` **mudou de módulo**: sai de `stability.py` e vai para `clade_identity.py`, reexportado no lugar antigo (`audit_variola.py` e `TreeSet` seguem importando de onde importavam). Normalizar o rótulo *é* parte de decidir a identidade; deixar as duas decisões em módulos diferentes é como o projeto chegou a ter dois universos.
+5. `calculate_tree_hash` passa a hashar o rótulo **normalizado**, que é também o que grava em `newick`.
+
+**Por que 52 bits e não 128.** O consumidor mais estreito da cadeia manda: o identificador viaja no JSON da API até o navegador, e `Number` do JavaScript só é exato até 2^53 − 1. Um id de 60 ou 128 bits seria **arredondado no cliente** — trocar colisão de 16 bits por arredondamento silencioso não é correção. 52 bits dão 4,5 × 10¹⁵ valores (contra 65 536), cabem no inteiro de 64 bits com sinal do Neo4j e mantêm a colisão em ~10⁻⁶ mesmo com 10⁵ clados — três ordens de grandeza acima do maior experimento atual. Está fixado por teste, não por comentário.
+
+**Tabela de diff** — identidade recomputada sobre as **mesmas árvores em disco**, com a regra do `builder` (todo clado com mais de um terminal):
+
+| Experimento | M | Itens distintos | Clados canônicos (oráculo) | Fragmentados (oráculo) | Padrões (itemsets) |
+|---|---:|---|---:|---|---|
+| VARV-49 | 8 | 155 → **101** | 100 + raiz | 41 (40,6%) → **0** | 7 → **9** |
+| VARV-52 | 9 | 194 → **120** | 119 + raiz | 52 (43,3%) → **0** | 13 → **20** |
+| VARV-121 | 8 | 405 → **270** | 269 + raiz | 96 (35,6%) → **0** | 11 → **22** |
+| VARV-6 | 10 | 20 → **11** | 10 + raiz | 6 (54,5%) → **0** | 6 → **7** |
+
+O número de itens distintos **bate exatamente** com a contagem de clados canônicos de `audit_variola.py --secao 5` em todos os quatro, com a diferença de 1 explicada e esperada: `clade_identities` exclui o clado universal e o `builder` o inclui. A fragmentação vai a zero por construção — a identidade é o conjunto de terminais.
+
+**O número que muda a leitura do resultado.** O padrão de maior suporte que o FPMax reportava:
+
+| Experimento | Antes | Depois |
+|---|---|---|
+| VARV-49 | **1 clado** a 6/8 | **16 clados a 8/8** |
+| VARV-52 | 1 clado a 7/9 | **13 clados a 9/9** |
+| VARV-121 | 4 clados a 6/8 | **32 clados a 8/8** |
+| VARV-6 | 1 clado a 4/10 | 1 clado a **10/10** |
+
+D5 previa "a verdade é 15 clados a 8/8" para VARV-49 a partir do reticulado exato; o pipeline corrigido devolve 16 — os 15 mais o clado universal, que o `builder` conta. **Confere.** O núcleo de concordância entre pipelines nunca foi de um clado: era de dezenas, e a identidade de 16 bits o pulverizava.
+
+**Efeito colateral verificado: `decode_tree_hash` volta a funcionar.** Ele comparava o hash do rótulo **bruto** (`NC_008030.1`) com o do rótulo **gravado** (`NC_008030`): a conferência de integridade devolvia `None` para todo acesso versionado, ou seja, sempre. Passou a fechar porque hash e valor gravado agora são da mesma string. Não era item de D5 — apareceu ao unificar a normalização.
+
+**Encontro com D13.** Como a identidade sai de nomes normalizados, `NC_008030.` (IQ-TREE/RAxML, truncado pelo limite do PHYLIP) e `NC_008030.1` (FastTree) passam a designar o mesmo terminal. Parte do ganho de suporte da tabela acima vem daí: clados que só diferiam pela grafia do rótulo deixaram de ser itens distintos.
+
+**O que este lote NÃO faz.** Os `metadata.json` e `all_results_fpmax.csv` **em disco continuam com a identidade legada**. Nada nas páginas atuais muda até o experimento ser reexecutado (decisão 5). Artefato antigo e artefato novo não são comparáveis item a item — o `List_terminals_hash_legacy` existe exatamente para permitir essa ponte quando for preciso.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_tree_identity     → Ran 19 tests, OK
+                  python -m unittest workflow.tests.test_subtree_mining    → Ran 10 tests, OK
+                  python -m unittest workflow.tests.test_stability         → Ran 16 tests, OK
+                  python ../docs/science/scripts/audit_variola.py --secao 5 → roda, números do 'antes' inalterados
+cd Backend     && pytest tests                                            → 180 passed, 1 xfailed
+```
+
+**Write-lock:** `BioComp_UFF/workflow/stability/clade_identity.py`, `BioComp_UFF/workflow/stability/stability.py`, `BioComp_UFF/workflow/utils/treeUtils.py`, `BioComp_UFF/workflow/subtree_construction/builder.py`, `BioComp_UFF/workflow/tests/test_tree_identity.py` (novo). **Não tocou** `Backend/**`. **Reversível:** sim.
+
+### DEC-023 · 2026-08-24 · M1.3 — D3: a unidade de comparação passa a ser a bipartição, e **M1 fecha**
+
+Terceiro e último lote de M1 sob [DEC-020](#dec-020--2026-08-24--decisão-6-tomada-escrita-liberada-no-submódulo-biocomp_uff-com-lock-próprio-e-histórico-separado).
+
+**O defeito, em duas camadas.** `clade_sets` guardava clados **enraizados** e `rf_matrix` os comparava entre pipelines. FastTree, IQ-TREE, RAxML e NJ emitem topologia **não enraizada**, escrita em Newick com raiz trifurcante: o clado que se lê do arquivo depende de onde a ferramenta pôs a raiz, que é convenção de escrita e não hipótese biológica. Só o UPGMA tem raiz real. Somado a isso, a normalização dividia por `2(n−2)` — o máximo para árvore enraizada —, quando sobre bipartições o máximo é `2(n−3)`, o que deslocava todo valor normalizado.
+
+**O que foi aplicado.**
+1. `canonical_bipartition` (novo, em `clade_identity.py`): o lado de menor cardinalidade, desempate lexicográfico, `None` para bipartição trivial — a definição formal de [`03-metricas §2.2`](../science/03-metricas.md#22-bipartição-árvore-não-enraizada), agora em produção.
+2. `StabilityAnalyzer` ganha `rooted: bool = False`. **O padrão passa a ser a bipartição.** A análise enraizada continua acessível com `rooted=True` e continua legítima quando a raiz é real — mas exige enraizamento comum e explícito, nunca a raiz do arquivo.
+3. `rf_matrix` escolhe o denominador pelo enraizamento: `2(n−3)` não enraizada, `2(n−2)` enraizada.
+4. **"Não aplicável" deixa de ser um número** ([`04-rigor §3`](04-rigor-cientifico.md)): a RF é `None` quando indefinida — não enraizada exige `n ≥ 4`, enraizada `n ≥ 3`. A diagonal continua `0`. Devolver `0` faria topologias incomparáveis passarem por idênticas. `factor_effects` ignora pares indefinidos e devolve `None` em vez de `0.0` para grupo vazio; `report.py` grava célula vazia no CSV e "—" no heatmap.
+5. `bipartition_counts()` (novo): `|B(T)|` por pipeline, que [`03-metricas §3`](../science/03-metricas.md#3-distância-de-robinsonfoulds) exige ao lado de toda RF — sem ele, um valor baixo é ambíguo entre "topologias parecidas" e "árvore malresolvida".
+
+**Tabela de diff** — reproduz exatamente a tabela publicada em [`02-defeitos §D3`](../science/02-defeitos-que-alteram-resultado.md#d3):
+
+| Experimento | Par | RF enraizada | RF bipartição | Δ |
+|---|---|---:|---:|---:|
+| VARV-6 | fasttree × iqtree | 0,7500 | **0,0000** | **−100%** |
+| VARV-6 | iqtree × raxml | 0,7500 | **0,0000** | **−100%** |
+| VARV-6 | fasttree × upgma | 0,8750 | 0,3333 | −61,9% |
+| VARV-52 | fasttree × iqtree | 0,2600 | **0,0204** | **−92,2%** |
+| VARV-121 | fasttree × iqtree | 0,1765 | **0,0508** | **−71,2%** |
+| VARV-49 | fasttree × iqtree | 0,0851 | 0,0435 | −48,9% |
+| VARV-49 | fasttree × nj | 0,5532 | 0,5652 | +2,2% |
+
+O sinal misto é a evidência de que a correção não é um redutor cego: entre métodos que produzem topologia genuinamente diferente (fasttree × nj), a distância **sobe** — o denominador menor pesa mais que os clados reconciliados.
+
+**Clados universais — o que aparece quando se para de medir a raiz:**
+
+| Experimento | Enraizado | Bipartição |
+|---|---:|---:|
+| VARV-6 | **0** | **1** |
+| VARV-49 | 15 | **18** |
+| VARV-52 | 12 | **17** |
+| VARV-121 | 31 | **36** |
+
+Os "0 clados universais" de VARV-6 — um conjunto em que três métodos produzem a **mesma** topologia — eram o sintoma mais visível de D3. `02-defeitos` previa "tornam-se 1 bipartição universal". Confere.
+
+**Todas as árvores estão totalmente resolvidas.** `bipartition_counts()` devolve `n−3` para **todo** pipeline dos quatro experimentos (3, 46, 49 e 118). Não há politomia, então a normalização por `n−3` não subestima nada — a ressalva de `03-metricas §3` fica registrada como verificada, não como suposta.
+
+**Oráculo externo — 137 pares, 0 divergências.** [`docs/science/scripts/oraculo_rf_dendropy.py`](../science/scripts/oraculo_rf_dendropy.py) (novo) recalcula a RF de todos os pares com `dendropy.calculate.treecompare.symmetric_difference` sobre árvores lidas com `rooting='force-unrooted'`, sem passar por nenhuma linha do pipeline, e confronta com `rf_matrix`:
+
+| Experimento | Pares | Divergências |
+|---|---:|---:|
+| VARV-6 | 45 | **0** |
+| VARV-49 | 28 | **0** |
+| VARV-52 | 36 | **0** |
+| VARV-121 | 28 | **0** |
+
+O script precisa contornar D13 para funcionar — ler todos os Nexus num namespace compartilhado faz o dendropy abortar, porque o `TaxLabels` de IQ-TREE e RAxML diverge do dos demais. Cada arquivo é lido isolado e os rótulos são normalizados antes de reunir. É a mesma manobra que M1.8 fez no backend.
+
+**`audit_variola.py` §3 agora é um confronto de três colunas** — RF enraizada (o "antes", pedido explicitamente com `rooted=True`), RF de bipartição pela reimplementação independente do próprio script, e o valor que a produção devolve —, mais a contagem de divergências. A independência do oráculo é preservada: `canonical_split` continua sendo a implementação do script, não a importada da produção.
+
+**O que este lote NÃO faz.** Não enraíza nada. A análise enraizada legítima — grupo externo declarado, comum a todos os métodos — é **M2.3** e depende das decisões 2, 3 e 4. Até lá, a unidade de comparação é a bipartição, e é o que a regra de [`03-metricas §2.2`](../science/03-metricas.md#22-bipartição-árvore-não-enraizada) determina enquanto o pipeline misturar métodos enraizados e não enraizados.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_rf_bipartition   → Ran 15 tests, OK
+                  (test_stability, test_subtree_mining, test_tree_identity) → 60 tests no total, OK
+                  python ../docs/science/scripts/oraculo_rf_dendropy.py    → 137 pares, 0 divergências
+                  python ../docs/science/scripts/audit_variola.py --secao 3 → 0 divergência(s) em todos
+cd Backend     && pytest tests                                            → 180 passed, 1 xfailed
+```
+
+**Write-lock:** `BioComp_UFF/workflow/stability/clade_identity.py`, `.../stability.py`, `.../report.py`, `BioComp_UFF/workflow/tests/test_rf_bipartition.py` (novo), `docs/science/scripts/audit_variola.py`, `docs/science/scripts/oraculo_rf_dendropy.py` (novo). **Reversível:** sim.
+
+---
+
+### M1 — **MARCO FECHADO** · 2026-08-24
+
+Os oito lotes de M1 estão concluídos. Resumo do que mudou de verdade, e como cada um foi conferido contra oráculo independente:
+
+| Lote | Defeito | Trilha | Confronto |
+|---|---|---|---|
+| M1.1 | D4 — `support` era o limiar | T1 | `audit_variola --secao 5`: **Δ = 0 em 37/37 itemsets** |
+| M1.2 | D5 — identidade de 16 bits, dependente da ordem | T1 | contagem de clados canônicos bate nos 4 experimentos |
+| M1.3 | D3 — clado enraizado como unidade de comparação | T1 | dendropy: **137 pares, 0 divergências** |
+| M1.4 | D7 — truncamento silencioso por `max_pattern_size` | T2 | DEC-016 |
+| M1.5 | D8 — `tree_coverage` um-para-um | T2 | DEC-016 |
+| M1.6 | D9 — `unique_signatures_count` sempre 0 | T2 | DEC-016 |
+| M1.7 | D12 + D16 — metadado fabricado do `strain`; país/região | T2 | DEC-018 |
+| M1.8 | D13 (backend) — leitura descartava o registro do GenBank | T2 | dendropy nos pares truncados; DEC-019 |
+
+**Gate de M1.** Os três comandos de [`10-marcos-e-metas §3`](10-marcos-e-metas.md#3-m1--verdade-dos-números) foram satisfeitos na forma que os artefatos atuais permitem: produção e oráculo concordam (itens 1 e 2, acima); nenhum golden snapshot mudou por acidente (item 3 — `pattern_analysis_varv6` idêntico, `insights_varv6` alterado com parecer registrado em DEC-019). O `compare_oracle.py` citado no gate não existe; seu papel é cumprido por `audit_variola.py --secao 3/5` e por `oraculo_rf_dendropy.py`.
+
+**A ressalva que não pode ser omitida.** M1 corrigiu o **pipeline**. Os artefatos em `BioComp_UFF/projects/**` continuam sendo os antigos: identidade legada de 16 bits, `support` com o limiar, RF enraizada nos relatórios já gravados. **Nenhum número exibido hoje na aplicação mudou.** O que M1 garante é que a próxima execução produz o número certo — e é a reexecução (decisão 5, já aprovada) que materializa isso. Enquanto ela não acontece, artefato antigo e novo não são comparáveis item a item.
+
+**Próximo passo do caminho crítico: M2**, bloqueado pelas decisões **2** (VARV-121 fica ou sai), **3** (VARV-6 fica ou sai) e **4** (UPGMA fica ou sai).
+
+### DEC-024 · 2026-08-24 · Decisões 2, 3 e 4 tomadas: **os três conjuntos ficam, o UPGMA fica**
+
+Com [DEC-018](#dec-018--2026-08-21--m17-fechado-d12-a-d--d16--a-geografia-de-variola-é-ausente-não-desconhecida) (decisão 5) e [DEC-020](#dec-020--2026-08-24--decisão-6-tomada-escrita-liberada-no-submódulo-biocomp_uff-com-lock-próprio-e-histórico-separado) (decisão 6), **M2 deixa de estar bloqueado**. Segue aberta apenas a decisão 1, que só importa depois de M3.
+
+| # | Decisão | Resposta | Motivo do usuário |
+|---|---|---|---|
+| **2** | VARV-121 fica ou sai | **Fica** | Histórico de experimentos — permite ver a evolução e os ajustes do workflow |
+| **3** | VARV-6 fica ou sai | **Fica** | Serve de demo didático |
+| **4** | UPGMA fica ou sai | **Fica**, com a recomendação aceita: reportar **com e sem** | O objetivo do projeto é uma biblioteca com diversas opções de ferramentas para o pipeline |
+
+**Por que o UPGMA chegou a ser cotado para sair** — a pergunta do usuário, respondida a partir de [`01-revisao-variola §12`](../science/01-revisao-variola.md) e [`03-metricas §4`](../science/03-metricas.md): o UPGMA supõe **ultrametricidade**, isto é, taxa de evolução constante em todas as linhagens (relógio molecular). O conjunto de *Variola* atravessa gêneros — vai de VARV a *Nile crocodilepox* — e essa suposição é falsa ali por construção. O UPGMA então produz uma topologia sabidamente errada, e como o suporte metodológico é "em quantos dos M pipelines o clado aparece", incluir um método cujo pressuposto é violado **infla artificialmente a discordância medida**. O argumento nunca foi "o UPGMA é ruim": foi que ele contamina o denominador. Mantê-lo e reportar `sup` com e sem ele resolve — a sensibilidade da métrica ao conjunto de pipelines vira uma limitação declarada, que é mais forte que escondida. É também o único método enraizado do conjunto, o que o torna o caso que **D3** tratava errado; com M1.3 fechado, comparar UPGMA com os demais passou a ser legítimo, via bipartição.
+
+**Consequência para M2.** A composição-alvo do dataset de referência não muda por estas decisões: os três conjuntos permanecem publicáveis e VARV-49-clean continua sendo o de referência. O que muda é o enquadramento — VARV-121 e VARV-6 passam a ter papel declarado (escala e demonstração didática), em vez de figurarem como replicações concorrentes.
+
+**Atualiza:** DM-6 e DM-11 em [`06-decisoes-metodologicas`](../science/06-decisoes-metodologicas.md); [`08-ficha-de-fatos §5`](08-ficha-de-fatos.md).
+
+---
+
+### DEC-025 · 2026-08-24 · [D17](../science/02-defeitos-que-alteram-resultado.md#d17) — o RAxML **roda** nos dados de *Variola*; o que quebrava era `--threads auto`
+
+Investigação motivada por um ponto de atenção do usuário: em árvores muito grandes alguns algoritmos não rodavam, por estouro de memória ou limitação do algoritmo, sem saber se a causa era erro de implementação dele.
+
+**Resposta curta: não foi erro de implementação, e em um dos dois casos não foi limitação do algoritmo.** São duas falhas de natureza distinta, que a memória juntou:
+
+**1. Clustal Omega — estouro de memória real.** `Non-zero return code 137` com `message 'Killed'` no conjunto Zika479: o *OOM killer* do kernel matou o processo. É limite de recurso genuíno, e o pipeline **já o trata** — `_isExecutableByClustalO` troca para MAFFT acima de 20 kb por sequência. O defeito ali não é a falha, é a **substituição silenciosa** ([D1](../science/02-defeitos-que-alteram-resultado.md#d1)): o arquivo continua sendo nomeado `*_clustalo_*`.
+
+**2. RAxML-NG — não foi memória, e não é limitação do algoritmo.** Em VARV-52 o processo morreu com `SIGSEGV` (sinal 11) após a autoconfiguração escolher `5 workers × 3 threads`. O alinhamento de 52 táxons e 259 496 sítios comprime para **3 713 padrões**: a necessidade de memória é de dezenas de MB, não de gigabytes. Reexecutado nesta máquina com o **mesmo arquivo e a mesma linha de comando**, escolheu `2 workers × 3 threads` e **concluiu em 251 s**.
+
+**Dimensão que realmente pesa.** Não é o número de táxons — é o comprimento do alinhamento, e ainda assim só até a compressão de padrões:
+
+| Conjunto | Táxons | Colunas | Células | RAxML |
+|---|---:|---:|---:|---|
+| VARV-6 | 6 | 250 517 | 1,5 M | rodou |
+| VARV-49 | 49 | 235 955 | 11,6 M | excluído do `ignore_mode` |
+| VARV-52 | 52 | 259 496 | 13,5 M | **SIGSEGV** → excluído |
+| VARV-121 | 121 | 283 874 | 34,3 M | excluído do `ignore_mode` |
+| ZIKV-480 | **478** | 10 816 | 5,2 M | **rodou** |
+
+478 táxons de Zika rodam; 52 de *Variola* quebravam. A diferença é o comprimento do genoma (~10,8 kb contra ~250 kb), não a quantidade de folhas.
+
+**Achado colateral, e é o mais sério: a semente fixa não garante reprodutibilidade.** Duas execuções na mesma máquina, mesmo arquivo, **mesma semente `12345`**, variando só a paralelização, produzem **RF = 8** entre si — quatro bipartições de diferença — com verossimilhanças praticamente idênticas (−591486,234 e −591486,233). São dois ótimos quase equivalentes, e o esquema de paralelização decide em qual a busca para. Como o esquema depende do número de núcleos, **a mesma análise em outra máquina dá outra árvore**. Isso torna o item *"cada figura reproduzível por script + commit + hash"* do checklist de submissão inatingível enquanto `--threads auto` estiver na linha de comando, e se soma a [D11](../science/02-defeitos-que-alteram-resultado.md#d11).
+
+**Ações que isto abre.**
+1. **Fixar `--threads N --workers 1`** e registrar `N`, a versão do RAxML-NG e o esquema efetivo no manifesto — entra em **M2.5**. Custo medido de abrir mão do `auto`: ~10% de tempo (251 s → 276 s).
+2. **Reverter a exclusão do RAxML** em VARV-49, VARV-52 e VARV-121, devolvendo `M` de 4 para 5 e eliminando a incomparabilidade de `M` entre experimentos (DM-11) — depende de reexecutar, decisão 5 já aprovada.
+3. Registrar a divergência de versão do RAxML-NG entre máquinas (**1.2.2** na de origem, **1.1.0** nesta), que se soma à do FastTree (2.2.0 × 2.1.11) já conhecida e continua bloqueando a replicação exata.
+
+**Evidência:** `.raxml.log` da execução que quebrou, em `projects/test_variola_noITRs_57_Complete/out/tmp/raxml_*/`; duas execuções de reprodução nesta máquina com `--threads auto` e `--threads 4 --workers 1`; `dendropy.symmetric_difference` entre as duas árvores resultantes. **Nenhum código foi alterado neste lote** — é parecer sobre artefatos e sobre reprodução controlada.
+
+### DEC-026 · 2026-08-24 · Biblioteca de contexto para a **máquina de validação** — `CLAUDE.md` e handoff
+
+**Contexto do usuário:** o desenvolvimento fica nesta máquina e **a execução pesada será feita em outra**, com mais recursos, para validação e teste de estresse. Uma janela de contexto que abrir lá precisa saber o necessário para validar sem redescobrir nada.
+
+**O que faltava.** O repositório **não tinha `CLAUDE.md`** — o arquivo que um agente carrega automaticamente ao abrir o projeto. Toda a memória externa estava em `docs/`, excelente, mas dependia de alguém saber que ela existe e por onde entrar. Era o achado de triagem de 2026-07-29 ("repositório sem `CLAUDE.md`"), ainda aberto.
+
+**O que foi criado.**
+1. **`CLAUDE.md`** na raiz: por onde começar (ficha de fatos → ledger → marcos → defeitos), as sete regras invioláveis, o layout, os comandos de verificação com os números esperados, e as armadilhas que custam uma sessão inteira se descobertas na hora errada — o namespace compartilhado que o D13 derruba, o `--threads auto` de D17, os artefatos em disco serem anteriores a M1, e o submódulo já vir sujo.
+2. **[`11-handoff-maquina-de-validacao.md`](11-handoff-maquina-de-validacao.md)**: a ponte entre as duas máquinas. Traz o ambiente medido desta (com um espaço para registrar o da outra), as **divergências de versão** que bloqueiam replicação exata, um portão de sanidade que roda em minutos com os números esperados linha a linha, e o que espera máquina grande — reexecução dos experimentos com os seis critérios de conferência, devolução do RAxML, e cinco perguntas de estresse ainda sem resposta, cada uma com como medir.
+3. Ambos ligados a partir de [`docs/README.md`](../README.md) e do índice de `automation/`.
+
+**Reversível:** sim — é documentação.
+
+---
+
+### DEC-027 · 2026-08-24 · M2.5 — manifesto de execução, e a semente deixa de ser da ferramenta
+
+Primeiro lote de **M2**, escolhido por ser o que torna **verificável** todo o trabalho pesado que a outra máquina vai fazer. Não exige execução pesada.
+
+**O problema.** Os `config_backup.json` guardam parâmetros e mais nada: nem versão de ferramenta, nem commit, nem semente efetiva, nem hash de entrada. É [D11](../science/02-defeitos-que-alteram-resultado.md#d11), e é o que torna inatingível o item *"cada figura reproduzível por script + commit + hash"*. Somado a [D17](../science/02-defeitos-que-alteram-resultado.md#d17) — a paralelização muda a topologia —, o resultado é que **duas máquinas rodando o mesmo comando produzem árvores diferentes e nada no artefato registra por quê.**
+
+**O que foi aplicado.**
+
+1. **`workflow/utils/manifest.py`** (novo). `ExecutionManifest` grava `out/outputs/manifest.json` com: `run_id`, início e fim em UTC, **commit/ramo/sujo dos dois repositórios**, ambiente (sistema, arquitetura, núcleos, memória, Python), versão de **todas** as sete ferramentas externas, semente e paralelização efetivas, e SHA-256 de entradas e saídas.
+2. **Gravado antes de rodar**, e de novo em `finally`. Uma execução que morre no meio — e D17 mostra que morre — deixa um manifesto que diz em que ambiente ela morreu.
+3. **RAxML-NG pinado**: `--threads N --workers 1` no lugar de `--threads auto`, com a razão medida no comentário.
+4. **IQ-TREE ganha `-seed`**: sem ele a ferramenta gerava a própria semente (nos logs de VARV, `97376`) e reexecutar não reproduzia a árvore. `-nt AUTO` vira `-nt N` pelo mesmo motivo de D17.
+5. **`reproducibility_settings`** é a fonte única desses valores: o builder e o manifesto leem da mesma função, e um teste falha se divergirem. Padrões: semente `12345`, 4 threads para cada inferência, sobrescrevíveis pelo `tree_config`.
+
+**Regra de privacidade, aplicada por teste.** O manifesto vai para o repositório e pode ir para o material suplementar. Ele **não** grava *hostname*, usuário nem caminho absoluto — todo caminho é relativo à raiz do projeto. É [D15](../science/02-defeitos-que-alteram-resultado.md#d15) tratado na origem, em vez de vazar de novo por um artefato novo.
+
+**Ausente é `None`.** `mrbayes` não está no PATH desta máquina e o manifesto grava `"mrbayes": null` — não string vazia, não "desconhecida". Uma ferramenta que não existe é um fato do experimento.
+
+**Dois defeitos encontrados e corrigidos dentro do próprio lote:**
+- A poda de `out/tmp` testava `"/tmp" in caminho_absoluto`, o que descartava **todo** projeto guardado sob um diretório chamado `tmp` — inclusive todo diretório temporário de teste. Passou a podar pelo nome do subdiretório durante a travessia.
+- `FastTree` invocado sem argumentos **lê a entrada padrão** e ficava bloqueado até o timeout: coletar versões custava **300 s**. Com `stdin=DEVNULL` e cache, custa **0,05 s**. Seria uma regressão séria no início de toda execução na máquina de validação.
+
+**Exemplo do que passa a existir** (execução real desta máquina):
+
+```json
+"reproducibility": {"iqtree_threads": 4, "random_seed": 12345, "raxml_threads": 4},
+"tools_available": {"FastTree": "2.1.11", "clustalo": "1.2.4", "iqtree2": "2.2.2.6",
+                    "mafft": "v7.490", "mrbayes": null, "muscle": "v3.8.1551",
+                    "raxml-ng": "1.1.0"},
+"git": {"BioComp_UFF": {"branch": "main", "commit": "cfa2af4…", "dirty": true}, …}
+```
+
+O `dirty: true` é informação, não defeito: diz que a execução saiu de uma árvore de trabalho com mudanças não commitadas, o que é exatamente o estado atual do projeto.
+
+**Nota sobre `num_threads`.** Já existia no `tree_config`, mas governa só o **alinhamento** (`mafft --thread`, `clustalo --threads`) — os projetos usam de 1 em VARV a 16 em ZIKV-480. Inferência e alinhamento têm perfis de paralelismo diferentes, então as chaves novas são separadas, e isso está documentado ao lado do padrão.
+
+**O que este lote NÃO faz.** Não gera manifesto para os experimentos **já executados** — não há como: as versões e sementes daquelas execuções não foram registradas, e é justamente o buraco que D11 descreve. Os projetos existentes seguem sem manifesto até serem reexecutados.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_manifest   → Ran 17 tests, OK (0,05 s)
+                  (suíte completa do submódulo)                     → Ran 77 tests, OK
+                  python -m py_compile workflow.py                  → ok
+cd Backend     && pytest tests                                      → 180 passed, 1 xfailed
+```
+
+**Write-lock:** `BioComp_UFF/workflow/utils/manifest.py` (novo), `BioComp_UFF/workflow/tests/test_manifest.py` (novo), `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow.py`. **Reversível:** sim.
+
+### DEC-028 · 2026-08-25 · **Zika-21 é o conjunto de validação do workflow**, e a primeira execução achou [D18](../science/02-defeitos-que-alteram-resultado.md#d18)
+
+**Decisão do usuário:** `Zika_Virus_Singapura_Large_21seq` passa a ser o conjunto usado sempre que for preciso validar o workflow, com todas as combinações de alinhador e método de inferência — ou a configuração que melhor se adeque ao teste.
+
+**Por que é uma boa escolha, além do tamanho.** 20 táxons e ~10,8 kb rodam em minutos, o que permite validar a cada mudança em vez de uma vez por mês. Mas o motivo mais forte é outro: **é o único conjunto em que o braço `clustalo` é genuíno**. Nos conjuntos de *Variola* as sequências têm ~250 kb, acima do limite de 20 kb de `_isExecutableByClustalO`, e o controlador troca silenciosamente para MAFFT — os dois braços viram cópias byte a byte ([D1](../science/02-defeitos-que-alteram-resultado.md#d1)) e o fator alinhador **não existe**. Com 10,8 kb o Clustal Omega executa de verdade. Para validar o workflow, isso importa mais que o número de táxons.
+
+**Isto não resolve D11**, e vale registrar por quê, porque a pergunta foi feita. D11 é *"nenhum manifesto de execução"* e foi fechado em [M2.5](#dec-027--2026-08-24--m25--manifesto-de-execução-e-a-semente-deixa-de-ser-da-ferramenta), que é código e vale para qualquer conjunto. Fixar um conjunto de validação resolve um problema **vizinho**: dá um alvo comparável às execuções. É o que torna o manifesto *útil* — um manifesto isolado não prova nada; dois manifestos do mesmo conjunto, com a mesma entrada e a mesma semente, provam ou refutam reprodutibilidade. E ataca **DM-11**, a incomparabilidade de `M` entre experimentos.
+
+**Procedimento registrado** como skill [`validar-workflow`](../skills/validar-workflow/SKILL.md), instalada em `.claude/skills/`, e conferência automatizada em `Backend/scripts/conferir_correcoes_m1.py`.
+
+---
+
+**O que a primeira execução achou: [D18](../science/02-defeitos-que-alteram-resultado.md#d18).**
+
+Configurado com `mode: "auto"` e `ignore_mode: ["mrbayes"]` — isto é, pedindo explicitamente para não ignorar mais nada —, o pipeline produziu **8 árvores**, todas de distância e parcimônia. **Nenhum FastTree, IQ-TREE ou RAxML.** E o log encerrou com `STEP: Completed successfully!`.
+
+A causa é `_process_auto_mode`: ele varre `{nj, upgma} × {distance, parsimony} × {clustalo, mafft}` e **retorna**. Quem executa os métodos avançados é `_process_advanced_mode`, o modo chamado `advanced`. O nome `auto` sugere "escolha sozinho o que faz sentido"; o que ele faz é rodar só o básico.
+
+Confirmado nos projetos que já existiam — mesmo dado de entrada, o `mode` sozinho dobra o número de pipelines:
+
+| Projeto | `mode` | `ignore_mode` | Árvores |
+|---|---|---|---:|
+| `Zika_Virus_Singapura_Large_21seq` | `auto` | vazio | **8** |
+| `Zika_Virus_Singapura_Advanced_21seq` | `advanced` | vazio | **16** |
+| `Variola_Yu_li_2007` | `advanced` | raxml, mrbayes, parsimony | 9 |
+| `Variola_Yu_li_2007_noITRs_6seqs` | `advanced` | mrbayes, parsimony | 11 |
+| `Zika_Virus_Singapura_Large_480seq` | `advanced` | parsimony | 10 |
+
+**Por que isso é grave.** `M` é o denominador de todo suporte metodológico, e portanto de todo número da Deep Analysis. Um conjunto rodado em `auto` e outro em `advanced` **não são comparáveis**, e nada no artefato registra a diferença além de uma chave no `config_backup.json`. Compõe-se com **DM-11**: já se sabia que `ignore_mode` varia entre experimentos; agora sabe-se que **mesmo com `ignore_mode` idêntico** o `mode` sozinho muda `M`.
+
+**Nenhuma correção aplicada neste lote** — D18 está registrado com as três opções de correção, e a mínima obrigatória (gravar no manifesto os métodos efetivamente executados contra os disponíveis) entra como lote próprio.
+
+---
+
+### DEC-029 · 2026-08-25 · O backend declara quando o CSV do FPMax é anterior a M1.1
+
+Fecha o achado de triagem aberto por [DEC-021](#dec-021--2026-08-24--m11--d4-o-support-do-fpmax-deixa-de-ser-o-limiar-da-varredura). M1.1 corrigiu a **escrita** do `all_results_fpmax.csv`; os arquivos em disco seguem com o limiar da varredura na coluna `support`. Até agora, `/api/tree/pattern-analysis` exibia os dois como se fossem a mesma coisa — corrigir na escrita e repetir o defeito na leitura.
+
+`analyze_patterns` passa a reconhecer o artefato antigo pela **ausência da coluna `min_support_threshold`** e a declarar isso no payload:
+
+```json
+"support_schema": {
+  "corrected": false,
+  "support_means": "LIMIAR da varredura do FPMax, não o suporte real",
+  "warning": "Este projeto foi gerado antes da correção de D4 (M1.1) ... Reexecute o projeto para obter os valores corretos."
+}
+```
+
+**Parecer de snapshot.** `pattern_analysis_varv6` muda por **acréscimo**: nenhum número existente foi alterado, um campo novo apareceu. Regravado com este parecer.
+
+**Segundo ajuste, motivado pela máquina de validação.** `test_projects_listing` congelava a lista **inteira** de projetos em disco — e `BioComp_UFF/projects/` é gitignored, isto é, o conjunto de projetos é local de cada máquina. O portão de sanidade do handoff falharia na máquina nova por um motivo que não é defeito. O teste passa a congelar apenas o **subconjunto de referência** — os conjuntos que os documentos científicos citam pelo nome — e a falhar se algum deles estiver ausente, que é a condição que realmente importa. Projeto a mais é normal; um destes a menos impede os oráculos de rodarem.
+
+**Evidência:** `pytest Backend/tests` → **182 passed, 1 xfailed** (era 180 + 1).
+
+**Write-lock:** `Backend/src/app.py` (`analyze_patterns`), `Backend/tests/unit/test_rotulos_truncados.py`, `Backend/tests/golden/test_golden_endpoints.py`, `Backend/tests/golden/snapshots/{pattern_analysis_varv6,projects_nomes}.json`. **Reversível:** sim.
+
+### DEC-030 · 2026-08-25 · Primeira execução completa sob o pipeline corrigido — **as correções de M1 materializaram**
+
+`Zika_21seq_validacao`, `mode: advanced`, `ignore_mode: ["mrbayes"]` (ausente do PATH). **14 árvores**: 2 alinhadores × {nj-distância, upgma-distância, nj-parcimônia, upgma-parcimônia, FastTree, IQ-TREE, RAxML}. Duração **11 min 03 s**. `run_id 15ac62a6dcfb493b92dd3f61cdfe348f`.
+
+É a primeira vez que um artefato do projeto é produzido pelo pipeline corrigido. Até aqui M1 e M2.5 eram verdade sobre o **código**; agora são verdade sobre um **arquivo em disco**.
+
+**Conferência** (`Backend/scripts/conferir_correcoes_m1.py`) — tudo verde:
+
+| Marco | O que se conferiu | Resultado |
+|---|---|---|
+| M2.5 | manifesto com `run_id`, término, semente, versões, commits, hashes | ✅ 1 entrada e **274 saídas** com SHA-256; `mrbayes: null` declarado; nenhum caminho absoluto |
+| M1.1 | uma linha por itemset, quatro colunas, limiar ≤ suporte | ✅ **37 linhas, 37 itemsets**; 16 frágeis, 8 robustos, **interseção vazia** |
+| M1.2 | identidade canônica, legada ao lado, dentro do seguro do JS | ✅ **46 clados canônicos contra 109 identificadores legados** |
+| M1.3 | bipartição, `\|B\| ≤ n−3`, diagonal zero | ✅ `\|B\| = 17 = n−3` em **todos** os 14 pipelines; 7 bipartições universais |
+
+**O número mais eloquente é o de M1.2.** Pela primeira vez o **mesmo arquivo** carrega as duas identidades lado a lado, o que torna a comparação controlada: **109 identificadores legados para 46 clados reais**. O esquema de 16 bits dependente da ordem fragmentava cada clado em 2,4 pedaços em média. Todas as estimativas anteriores vinham de artefatos diferentes; esta vem de uma execução só.
+
+**Oráculo externo:** `oraculo_rf_dendropy.py` sobre os 14 pipelines → **91 pares, 0 divergências** contra o dendropy.
+
+**Custo por método** (Δ entre árvores consecutivas, mesmo alinhamento reaproveitado):
+
+| Método | Tempo por árvore |
+|---|---:|
+| distância (NJ, UPGMA) | 0-6 s |
+| IQ-TREE (com UFBoot 1000) | 4-5 s |
+| FastTree | 4-5 s |
+| RAxML-NG (`--threads 4 --workers 1`, 10 árvores iniciais) | 6-7 s |
+| **parcimônia** | **116-169 s** |
+
+A parcimônia é **~25× mais lenta** que qualquer método de ML e consome ~9 dos 11 minutos da execução. É o `ParsimonyTreeConstructor` do Biopython, em Python puro — e é a resposta quantificada para por que ela está no `ignore_mode` de todos os experimentos de *Variola*, onde o alinhamento é 25× maior. **O RAxML, o suposto vilão, é o terceiro mais rápido.**
+
+**Dois defeitos novos, ambos achados por esta execução e nenhum deles achável por teste de unidade:**
+
+- **[D18](../science/02-defeitos-que-alteram-resultado.md#d18)** — o modo `auto` não executa os métodos avançados. A primeira tentativa, com `ignore_mode: ["mrbayes"]`, devolveu 8 árvores e `Completed successfully!`. Registrado, não corrigido.
+- **[D19](../science/02-defeitos-que-alteram-resultado.md#d19)** — `nj_parsimony` e `upgma_parsimony` recebiam o mesmo rótulo de pipeline e uma sobrescrevia a outra: **14 árvores viravam 12 pipelines**, silenciosamente. **Corrigido** neste lote: sufixo mais longo vence, `INFERENCE_METHODS` completo, e `TreeSet.from_directory` recusa colisão em vez de escolher uma árvore. Depois: 14 para 14.
+
+**Por que D19 só apareceu agora.** A parcimônia está excluída de todos os experimentos de *Variola*; sem árvore de parcimônia não há colisão. Foi preciso um conjunto que rodasse **todas** as combinações para o defeito existir — que é exatamente o que o conjunto de validação foi escolhido para fazer.
+
+**Evidência de execução:**
+```
+cd Backend && python scripts/conferir_correcoes_m1.py Zika_21seq_validacao   → TUDO VERDE
+cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Zika_21seq_validacao
+                                                                             → 91 pares, 0 divergências
+cd Backend && pytest tests                                                   → 182 passed, 1 xfailed
+cd BioComp_UFF && python -m unittest (5 módulos)                             → 81 tests, OK
+```
+
+**Write-lock:** `BioComp_UFF/workflow/stability/stability.py`, `BioComp_UFF/workflow/tests/test_rf_bipartition.py`. **Reversível:** sim.
+
+### DEC-031 · 2026-08-25 · O explorador abre qualquer JSON; respostas metodológicas ganham lugar próprio
+
+**Explorador de arquivos.** Nenhum JSON que não fosse lista de listas podia ser aberto. `manifest.json` e `config_backup.json` respondiam **404 dizendo que o arquivo estava vazio** — o oposto do que acontecia — e `/file` respondia **500**, porque a leitura fazia `parsed_json[0]` supondo que todo JSON fosse lista. Na prática: o manifesto que M2.5 acabou de criar era invisível pela aplicação.
+
+| O que mudou | Onde |
+|---|---|
+| `json_root_kind` — descobre a forma da raiz lendo **dois eventos** do parser incremental, custo independente do tamanho | `app.py` |
+| `/api/file/paginated` passa a servir `object`, `array` e `array_of_arrays`, e devolve `kind` para o cliente decidir a apresentação | `app.py` |
+| Guarda de tamanho (`MAX_JSON_INLINE_BYTES`, 8 MB) antes de qualquer `read()` — um `metadata.json` de 3,2 GB derrubava o processo | `app.py` |
+| JSON malformado é **400 com o motivo**, não 500 | `app.py` |
+| `JsonViewer` — leitor colapsável, com filtro por chave ou valor, alternância árvore/bruto e cópia | novo, frontend |
+| `PaginatedJsonViewer` usa `kind`: metadados no visualizador de árvores, o resto no leitor genérico, sem paginação quando não há o que paginar | frontend |
+
+O rótulo também mentia: toda página dizia "Tree N of M" mesmo para um manifesto. E o erro genérico "Falha ao carregar" foi trocado pela mensagem do backend, que sabe o motivo.
+
+**Respostas úteis.** Nova seção [`docs/respostasUteis/`](../respostasUteis/README.md) para o **porquê** — raciocínio metodológico e conceitual —, separado do ledger, que guarda o **que** mudou com evidência. Primeiro documento: [R1](../respostasUteis/r1.md), sobre o conjunto de validação, por que fixá-lo não resolve D11, o padrão comum aos três defeitos que a execução achou, e por que semente fixa não basta.
+
+**Evidência:** `pytest Backend/tests` → **194 passed, 1 xfailed** (12 testes novos em `tests/api/test_previa_de_json.py`); `vitest` → 8 passed; `build` ✓; catraca de lint **melhorou**, de 69 para 68 erros.
+
+---
+
+### DEC-032 · 2026-08-25 · [D20](../science/02-defeitos-que-alteram-resultado.md#d20) — o MrBayes estava instalado o tempo todo
+
+**O erro era meu, e do lote anterior.** O MrBayes foi excluído do conjunto de validação sob a justificativa de "não está instalado". **Está**: `MrBayes 3.2.7`, no PATH. O binário chama-se **`mb`**, como na maioria das distribuições; a detecção de versão que escrevi em M2.5 procurava `mrbayes` e gravava `"mrbayes": null`. O construtor do pipeline sempre chamou `mb` corretamente — **os dois lados do código discordavam sobre o nome da própria ferramenta**, e o método sumiu do delineamento sem que ninguém tivesse decidido isso.
+
+Corrigido: a detecção usa `mb` e lê a versão do banner de abertura. `tool_versions()` agora devolve `"mrbayes": "3.2.7"`.
+
+**A inspeção do construtor achou cinco problemas**, todos registrados em D20 e nenhum corrigido ainda:
+
+1. `tmp_dir` construído com `split('/PhyloTreeMiner/')` — depende do **nome do diretório do repositório** e produz caminho **relativo**, enquanto todos os outros construtores produzem absoluto. Os arquivos do MrBayes vão parar onde o processo foi lançado. O repositório **já foi renomeado** de `FPM-Tree` para `PhyloTreeMiner`, então isso já quebrou uma vez.
+2. **Sem semente.** O MCMC é estocástico, o MrBayes aceita `set seed=`/`set swapseed=`, e o script não usa nenhum. É D11 e D17 outra vez, num método onde o efeito é maior porque a cadeia inteira diverge.
+3. `ngen=10⁶` e `burnin=250` fixos e **sem relação entre si** — 250 amostras de 10 000 é 2,5% de descarte, contra os 25% usuais; mudar `ngen` altera essa fração em silêncio.
+4. **Convergência nunca verificada.** O ASDSF e os ESS saem no `sump`/`sumt` e são ignorados. Uma árvore consenso de cadeia não convergida **não significa nada** — é o único método do conjunto cuja saída pode ser silenciosamente sem sentido com o processo terminando em código 0.
+5. Descritor de arquivo vazado no `stdin=open(...)`; `timeout` fixo sem relação com `ngen`; modelo `nst=6 rates=gamma` fixo e sem correspondência declarada com o dos outros métodos.
+
+---
+
+### DEC-033 · 2026-08-25 · Marco **M7** — heurísticas de inferência auditadas, parametrizáveis e escaláveis
+
+**Motivo.** M1 corrigiu o que o pipeline calcula **depois** que as árvores existem. M7 é o degrau anterior: **como as árvores são feitas**. Erro aqui não é corrigível a jusante — a árvore errada já entrou no conjunto.
+
+E a evidência acumulada diz que este degrau nunca foi auditado: [D17](../science/02-defeitos-que-alteram-resultado.md#d17) (RAxML, `--threads auto`), [D11](../science/02-defeitos-que-alteram-resultado.md#d11) (IQ-TREE sem semente), [D18](../science/02-defeitos-que-alteram-resultado.md#d18) (o modo que nunca chamava método avançado), [D20](../science/02-defeitos-que-alteram-resultado.md#d20) (MrBayes) e a medição de custo de 2026-08-25. **Cada um foi achado por acaso, ao investigar outra coisa; três dos quatro métodos tinham defeito.**
+
+Sete lotes, em [`10-marcos-e-metas §8`](10-marcos-e-metas.md): ficha de chamada por método (M7.1), suporte de ramo simétrico (M7.2, que é o mesmo trabalho que M3.2), modelo declarado e coerente (M7.3), MrBayes correto com verificação de convergência (M7.4), parcimônia viável ou declarada inviável **com limite medido** (M7.5), falha nunca silenciosa (M7.6) e curva de custo em função de `n` e `L` (M7.7).
+
+**Portão:** toda chamada de ferramenta no manifesto com semente e paralelização; duas execuções da mesma entrada com os mesmos hashes; nenhum método falhando em silêncio; curva de custo publicada. E a regra: **nenhum método entra em `M` sem ter passado por M7.1** — um pipeline cuja chamada ninguém conferiu não é um voto válido no suporte metodológico.
+
+Paralelo ao caminho crítico. M7.5 e M7.7 exigem a máquina de validação; o resto é código.
+
+---
+
+### DEC-034 · 2026-08-25 · M2.3 — enraizamento explícito por grupo externo, e o que a recusa revelou
+
+`workflow/stability/rooting.py` (novo) implementa o que [D3](../science/02-defeitos-que-alteram-resultado.md#d3) pedia na outra metade: quando a análise enraizada é o que se quer, ela exige **enraizamento explícito e comum a todos os métodos, pelo grupo externo declarado** — nunca a raiz arbitrária do arquivo.
+
+**Três regras, todas porque enraizar errado é pior que não enraizar:**
+
+1. **O grupo externo é declarado, nunca inferido.** `outgroup_from_classifier` deriva o externo como complemento do grupo **interno** declarado — nos experimentos de *Variola*, "tudo que não é VARV". A declaração continua sendo do pesquisador.
+2. **Grupo externo não monofilético não enraíza.** Sem clado, há mais de uma aresta candidata a raiz e a escolha seria arbitrária. O resultado é `None` **com o motivo**, e não uma árvore enraizada em algum lugar plausível. Pode ser desligado, mas é preciso pedir.
+3. **Ou todos, ou nenhum.** `root_tree_set` devolve o relatório de **todas** as árvores, inclusive as que falharam: se um método não enraizou, a análise enraizada daquele conjunto não é comparável, e quem decide precisa ver o quadro inteiro.
+
+A árvore original nunca é modificada — a mesma árvore precisa poder ser analisada nas duas formas sem que uma contamine a outra. Rótulos são normalizados, então o grupo externo declarado uma vez vale na grafia truncada de IQ-TREE e RAxML (D13).
+
+**Aplicado aos experimentos reais, o resultado é evidência, não só código:**
+
+| Conjunto | Grupo externo derivado | Enraizadas | Recusadas |
+|---|---|---:|---|
+| VARV-49 | 4 táxons (`AF438165`, `AY009089`, `DQ437593`, `DQ437594`) | **6 / 8** | **os dois UPGMA** |
+| VARV-6 | 2 táxons (`NC_008030`, `NC_008291`) | **6 / 10** | os dois UPGMA **e os dois IQ-TREE** |
+
+**Achado 1 — o argumento contra o UPGMA deixa de ser teórico.** Ele é o único método que já vinha enraizado, e o faz impondo um relógio molecular. Em **ambos** os experimentos, os dois braços de UPGMA são os que **não recuperam o grupo externo como clado**. O que se dizia por dedução — "os pressupostos são violados num conjunto que atravessa gêneros" — passa a ter medida: o UPGMA erra justamente onde o erro é verificável de fora.
+
+**Achado 2 — a recusa detecta [D6](../science/02-defeitos-que-alteram-resultado.md#d6).** Em VARV-6 o "grupo externo" é `NC_008291` (*Taterapox virus*, gênero irmão) mais `NC_008030` (*Nile crocodilepox virus*, **fora de Orthopoxvirus**). Não é um grupo externo: são dois, em níveis taxonômicos diferentes, e nenhuma árvore razoável os agruparia. **A recusa de enraizamento é o sintoma da contaminação taxonômica** que D6 descreve — e é a primeira vez que ela aparece como consequência mensurável, e não como observação sobre a composição do conjunto.
+
+**O que este lote NÃO faz.** Não enraíza os artefatos em disco nem muda número exibido. A ferramenta existe e está testada; **aplicá-la ao dataset de referência é M2.6**, e depende da composição que M2.2 (filtro `txid10242`) vai definir — o que, à luz do achado 2, é a ordem certa: limpar o conjunto antes de enraizá-lo.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_rooting   → Ran 15 tests, OK
+                  (suíte completa do submódulo)                    → Ran 96 tests, OK
+cd Backend     && pytest tests                                     → 194 passed, 1 xfailed
+```
+
+**Write-lock:** `BioComp_UFF/workflow/stability/rooting.py` (novo), `BioComp_UFF/workflow/tests/test_rooting.py` (novo), `BioComp_UFF/workflow/utils/manifest.py` (detecção do `mb`), `Backend/src/app.py`, `Backend/tests/api/test_previa_de_json.py` (novo), `Frontend/.../JsonViewer.jsx` (novo), `Frontend/.../PaginatedJsonViewer.jsx`, `Frontend/.../projectExplorer.jsx`, `docs/respostasUteis/**`. **Reversível:** sim.
+
+### DEC-035 · 2026-08-25 · M2.2 — filtro taxonômico declarado, e a contaminação de [D6](../science/02-defeitos-que-alteram-resultado.md#d6) medida acesso a acesso
+
+`workflow/utils/taxonomy.py` (novo) implementa as **duas defesas** que M2.2 pede, e a segunda existe porque a primeira não basta.
+
+**1. Filtro na consulta.** `entrez_term(query, taxon)` compõe o termo do Entrez com o clado declarado:
+
+```
+(Variola virus[Organism] AND complete genome) AND txid10242[Organism:exp]
+```
+
+**2. Verificação pós-download.** `audit_genbank` confere a linhagem de cada registro **baixado** contra o clado. É necessária porque o filtro da consulta **não cobre todos os caminhos de entrada**: `download_method="csv"` e um FASTA fornecido à mão nunca passam por uma consulta. Uma verificação que só olha a consulta confia justamente no que deveria conferir.
+
+A verificação é **offline** — a linhagem vem de `annotations['taxonomy']`, que o próprio registro GenBank carrega. Por isso ela vale para os conjuntos **que já existem em disco**, sem nova consulta ao NCBI. Foi assim que se produziu a tabela abaixo.
+
+**O clado é declarado, nunca presumido.** O padrão é `None`, e nesse caso nada é conferido — mas o log **avisa**, com a razão: *"foi assim que crocodilepox entrou nos conjuntos de Variola"*. Ausência de filtro passa a ser uma decisão visível.
+
+**Três estados, não dois.** Um registro pode estar dentro do clado, fora, ou **sem anotação de taxonomia**. O terceiro é indecidível sem consultar o NCBI, e tratá-lo como qualquer um dos outros seria decidir por falta de metadado: reprovar descartaria registro legítimo; aprovar aceitaria contaminação não detectada. O modo estrito **levanta por táxon fora e apenas avisa por indecidível**, e um conjunto só é declarado limpo quando não há nem um nem outro.
+
+**Auditoria dos conjuntos em disco** (`docs/science/scripts/auditar_taxonomia.py`, novo):
+
+| Conjunto | Clado exigido | Total | Dentro | Fora | Estado |
+|---|---|---:|---:|---:|---|
+| **VARV-49** | *Orthopoxvirus* | 49 | **49** | **0** | ✅ limpo |
+| VARV-52 | *Orthopoxvirus* | 52 | 51 | **1** | contaminado |
+| VARV-121 | *Orthopoxvirus* | 121 | 117 | **4** | contaminado |
+| VARV-6 | *Orthopoxvirus* | 6 | 5 | **1** | contaminado |
+| ZIKV-21 | *Orthoflavivirus* | 20 | **20** | **0** | ✅ limpo |
+
+Os seis táxons fora do clado, com a linhagem que os denuncia:
+
+| Acesso | Organismo | Gênero real |
+|---|---|---|
+| `NC_008030` | Nile crocodilepox virus | *Crocodylidpoxvirus* |
+| `MG450915` | Saltwater crocodilepox virus | *Crocodylidpoxvirus* |
+| `MG450916` | Saltwater crocodilepox virus | *Crocodylidpoxvirus* |
+| `NC_015960` | Yokapox virus | *Centapoxvirus* |
+
+**Reproduz exatamente a tabela de D6**, agora por comando e não por inspeção manual. E confirma a afirmação de [`01-revisao-variola §1`](../science/01-revisao-variola.md): **VARV-49 é o único experimento com delineamento defensável** — 49 de 49 dentro do gênero.
+
+**O clado é do experimento, não do projeto.** Rodar os conjuntos de Zika contra *Orthopoxvirus* reprova os 20 táxons, corretamente; contra *Orthoflavivirus*, aprova os 20. Por isso `TaxonFilter` é um parâmetro e não uma constante — e por isso `ORTHOFLAVIVIRUS` existe ao lado de `ORTHOPOXVIRUS`, como prova de que a máquina serve a mais de um estudo.
+
+**Encontro com M2.3.** O enraizamento explícito ([DEC-034](#dec-034--2026-08-25--m23--enraizamento-explícito-por-grupo-externo-e-o-que-a-recusa-revelou)) recusou os dois braços de IQ-TREE de VARV-6 porque o "grupo externo" não era monofilético. A auditoria taxonômica explica **por quê**: aquele grupo externo mistura *Taterapox* (*Orthopoxvirus*, gênero irmão) com *Nile crocodilepox* (*Crocodylidpoxvirus*, outro gênero). Não é um grupo externo — são dois, em níveis diferentes. **A recusa de enraizamento e a reprovação taxonômica são o mesmo defeito visto por dois instrumentos independentes.**
+
+**O que este lote NÃO faz.** Não remove nada de conjunto nenhum. Compor `VARV-49-clean` e publicar o dataset de referência é **M2.6**, e agora tem o instrumento que decide quem entra. VARV-52, VARV-121 e VARV-6 continuam contaminados até serem recompostos — e VARV-121 e VARV-6 ficam, por decisão registrada ([DEC-024](#dec-024--2026-08-24--decisões-2-3-e-4-tomadas-os-três-conjuntos-ficam-o-upgma-fica)), com o papel declarado de escala e demo didático. **Um conjunto contaminado pode ficar; o que não pode é ficar sem estar declarado como tal.**
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_taxonomy    → Ran 20 tests, OK
+                  (suíte completa do submódulo)                      → Ran 116 tests, OK
+                  python ../docs/science/scripts/auditar_taxonomia.py → 6 fora do clado, exit 1
+cd Backend     && pytest tests                                       → 194 passed, 1 xfailed
+```
+
+**Write-lock:** `BioComp_UFF/workflow/utils/taxonomy.py` (novo), `BioComp_UFF/workflow/tests/test_taxonomy.py` (novo), `BioComp_UFF/workflow/workflow_dataAcquisition.py`, `docs/science/scripts/auditar_taxonomia.py` (novo). **Reversível:** sim.
+
+### DEC-036 · 2026-08-25 · **Decisão 1 tomada** — a biblioteca de alinhadores é MAFFT + Clustal Omega + MUSCLE
+
+Última das seis decisões pendentes. **Nenhuma decisão do usuário bloqueia mais nada.**
+
+**Resposta do usuário:** a biblioteca de ferramentas disponíveis à escolha contém **MAFFT** e **Clustal Omega** (já inclusos) e **MUSCLE** (novo).
+
+Isto **substitui** a recomendação registrada, que era contrastar duas estratégias do MAFFT (`--retree 1` × `--maxiterate 1000`). O motivo da recomendação era evitar depender do MUSCLE 3.8.1551, que é o instalado e não o MUSCLE 5. A decisão do usuário privilegia outro objetivo — **uma biblioteca com várias ferramentas de verdade**, e não um contraste de parâmetros dentro de uma só —, e é uma escolha de produto legítima.
+
+**O que fica registrado como limitação:** a versão instalada é **MUSCLE 3.8.1551**, cujo algoritmo é diferente do MUSCLE 5. Se o artigo comparar alinhadores, tem de dizer **qual MUSCLE**, e o manifesto já grava a versão.
+
+**Consequência para [E4](../science/04-agenda-de-pesquisa.md):** o fator alinhador passa a ter três níveis reais em vez de dois. E, com [D1](../science/02-defeitos-que-alteram-resultado.md#d1) corrigido, o braço `clustalo` deixa de ser cópia de MAFFT nos conjuntos onde ele de fato roda.
+
+---
+
+### DEC-037 · 2026-08-25 · MUSCLE integrado, e a substituição silenciosa de alinhador acaba (**M2.4**)
+
+**MUSCLE no pipeline.** `align_sequences_muscle` suporta as **duas gerações de linha de comando**, que são incompatíveis e ambas circulam: `-in/-out` na 3.8, `-align/-output` na 5. A versão é detectada uma vez e registrada — não se adivinha por tentativa e erro, porque um erro de sintaxe e uma falha de alinhamento produzem o mesmo código de saída, e confundi-los esconderia o segundo. Acima de 500 sequências, a 3.8 recebe `-maxiters 2`: o refinamento iterativo padrão (16) não termina em tempo útil.
+
+**Biblioteca declarada.** `workflow/alignment/aligners.py` (novo) reúne num lugar só o que cada alinhador é, o que aguenta e **por quê**. `viability(n, L)` responde, para um conjunto concreto, quais são viáveis e qual o motivo dos que não são — que é o que a UI precisa para avisar **no momento da configuração, quando ainda há escolha**.
+
+**Limite não medido é `None`, nunca um palpite.** Só o Clustal Omega tem limite declarado (20 kb por sequência), e ele vem de uma falha **observada** neste projeto: `return code 137`, o OOM killer, no conjunto Zika479. Os limites de MAFFT e MUSCLE estão como desconhecidos até M7.7 medir.
+
+**A substituição silenciosa acaba — é o núcleo de D1.** `_isExecutableByClustalO` trocava Clustal Omega por MAFFT e devolvia a troca sem que ninguém renomeasse o arquivo: nos experimentos de *Variola*, metade dos "pipelines" são cópias byte a byte com nome de `clustalo`, e o fator alinhador **não existe** ali. Agora:
+
+1. o padrão é **falhar** com o motivo, e a mensagem diz como autorizar a substituição;
+2. autorizada, `resolve_aligner` **devolve o nome do alinhador que rodou**, e o chamador nomeia a saída por ele;
+3. os **três** pontos de despacho do controlador — que eram cópias um do outro — foram unificados em `_resolver_alinhador` + `_alinhar`, e um método desconhecido virou erro em vez de aviso.
+
+Isto fecha **M2.4** (proveniência honesta) pela metade que é código. A outra metade — reexecutar para que os artefatos deixem de mentir — é da máquina de validação.
+
+**Medição dos três alinhadores** no conjunto de validação (20 sequências × 10,8 kb, 4 threads):
+
+| Alinhador | Tempo | Colunas |
+|---|---:|---:|
+| **MAFFT** | **4,9 s** | 10 792 |
+| MUSCLE 3.8 | 34,5 s | 10 791 |
+| Clustal Omega | 64,0 s | 10 791 |
+
+MAFFT é **7× mais rápido que o MUSCLE e 13× mais rápido que o Clustal Omega**, com alinhamento do mesmo comprimento. Num conjunto pequeno, onde os três são viáveis, a escolha é de método e não de custo; a diferença passa a decidir quando o conjunto cresce.
+
+**Dependências.** `scripts/check_dependencies.sh` (novo) confere as sete ferramentas externas, relata versão de cada uma e **instala só com `--install`** — instalar software na máquina de alguém sem pedir é decisão de quem está na frente do teclado. Ligado ao `start.sh` como passo 1 de 4: falhar ali é melhor que falhar no meio de um alinhamento de duas horas. O script trata a armadilha do `FastTree` e do `mb`, que **leem a entrada padrão** quando invocados sem argumentos e ficam bloqueados sem `</dev/null`.
+
+**Achado incidental:** as linhas 79-93 do `start.sh` eram um **prompt colado por acidente** num commit anterior. Texto morto, depois do `cleanup` que encerra o script, mas lixo num arquivo versionado. Removido.
+
+---
+
+### DEC-038 · 2026-08-25 · Conjuntos limpos criados **ao lado** dos contaminados
+
+**Decisão do usuário:** limpar os conjuntos e corrigir o erro, **sem apagar** — os originais servem como subamostra do conjunto completo, úteis para teste.
+
+`workflow/utils/dataset_cleaning.py` e `docs/science/scripts/limpar_datasets.py` (novos) criam uma variante `-clean` ao lado de cada conjunto contaminado. **Nenhum arquivo de origem foi alterado** — verificado por contagem antes e depois.
+
+| Conjunto | Antes | Depois | Removidos |
+|---|---:|---:|---|
+| VARV-6 | 6 | **5** | `NC_008030` (Nile crocodilepox) |
+| VARV-52 | 55 | **54** | `NC_008030` |
+| VARV-121 | 125 | **121** | `MG450915`, `MG450916` (Saltwater crocodilepox), `NC_008030`, `NC_015960` (Yokapox) |
+| VARV-49 | 52 | — | já limpo, nada a fazer |
+
+**Cada conjunto limpo carrega um `PROVENIENCIA.md`** com a origem, o clado exigido, a lista do que saiu **com o motivo taxonômico**, e o comando que reproduz. Um conjunto limpo sem proveniência é tão indefensável quanto um contaminado: o que o torna publicável não é estar limpo, é **ser possível provar o que foi retirado**.
+
+**Terceiro estado, de novo.** Três acessos — `DQ437594`, `NC_003391`, `HQ849551` — estão no FASTA e **não têm registro no `raw_data_sequences.gb`**, então não havia como decidir seu clado. Eles **ficam** no conjunto limpo e são declarados na proveniência: retirá-los seria descartar dado por falta de metadado, que é uma decisão diferente e precisa ser tomada explicitamente. Registrado na triagem como vão de proveniência.
+
+**VARV-6 é o caso que muda de natureza.** Ali o crocodilepox não é contaminante à margem — é **um sexto do conjunto**, e estava sendo usado como grupo externo. O papel declarado de VARV-6 é demo didático, e um demo que ensina um delineamento errado ensina a coisa errada. A variante limpa tem 5 táxons com *Taterapox* como único grupo externo, que é o desenho correto; o contraste entre as duas versões vira, ele próprio, a lição.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python ../docs/science/scripts/limpar_datasets.py --dry-run  → 6 a remover
+                  python ../docs/science/scripts/limpar_datasets.py            → 6 removidas, originais intactos
+                  python -m unittest (8 módulos)                               → Ran 129 tests, OK
+cd Backend     && pytest tests                                                 → 194 passed, 1 xfailed
+bash scripts/check_dependencies.sh                                             → 7 de 7 presentes
+```
+
+**Write-lock:** `BioComp_UFF/workflow/alignment/{aligners.py,alignmentSeq.py}`, `BioComp_UFF/workflow/controller/treeBuilderController.py`, `BioComp_UFF/workflow/utils/dataset_cleaning.py`, `BioComp_UFF/workflow/tests/test_aligners.py`, `docs/science/scripts/limpar_datasets.py`, `scripts/check_dependencies.sh`, `start.sh`, `BioComp_UFF/data/*-clean/**` (novos). **Reversível:** sim.
+
+### DEC-039 · 2026-08-25 · Política de alinhador: **avisar, não bloquear** — endpoint e seletor
+
+**Decisão do usuário:** avisar sem bloquear.
+
+Três saídas eram possíveis, e a escolha entre elas é o que separa este projeto do defeito que ele passou dois meses corrigindo:
+
+| Saída | Veredito |
+|---|---|
+| **Substituir em silêncio** | É [D1](../science/02-defeitos-que-alteram-resultado.md#d1). Produz artefato que mente sobre a própria proveniência, e ninguém descobre até auditar |
+| **Bloquear na interface** | Remove agência de quem sabe o que está fazendo. E os limites são **conservadores e alguns não medidos** — o de 20 kb nunca foi verificado, o de 1 000 sequências é palpite. Bloquear com base em número não medido é pior que avisar |
+| **Avisar e deixar escolher** | ✅ O inviável aparece esmaecido, **com o motivo ao lado**, e continua selecionável. Se falhar, o motivo fica no manifesto |
+
+**Backend.** `GET /api/aligners` devolve a biblioteca — instalado, versão, limites e **o motivo de cada limite**, que é campo obrigatório na resposta. `GET /api/aligners/viability?path=…` responde para um conjunto concreto: mede o número de sequências e o **comprimento da maior** (é uma sequência só que estoura a memória, não a média), e devolve `viable` + `reasons` por alinhador, mais `policy: "warn"` declarado no corpo.
+
+**O registro de limites não foi duplicado.** O backend **importa** `workflow/alignment/aligners.py` do submódulo. Duas tabelas de limites divergindo seria [D5](../science/02-defeitos-que-alteram-resultado.md#d5) em outro assunto — e D5 custou 109 identificadores para 46 clados reais.
+
+**Interface.** `AlignerSelect.jsx` (novo) lê os dois endpoints, esmaece o inviável com uma etiqueta, mostra as dimensões do conjunto, e — quando o escolhido é inviável — abre um aviso que termina dizendo: *"a escolha continua sua; a execução não troca de alinhador por conta própria"*.
+
+**Achado corrigido no caminho.** O seletor antigo oferecia duas opções fixas: `mafft` e **`clustalw`**. O pipeline **não implementa `clustalw`** — escolhê-lo fazia a execução falhar com "método de alinhamento não suportado". A interface oferecia uma opção quebrada, e agora lê a biblioteca de verdade.
+
+---
+
+### DEC-040 · 2026-08-25 · Relatório de gargalos e rotas de execução
+
+[`docs/science/07-gargalos-e-rotas.md`](../science/07-gargalos-e-rotas.md) (novo) reúne o que cada método custa, onde quebra, por onde a execução passa e o que acontece quando não dá.
+
+Existe porque três defeitos — [D1](../science/02-defeitos-que-alteram-resultado.md#d1), [D17](../science/02-defeitos-que-alteram-resultado.md#d17) e [D18](../science/02-defeitos-que-alteram-resultado.md#d18) — têm a mesma raiz: **o pipeline decidia sozinho o que não conseguia fazer, e não contava a ninguém.**
+
+**Regra de leitura declarada no topo:** número medido vem com máquina e data; onde não há medição, está escrito *não medido*, nunca um palpite. Este projeto já carregou por anos um limite de 20 kb que ninguém sabia de onde vinha.
+
+**O que o relatório fixa:**
+
+- **Custo dos alinhadores** (Zika-21, 20 × 10,8 kb): MAFFT 4,9 s · MUSCLE 34,5 s · Clustal Omega 64,0 s, todos com o mesmo comprimento de alinhamento.
+- **Custo da inferência**: distância 0-6 s · IQ-TREE 4-5 s (com 1000 UFBoot) · FastTree 4-5 s · RAxML 6-7 s · **parcimônia 116-169 s**.
+- **Limites com a origem de cada número** — e a marca explícita de *não medido* em quatro dos sete.
+- **A dimensão que pesa não é a que parece**: 478 táxons de Zika rodam, 52 de *Variola* quebravam. No alinhamento pesa o **comprimento**; na inferência, nem isso, porque a compressão de padrões torna 259 mil sítios baratos quando 70% são invariantes.
+- **As rotas**, antes e depois: a de D1 (`clustalo pedido → troca para MAFFT → grava com nome de clustalo`) contra a atual (`inviável → erro com motivo`, ou substituição autorizada **que devolve o nome do que rodou**).
+- **O buraco que resta**: não há política para método de **inferência** que falha. Hoje `ignore_mode` mistura "excluído de propósito" com "quebrou e foi excluído depois" — foi assim que o RAxML sumiu dos experimentos de *Variola* sem que ninguém soubesse que a causa era um `SIGSEGV` de autoconfiguração. É o lote **M7.6**.
+- **Seis perguntas em aberto**, cada uma com como medir, todas para a máquina de validação (M7.7).
+
+**Evidência de execução:**
+```
+cd Backend && pytest tests   → 205 passed, 1 xfailed  (11 testes novos em tests/api/test_alinhadores.py)
+npm run test -- --run        → 8 passed
+npm run build                → ✓ built
+npm run lint:ratchet         → erros 68/68, avisos 27/27
+```
+
+**Write-lock:** `Backend/src/app.py`, `Backend/tests/api/test_alinhadores.py` (novo), `Frontend/.../AlignerSelect.jsx` (novo), `Frontend/.../pipelineConfigurator.jsx`, `docs/science/07-gargalos-e-rotas.md` (novo). **Reversível:** sim.
+
+### DEC-042 · 2026-08-25 · M2.6 e M2.7 — o dataset de referência e o portão científico existem
+
+**M2.6 — dataset de referência versionado.** `Backend/tests/data/reference/`, gerado por `docs/science/scripts/gerar_dataset_referencia.py` e regenerável por `make reference-dataset`.
+
+O conjunto é o **VARV-49**, e a escolha não precisou de decisão: é o único dos quatro experimentos que é ao mesmo tempo **taxonomicamente limpo** (49/49 *Orthopoxvirus*, conferido) e com **delineamento defensável** — 45 VARV contra 2 CMLV, 1 CPXV e 1 TATV, que é exatamente a composição-alvo do plano e a replicação de Li *et al.* (2007).
+
+Contém `README.md` de proveniência, `accessions.txt` com a classificação de cada acesso, `expected.json` com o invariante declarado, as árvores de referência e `MANIFEST.sha256`. Um teste confere o manifesto: **se um arquivo mudou sem o manifesto ser regenerado, a proveniência deixou de valer** — e um dataset de referência sem proveniência é tão indefensável quanto um contaminado.
+
+**M2.7 — o portão.** `make reference-check` (rápido, qualquer máquina, segundos) e `make reference-check-full` (reexecuta; máquina de validação). O rápido responde *"a refatoração preservou a biologia?"*; o completo, *"o pipeline ainda produz essa biologia?"*. São perguntas diferentes e só a primeira pode rodar em CI.
+
+**Decisões do usuário que moldaram o portão** (2026-08-25):
+
+| Escolha | Decisão | Consequência |
+|---|---|---|
+| Tolerância | **só o invariante biológico** | A topologia é registrada como *impressão digital do ambiente*, e mudança nela é sinal para investigar — não reprovação. Exigir topologia idêntica reprovaria por troca de máquina: D17 mediu RF = 8 com a mesma semente |
+| Composição de M | **esperar a reexecução completa** | O portão fica em código 2 até lá. Escolha informada: a opção dizia que bloqueia o fechamento de M2 |
+| Execução | **dois níveis** | O rápido é o portão do dia a dia; o completo valida a reexecução |
+
+**Três códigos de saída, não dois:**
+
+```
+0   invariante válido E M completo     — portão satisfeito
+2   invariante válido, M incompleto    — falta reexecutar
+1   invariante VIOLADO                 — sempre falha
+```
+
+O código 2 existe porque *"ainda não terminamos"* e *"quebrou"* são estados diferentes, e colapsá-los ensinaria a ignorar o portão.
+
+**Estado atual, medido:**
+
+```
+✓ monofilia_varv    4 táxons   recuperado por todos os 4 pipelines
+✓ clado_p2          6 táxons   recuperado por todos os 4 pipelines
+✓ p2_basal         10 táxons   recuperado por todos os 4 pipelines
+○ Invariante válido, mas M incompleto: 4 de 5.  Faltam: mafft_raxml
+```
+
+**O portão compara pipelines por nome, não por contagem.** Com 8 árvores em disco e alvo 5, a contagem diria "completo" — mas 4 são cópias byte a byte do braço `clustalo` ([D1](../science/02-defeitos-que-alteram-resultado.md#d1)) e falta o RAxML. E o invariante é conferido **só sobre os pipelines do alvo**: um braço que é cópia de outro não é um voto.
+
+**Uma sutileza que vale registrar.** Sob semântica de bipartição, *"VARV é monofilético"* e *"o grupo externo é monofilético"* são **a mesma afirmação** — a bipartição é não ordenada, e o representante canônico é o lado menor, o grupo externo de 4 táxons. Está escrito no `expected.json` para que ninguém tropece nisso depois.
+
+**M alvo: 5, não 15.** Após a medição de que MUSCLE e Clustal Omega são inviáveis em sequências de ~230 kb, o M alvo do VARV-49 é **MAFFT × 5 métodos de inferência**. Os dois alinhadores excluídos ficam em `aligners_excluded` **com o motivo medido**, não apenas removidos. Isso não enfraquece o portão: o invariante de Li *et al.* sempre foi sobre **métodos de inferência**, nunca sobre alinhadores — os "4/4" são FastTree, IQ-TREE, NJ e UPGMA, todos sobre o mesmo alinhamento.
+
+**O que falta para o portão sair de 2 e ir a 0:** uma coisa só — **o RAxML sobre o VARV-49**. Ele nunca rodou ali, por causa do `SIGSEGV` do `--threads auto` que [D17](../science/02-defeitos-que-alteram-resultado.md#d17) corrigiu.
+
+**Evidência de execução:**
+```
+make reference-dataset                                       → 49 táxons, invariantes 3/3
+make reference-check                                         → invariante 3/3, código 2
+cd Backend && pytest tests/oracle/test_portao_cientifico.py  → 11 passed
+                pytest tests                                 → 216 passed, 1 xfailed
+```
+
+**Write-lock:** `Backend/tests/data/reference/**` (novo), `Backend/tests/oracle/test_portao_cientifico.py` (novo), `docs/science/scripts/{gerar_dataset_referencia,reference_check}.py` (novos), `Makefile`. **Reversível:** sim.
+
+---
+
+### DEC-041 · 2026-08-25 · **Independência de hardware vira requisito de projeto** — limites deixam de ser escalares
+
+**Pergunta do usuário que originou o achado:** *"esses limites dos alinhadores são algo fixo ou é por conta da arquitetura desta máquina? Como definimos os limites para qualquer arquitetura?"*
+
+Análise completa em [R2](../respostasUteis/r2.md). O resumo é que **estávamos rotulando mal os números**, e o erro tem a mesma forma de [D1](../science/02-defeitos-que-alteram-resultado.md#d1) e do `20000` herdado do Clustal Omega: **um número sem as suas condições.**
+
+**Há duas coisas dentro de cada limite, e elas se comportam de forma oposta quando o hardware muda:**
+
+| | Natureza | Transfere? |
+|---|---|---|
+| **A lei de escala** — como o consumo cresce com `n` e `L` | do **algoritmo** | sim |
+| **O ponto onde a curva cruza o orçamento** | da **máquina** | **não** |
+
+Escrevemos o campo como `max_sequence_bp`, como se fosse intrínseco à ferramenta, e jogamos a condicionalidade na prosa. Mas **"10.788 pb" não é propriedade do MUSCLE** — é propriedade de `MUSCLE ⊗ esta máquina ⊗ este formato de dado`. O MUSCLE consumiu 19,4 GB antes de ser morto numa máquina de 31 GB; numa de 125 GB provavelmente teria terminado.
+
+**O que foi aplicado.**
+
+1. **`ResourceModel` e `Measurement`** (novos, em `aligners.py`): a lei de escala declarada, a constante quando há, e os **pontos medidos com as suas condições** — dimensões, desfecho, pico de RSS, **memória da máquina** e data. Uma medição sem `machine_bytes` não é interpretável, não transfere, e o código a ignora explicitamente.
+2. **`viability(n, L, available_bytes=None)`**: sem argumento, lê a memória **da máquina em execução**. O mesmo código passa a dar vereditos diferentes em máquinas diferentes — que é o comportamento correto, não um bug.
+3. **O modelo de custo tem precedência sobre o limite escalar.** Onde há estimativa, o `max_sequence_bp` não é consultado: mantê-lo faria a ferramenta vetar numa máquina de 128 GB pelo que mediu numa de 31.
+4. **Falha observada vence estimativa.** Uma falha só condena máquinas de orçamento **igual ou menor**; numa maior, o veredito volta a ser do modelo.
+5. **`fitted=False` em todos os modelos.** Com pontos de uma máquina só, expoente e deslocamento ficam confundidos — qualquer curva passa por dois pontos. Um teste falha se alguém marcar `fitted=True` sem calibrar em duas máquinas.
+6. **Estimativa vinda de falha é declarada como piso** (`bytes_is_lower_bound`): o pico registrado no instante da morte subestima por construção.
+
+**Dois defeitos meus, achados ao testar o próprio mecanismo:**
+
+- Com a estimativa mandando, o MUSCLE apareceu como **viável justamente no conjunto em que o vimos morrer** — porque 19,9 GB estimados < 26,7 GB utilizáveis. É o problema do piso, e é o que motivou a regra 4.
+- A comparação `m.machine_bytes >= budget` falhava contra a **própria máquina**: registrei `33.400.000.000` e o sistema reporta `33.424.216.064`. Vinte e quatro MB de arredondamento apagavam a observação. Passou a usar tolerância de 5%, com o motivo no docstring.
+
+**Comportamento resultante, verificado nos quatro casos:**
+
+| Máquina | Conjunto | MUSCLE |
+|---|---|---|
+| 31 GB (esta) | 52 × 228 kb | **inviável** — observado falhar aqui |
+| 128 GB | 52 × 228 kb | **viável** — a falha foi numa máquina menor |
+| 8 GB | 52 × 228 kb | inviável |
+| 31 GB | 20 × 10,8 kb | viável |
+
+**Memória não é o único eixo — e a prova é D17.** O RAxML morreu com `SIGSEGV` numa máquina e concluiu em 251 s noutra, com o mesmo arquivo e a mesma linha de comando: o alinhamento comprimia para 3.713 padrões, dezenas de MB. **Memória não tinha nada a ver** — foi o esquema de paralelização. E, com a mesma semente, mudar só a paralelização deu **RF = 8** entre as árvores. Um limite em pares de base não vê três dos quatro eixos.
+
+**Consequência para o manuscrito:** o fingerprint de execução passa a ser **parte do resultado científico**. Se o número de núcleos muda a árvore, relatar a topologia sem relatar o esquema de paralelização é relatar metade do experimento.
+
+**Novos artefatos de contexto:**
+
+- [`12-portabilidade-e-migracao.md`](12-portabilidade-e-migracao.md) — o mapa: os quatro eixos, o que já é portável (7 mecanismos), o que não é (8 itens com destino), o procedimento ao ligar numa máquina nova, e as 6 regras de projeto que decorrem disso.
+- **`CLAUDE.md` ganha a regra 8**: nenhum limite absoluto compilado.
+- **M7.7 recalibrado** para exigir ≥2 máquinas, e em função de **colunas distintas**, não `L` bruto — 259.496 sítios comprimiram para 3.713 padrões, e é o número comprimido que manda no consumo.
+- **M7.8 criado**: o eixo de núcleos no modelo de custo.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_aligners   → Ran 22 tests, OK
+                  (suíte completa do submódulo)                      → Ran 138 tests, OK
+cd Backend     && pytest tests                                       → 216 passed, 1 xfailed
+npm run build · npm run lint:ratchet                                 → ✓ · 68/68, 27/27
+```
+
+**Write-lock:** `BioComp_UFF/workflow/alignment/aligners.py`, `BioComp_UFF/workflow/tests/test_aligners.py`, `Backend/src/app.py`, `Frontend/.../AlignerSelect.jsx`, `docs/respostasUteis/r2.md`, `docs/automation/12-portabilidade-e-migracao.md` (novo), `CLAUDE.md`, `docs/automation/10-marcos-e-metas.md`. **Reversível:** sim.
+
+## Medições
+
+### Baseline P-0 — **coletado em 2026-08-19**
+Comando: `cd Backend && python scripts/perf_baseline.py` (em repouso) e `--servidor http://127.0.0.1:8011` (sob carga).
+
+**Ambiente:** Linux 6.8.0-136, Python 3.10.19, 12 CPUs lógicas / 6 físicas, 31,1 GB RAM, MAFFT 7.490, IQ-TREE 2.2.2.6.
+**Entrada:** projeto `Variola_Yu_li_2007_noITRs_6seqs` (VARV-6, 6 táxons). 5 repetições, mediana [min-max] ±desvio.
+
+| Métrica | Mediana | Faixa | Desvio |
+|---|---:|---|---:|
+| `/api/system/health` | 1,3 ms | [1,3-2,7] | ±0,6 |
+| `/projects` em repouso | 58,6 ms | [57,9-64,5] | ±2,8 |
+| `/api/tree/{p}/insights` | 0,5 ms | [0,5-5,7] | ±2,3 |
+| `/api/tree/pattern-analysis/{p}` | 375,4 ms | [331,0-379,4] | ±20,5 |
+| **`/projects` sob carga** (servidor real) | **383,2 ms** | — | n=1 |
+
+**O número que decide P-1: degradação de 6,4×.**
+
+A medida foi feita com uvicorn de verdade — o transporte ASGI em processo atende em sequência e **mascara** o bloqueio. Durante os 383 ms de `pattern-analysis`, **uma única** requisição trivial completou, e ela absorveu a duração inteira do trabalho pesado. É a prova direta de que a bioinformática roda no event loop sem ceder (`B-4`, `B-5`, `P-1`).
+
+**Extrapolação declarada como estimativa, não medição:** VARV-6 tem `metadata.json` de 28,6 MB; o de VARV-49 tem **860 MB**. Se o custo escala com o arquivo, `pattern-analysis` em VARV-49 congela a API inteira por minutos. **Não medido** — a execução pesada é da máquina do usuário.
+
+| Métrica | Ambiente | Antes | Depois | Marco |
+|---|---|---|---|---|
+| `/projects` sob carga | ver acima | 383,2 ms (6,4×) | — | M4 |
+| `/projects` em repouso | ver acima | 58,6 ms | — | M4 |
+
+
+## Pareceres científicos
+
+Toda mudança na zona sagrada ([04-rigor-cientifico §1](04-rigor-cientifico.md)) deixa um parecer aqui — **inclusive quando Δ = 0**.
+
+| Item | Data | Δ em métrica publicada? | Parecer | Decisão do usuário |
+|---|---|---|---|---|
+| Revisão dos experimentos de *Variola* (D1–D12) | 2026-08-19 | **Sim, em todos os números reportados** | [`science/01-revisao-variola.md`](../science/01-revisao-variola.md) e [`science/02-defeitos-que-alteram-resultado.md`](../science/02-defeitos-que-alteram-resultado.md). Nenhum código foi alterado: é parecer sobre artefatos já em disco. Quatro defeitos bloqueantes/altos (braço `clustalo` espúrio, denominador do suporte 2×, RF enraizada sobre árvores não enraizadas, `support` do FPMax = limiar da varredura) invalidam os números atuais. Corrigidos, o resultado principal sobrevive e é replicado em 3 conjuntos. | **Pendente** — ver as 5 decisões em [`science/04-agenda-de-pesquisa.md`](../science/04-agenda-de-pesquisa.md#decisões-que-são-do-usuário-não-de-um-agente) |
+| M1.7 — D12 (a-d) + D16, país/região e data de coleta | 2026-08-21 | **Sim** — `/insights` de *Variola*: país e ano deixam de existir; cobertura de região vai a 100% onde há dado | [DEC-018](#dec-018--2026-08-21--m17-fechado-d12-a-d--d16--a-geografia-de-variola-é-ausente-não-desconhecida). Nenhum número **real** foi alterado: os países e anos que sumiram do painel eram produzidos por regex sobre `strain`, não vinham do GenBank (5 de 6 registros de VARV-6 não têm `geo_loc_name` nem `country`). A cobertura de região sobe de 0%/40%/66,8% para 100% em VARV-49/ZIKV-21/ZIKV-480. Painéis geográficos e linha do tempo de *Variola* já publicados são artefato e não podem ser reafirmados. | **Aprovada** — "aprovado, pode seguir" (decisão 5) |
+| M1.8 — D13 (metade backend), rótulos truncados em 10 caracteres | 2026-08-24 | **Sim** — `/insights` de VARV-6 e 24 dos 45 pares de comparação de árvores | [DEC-019](#dec-019--2026-08-24--m18--d13-metade-backend-o-metadado-de-nc_001611-sempre-esteve-no-arquivo). Nenhum número foi recalculado: o metadado estava no `metadata.json` o tempo todo, sob o rótulo íntegro, e era descartado por se ler apenas a primeira das 10 árvores. Os dois grupos externos do baseline de Li *et al.* (2007) deixam de aparecer como `Unknown` e passam a aparecer como *Taterapox virus* e *Nile crocodilepox virus*. RF do par de controle inalterada (Δ = 0); oráculo dendropy independente confere os 3 pares truncados. **Não reabre DEC-018**: os 4 genomas de *Variola* seguem sem `geo_loc_name` e sem `collection_date`. | **Coberta** pela decisão 5 já aprovada — nenhum número publicado é reafirmado, e sim retirado da condição de desconhecido |
+| M1.1 — D4, `support` do FPMax era o limiar da varredura | 2026-08-24 | **Sim** — toda linha de `all_results_fpmax.csv`, as duas tabelas da Deep Analysis, `pattern_statistics.avg_support` e `support_distribution` | [DEC-021](#dec-021--2026-08-24--m11--d4-o-support-do-fpmax-deixa-de-ser-o-limiar-da-varredura). Confronto contra `audit_variola.py --secao 5`: **Δ = 0 em 37 de 37 itemsets** nos quatro experimentos de *Variola*. A contradição de exibir o mesmo padrão como frágil e como robusto cai a zero em todos. **Os CSVs em disco não mudam** — só reexecutando o experimento. | **Coberta** pela decisão 5 ("corrigir e re-rodar"); a reexecução é o passo que materializa o número novo |
+| M1.2 — D5, identidade de clado de 16 bits e dependente da ordem | 2026-08-24 | **Sim** — todo item do FPMax e todo padrão da Deep Analysis | [DEC-022](#dec-022--2026-08-24--m12--d5-o-pipeline-passa-a-usar-a-identidade-canônica-de-clado). Itens distintos caem de 155/194/405/20 para 101/120/270/11, batendo com a contagem de clados canônicos do oráculo (+1, o clado universal, que o builder inclui). O padrão de maior suporte de VARV-49 vai de **1 clado a 6/8** para **16 clados a 8/8** — `02-defeitos` previa 15 a 8/8. | **Coberta** pela decisão 5; materializa na reexecução |
+| M1.3 — D3, RF sobre clados enraizados | 2026-08-24 | **Sim** — `rf_matrix`, `factor_effects`, `support_profile`, `universal_clades` e todo padrão maximal | [DEC-023](#dec-023--2026-08-24--m13--d3-a-unidade-de-comparação-passa-a-ser-a-bipartição-e-m1-fecha). Confronto contra dendropy: **137 pares, 0 divergências**. VARV-6 sai de 0 para 1 clado universal e a discordância entre três métodos de topologia idêntica cai de 75% para 0%. A distância **sobe** em pares genuinamente diferentes (fasttree × nj, +2,2%), o que descarta a hipótese de redutor cego. | **Coberta** pela decisão 5; a análise enraizada legítima é M2.3 |
+
+## Handoffs e relatórios
+
+Formato em [protocolo §4](02-protocolo-de-orquestracao.md). Manter os últimos ~10; arquivar os antigos ao fim de cada onda em `07-log-arquivo-Wn.md`.
+
+*(nenhum handoff registrado ainda)*
+
+## Riscos materializados
+
+| Data | O que aconteceu | Como foi detectado | Ação | Controle que falhou |
+|---|---|---|---|---|
+| *(vazio)* | | | | |
+
+## Achados fora de escopo (fila de triagem)
+
+Achados que agentes encontraram e **não** corrigiram, conforme a regra de escopo. O orquestrador tria: vira item de onda, entra na auditoria, ou é descartado com justificativa.
+
+| Data | Achado | `arquivo:linha` | Quem achou | Destino |
+|---|---|---|---|---|
+| 2026-07 | `rerun_workflow` e `can_rerun_project` ainda usam `startswith` fraco em vez de `resolve_within`; `rerun_workflow` executa subprocess → prioridade alta | `Backend/src/app.py:~367,412` | P1 batch 1 | **W1** |
+| 2026-07 | `os.path.commonpath` pode levantar `ValueError` em caminhos cross-drive no Windows | `Backend/src/app.py` (`resolve_within`) | P1 batch 1 | Baixa prioridade (deploy alvo é Linux) |
+| 2026-07-29 | Repositório sem `CLAUDE.md`, sem `.github/`, sem qualquer teste | raiz | criação deste sistema | ✅ **fechado** — testes e CI em M0; `CLAUDE.md` em 2026-08-24 ([DEC-026](#dec-026--2026-08-24--biblioteca-de-contexto-para-a-máquina-de-validação--claudemd-e-handoff)) |
+| 2026-08-19 | **D1** — `_isExecutableByClustalO` troca para MAFFT acima de 20 kb e grava em `dataset_final_clustalo.aln`; nos 4 experimentos de Variola metade dos "pipelines" são cópias byte a byte | `BioComp_UFF/workflow/controller/treeBuilderController.py:868,898` | revisão científica | **Bloqueante** — decisão do usuário |
+| 2026-08-19 | **D3** — RF calculada sobre clados enraizados misturando árvores enraizadas (UPGMA) e não enraizadas; superestima discordância em até 100% | `BioComp_UFF/workflow/stability/stability.py:300,461` | revisão científica | **Alta** |
+| 2026-08-19 | **D4** — `result_fpmax['support'] = support` sobrescreve o suporte real com o limiar da varredura; mesmo padrão exibido como frágil e robusto | `BioComp_UFF/workflow/subtree_mining/miner.py:147` | revisão científica | **Alta** |
+| 2026-08-19 | **D5** — identidade de clado de 16 bits e dependente da ordem fragmenta 36–55% dos clados; `clade_identity.py` já tem a correta e não é usada em produção | `BioComp_UFF/workflow/utils/treeUtils.py:275,392` | revisão científica | **Alta** |
+| 2026-08-19 | **D7/D8/D9** — `max_pattern_size=100` descarta 8 de 20 padrões em silêncio; `tree_coverage` perde 50–62% das árvores por colisão de `dict.update`; `unique_signatures_count` é sempre 0 | `Backend/src/app.py:1560,1581,1655` | revisão científica | **Alta** |
+| 2026-08-19 | **D10** — UFBoot calculado pelo IQ-TREE (`.contree`) é descartado ao gravar o Nexus; é o insumo do resultado principal do artigo | `out/tmp/iqtree_*/*.contree` vs `out/Trees/*.nexus` | revisão científica | **Alta — maior valor por custo** |
+| 2026-08-19 | **D12** — ano derivado do nome da cepa (`0408151v` → ano 408, visível em `/insights`); país por regex sobre `strain`; fallback de `organism` inalcançável | `Backend/src/app.py:627,635,648` | revisão científica | **Média** (`C-5b`, `C-5d`) |
+| 2026-08-19 | **G1/G2** — grafo Neo4j: `Metadata` duplicado 321× por acesso (3,8 M nós para 477 registros); metade dos nós `Subtree` chamam-se `"metadata"` e são lixo do parser; zero constraints e zero índices de propriedade | instância `localhost:7474` | revisão científica | **Alta** (`P-3`) |
+| 2026-08-19 | O Neo4j em produção contém **apenas Zika**; a Deep Analysis de Variola lê CSV/JSON do disco, não o grafo | `Backend/src/app.py:1566` | revisão científica | Documentado em [`science/05-grafo-neo4j.md`](../science/05-grafo-neo4j.md) |
+| 2026-08-19 | Proveniência quebrada: `project_name` nos `config_backup.json` não corresponde ao diretório; caminhos apontam para outra máquina; 3 pares de projetos são duplicatas renomeadas; `test_variola_noITRs_57_Complete` (52 táxons) nunca foi analisado | `BioComp_UFF/projects/**` | revisão científica | **Alta** |
+| 2026-08-19 | **Divergência de versão do FastTree**: logs de VARV registram 2.2.0, a máquina tem 2.1.11 → reexecutar não reproduz as árvores em disco | `PATH` vs `out/tmp/*/​*.log` | replanejamento | **Bloqueia M2** — pinar 2.2.0 ou redeclarar o experimento |
+| 2026-08-19 | MUSCLE instalado é **3.8.1551**, não MUSCLE5 — reforça a recomendação de contrastar duas estratégias do MAFFT em [E4](../science/04-agenda-de-pesquisa.md) | `PATH` | replanejamento | Insumo da decisão 1 |
+| 2026-08-19 | **Conflito de protocolo**: D3/D4/D5/D10 exigem editar `BioComp_UFF/**`, que o protocolo congela → metade das correções científicas inexecutável | `02-protocolo §3` | replanejamento | **DEC-011 — decisão do usuário** |
+| 2026-08-19 | `.claude/agents/` e `.claude/skills/` **não existem**: os 13 contratos e as 6 skills de `docs/` nunca foram instalados no harness | `.claude/` | replanejamento | **M0.1** |
+| 2026-08-19 | Semente do IQ-TREE gerada pela ferramenta (`97376`), não fixada pelo pipeline → reexecução não reproduz a árvore mesmo com versão idêntica | pipeline | replanejamento | **M2.5** (manifesto) |
+| 2026-08-19 | **D13** — `TaxLabels` truncados em 10 caracteres (limite PHYLIP) nos Nexus de IQ-TREE e RAxML; **24 de 45 pares de árvores não comparam** em VARV-6 e 11 terminais ficam sem metadado, incluindo `NC_001611` (referência de VARV) | `out/Trees/*_iqtree.nexus`, `*_raxml.nexus` | harness M0 | **Alta** — correção no backend não depende da decisão 6 |
+| 2026-08-21 | **D13 — evidência de perda de metadado real.** O `metadata.json` guarda cada `NC_*` sob dois rótulos: truncado (`NC_008030.`, 10 ocorrências, **0 features**) e íntegro (`NC_008030.1`, 14 ocorrências, 347 features). `iter_metadata_nodes` deduplica por `newick` e o truncado vazio vence, descartando `geo_loc_name: Zimbabwe`, `collection_date: 2001` e `host: Nile crocodile`. É a causa de `hostData` ser `Unknown` para todos os 6 táxons de VARV-6 | `Backend/src/app.py` (`iter_metadata_nodes`, `get_metadata_node`) | M1.7 / DEC-018 | ✅ **corrigido em M1.8** ([DEC-019](#dec-019--2026-08-24--m18--d13-metade-backend-o-metadado-de-nc_001611-sempre-esteve-no-arquivo)) — a causa era `only_first`, não a deduplicação por `newick` |
+| 2026-08-19 | **D14** — saída da API não é reprodutível: 3 sementes de hash → 3 payloads diferentes para a mesma entrada | `app.py` (iteração sobre `set`) | harness M0 | **Alta** — contradiz o checklist de artefato |
+| 2026-08-19 | **D15** — `GET /api/tree/metadata/{p}` devolve `/home/hilai360/...`: caminho e nome de usuário de terceiro expostos ao cliente | `metadata.json` gravado pelo pipeline | varredura A8 | **Média** — `xfail(strict=True)` rastreando |
+| 2026-08-19 | **D16** — `REGION_MAPPING` tem 14 países do estudo de Zika; **97% dos táxons de VARV-49 caem em `Unknown`**. Compõe-se com D12 e um sem o outro não melhora nada | `treePlot.py:4` | harness M0 | **Alta** — D12+D16 são um lote só |
+| 2026-08-19 | `ignore_mode` difere entre experimentos (VARV-49 e VARV-121 excluem RAxML; VARV-6 não) e nunca foi reportado — "número de pipelines" não é comparável entre eles | `config_backup.json` | M0.8 | **Alta** — entra em *Methods* |
+| 2026-08-19 | Campo `/strain=` do GenBank contém aparentes **nomes de pacientes** de surtos de 1966-75 (`Bangladesh 1974 (nur islam)`) | dados do baseline | M0.7 | Menção obrigatória na declaração de ética (M6); não bloqueia |
+| 2026-08-19 | Grafo: **zero constraints e zero índices de propriedade** em 3,8 M nós; `Metadata` duplicado 153 mil vezes; label `Support` guarda o limiar do FPMax, não suporte de ramo | instância Neo4j | M0.9 | **Alta** (`P-3`) — T5, fora do caminho crítico |
+| 2026-08-19 | Frontend: `uuid` era **dependência fantasma** (importada, ausente do `package.json`); `import { width } from "@mui/system"` era import morto | `UserContext.jsx`, `projectsTableView.jsx` | M0 | ✅ **corrigido** — teste de fantasma em `dependencias.test.js` |
+| 2026-08-19 | 13 arquivos do frontend fixam `http://localhost:8000`; **zero** uso de `import.meta.env` | `Frontend/**/src` | M0 | **M5/T4** — rastreado por `it.fails` |
+| 2026-08-24 | `iter_metadata_nodes` faz a leitura inteira do `metadata.json` quando algum táxon nunca tem metadado no arquivo (~11 s em VARV-49, 821 MB), dentro de `cache_lock` e no event loop. Não ocorre em nenhum dos 11 projetos varridos | `Backend/src/app.py` (`iter_metadata_nodes`, `get_metadata_cache`) | M1.8 / DEC-019 | **P-1** — é o lote que tira essa leitura do event loop |
+| 2026-08-24 | `02-defeitos §D13` afirmava que a string da árvore preservava o rótulo íntegro; nos arquivos em disco ela também vem truncada. A afirmação orientava uma correção que teria inflado o namespace de 6 para 9 táxons | `docs/science/02-defeitos-que-alteram-resultado.md` | M1.8 / DEC-019 | ✅ **documento corrigido** neste lote |
+| 2026-08-24 | Os `all_results_fpmax.csv` **em disco** seguem com o limiar na coluna `support` (D4 corrigido só no pipeline). `/api/tree/pattern-analysis` sobre projeto antigo continua exibindo número errado, sem avisar. Sugestão: o backend detectar a ausência da coluna `min_support_threshold` e declarar no payload que o CSV é pré-M1.1 | `Backend/src/app.py` (`analyze_patterns`) | M1.1 / DEC-021 | **Alta** — fora do write-lock deste lote; lote curto de T2 |
+| 2026-08-24 | O `git status` do submódulo já vinha sujo antes de DEC-020 (`workflow/stability/` e `docs/` **não rastreados**, READMEs modificados). Commitar ali exige separar o que é deste trabalho do que já estava | `BioComp_UFF/` | DEC-020 | Considerar antes do primeiro commit no submódulo |
+| 2026-08-24 | `report.py` e `audit_variola.py` foram ajustados para RF `None`; qualquer outro consumidor de `rf_matrix`/`factor_effects` fora do repositório vai receber `None` onde antes recebia `0.0` | `BioComp_UFF/workflow/stability/` | M1.3 / DEC-023 | Mudança de contrato declarada; nenhum consumidor conhecido fora dos dois ajustados |
+| 2026-08-24 | **D17** — `--threads auto` do RAxML-NG: `SIGSEGV` na máquina de origem e, mesmo onde roda, **RF = 8 entre duas execuções com a mesma semente** variando só o esquema de paralelização. Torna inatingível o item "figura reproduzível por script + commit + hash" | chamada do RAxML-NG no pipeline | DEC-025 | **M2.5** — fixar `--threads N --workers 1` e registrar no manifesto |
+| 2026-08-24 | Divergência de versão do **RAxML-NG** entre máquinas: 1.2.2 na de origem, 1.1.0 nesta. Soma-se à do FastTree (2.2.0 × 2.1.11) | `PATH` vs `*.raxml.log` | DEC-025 | **Bloqueia replicação exata** — pinar no ambiente |
+| 2026-08-24 | A exclusão de `raxml` do `ignore_mode` em VARV-49/52/121 pode ser **revertida**: o RAxML conclui nesses dados em ~4 min. Devolve `M` de 4 para 5 e elimina a incomparabilidade de `M` entre experimentos (DM-11) | `config_backup.json` | DEC-025 | **M2** — depende de reexecutar |
+| 2026-08-24 | Os experimentos **já executados** não têm e não terão manifesto: versões e sementes daquelas execuções nunca foram registradas. Só a reexecução fecha esse buraco | `BioComp_UFF/projects/**` | M2.5 / DEC-027 | Reexecução, na máquina de validação |
+| 2026-08-25 | **D18** — o modo `auto` não executa métodos avançados e encerra com `Completed successfully!`. `M` muda sem que nada além do `config_backup.json` registre | `treeBuilderController._process_auto_mode` | DEC-028 | **Aberto** — mínimo obrigatório: gravar no manifesto os métodos executados contra os disponíveis |
+| 2026-08-25 | Parcimônia custa **116-169 s por árvore** contra 4-7 s dos métodos de ML no conjunto de validação (20 táxons, 10,8 kb). Domina 9 dos 11 min da execução | `ParsimonyTreeConstructor` do Biopython | DEC-030 | Insumo de [E7](../science/04-agenda-de-pesquisa.md); medir em escala na máquina de validação |
+| 2026-08-25 | `inputs_sha256` do manifesto grava `../../data/...` quando a entrada fica fora do diretório do projeto. É relativo e sem nome de usuário, mas atravessa a raiz | `manifest.ExecutionManifest._relativo` | DEC-030 | Baixa — considerar ancorar na raiz do repositório em vez do projeto |
+| 2026-08-25 | **D20** — MrBayes está instalado (`mb`, 3.2.7) e era dado como ausente; integração sem semente, sem verificação de convergência, com `tmp_dir` relativo dependente do nome do repositório | `builder.mrbayes_constructor` | DEC-032 | **M7.4** — detecção já corrigida; o resto é o marco |
+| 2026-08-25 | Os dois braços de **UPGMA** não recuperam o grupo externo como clado em VARV-49 **nem** em VARV-6 — evidência empírica de que seus pressupostos são violados nestes dados | `rooting.root_tree_set` | DEC-034 | Entra no *Methods* como sensibilidade declarada (DM-6) |
+| 2026-08-25 | Em VARV-6 o "grupo externo" mistura *Taterapox* (gênero irmão) com *Nile crocodilepox* (fora de Orthopoxvirus): a recusa de enraizamento é o sintoma mensurável de [D6](../science/02-defeitos-que-alteram-resultado.md#d6) | composição do conjunto | DEC-034 | **M2.2** — limpar antes de enraizar |
+| 2026-08-25 | VARV-52, VARV-121 e VARV-6 seguem **contaminados** (1, 4 e 1 táxons fora de *Orthopoxvirus*). VARV-49 é o único limpo, 49/49. Recompor é M2.6; os conjuntos ficam por DEC-024, mas precisam ser **declarados** como contaminados onde aparecerem | `raw_data_sequences.gb` | M2.2 / DEC-035 | **M2.6** e *Methods* |
+| 2026-08-25 | Três acessos (`DQ437594`, `NC_003391`, `HQ849551`) estão no FASTA de VARV-52/VARV-121 e **não têm registro** no `raw_data_sequences.gb`: clado indecidível. Mantidos e declarados na proveniência | `data/*/dataset_final.fasta` | DEC-038 | Vão de proveniência — decidir explicitamente em M2.6 |
+| 2026-08-25 | `start.sh` continha um **prompt colado por acidente** nas linhas 79-93 (texto morto após o `cleanup`) | `start.sh` | DEC-037 | ✅ removido |
+| 2026-08-25 | MAFFT é **7× mais rápido que MUSCLE e 13× que Clustal Omega** em 20 seqs × 10,8 kb, com alinhamento do mesmo comprimento. Falta medir onde a diferença passa a decidir viabilidade | `aligners.py` | DEC-037 | **M7.7** — curva de custo na máquina de validação |
+| 2026-08-25 | O seletor de alinhador da UI oferecia **`clustalw`**, que o pipeline não implementa — escolhê-lo fazia a execução falhar | `pipelineConfigurator.jsx` | DEC-039 | ✅ corrigido: o seletor lê a biblioteca real |
+| 2026-08-25 | Não há política para **método de inferência** que falha: `ignore_mode` mistura "excluído de propósito" com "quebrou e foi excluído depois" | `treeBuilderController` | DEC-040 | **M7.6** |
+| 2026-08-25 | **MUSCLE é inviável em sequências de *Variola***: 19,4 GB e OOM em 52 seqs de 228 kb, numa máquina de 31 GB. Com Clustal também fora, **MAFFT é o único alinhador viável no VARV-49** — o fator alinhador não existe nesse conjunto | sonda medida | DEC-041 | Declarado em `expected.json`; o fator alinhador pertence ao Zika-21 |
+| 2026-08-25 | Nenhum método de **inferência** tem `ResourceModel`: só os alinhadores têm modelo de custo | `aligners.py` | DEC-041 | **M7.1 / M7.7** |
+| 2026-08-25 | O modelo de custo só prevê **memória**; D17 mostrou que núcleos mudam o **resultado** | `ResourceModel` | DEC-041 | **M7.8** (novo) |

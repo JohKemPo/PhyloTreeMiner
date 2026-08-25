@@ -1,0 +1,117 @@
+{
+  "labels": [
+    {
+      "label": "Feature"
+    },
+    {
+      "label": "Metadata"
+    },
+    {
+      "label": "Qualifier"
+    },
+    {
+      "label": "Subtree"
+    },
+    {
+      "label": "Support"
+    },
+    {
+      "label": "Tree"
+    },
+    {
+      "label": "User"
+    }
+  ],
+  "relacionamentos": [
+    {
+      "relationshipType": "HAS_FEATURE"
+    },
+    {
+      "relationshipType": "HAS_METADATA"
+    },
+    {
+      "relationshipType": "HAS_QUALIFIER"
+    },
+    {
+      "relationshipType": "HAS_SUBTREE"
+    },
+    {
+      "relationshipType": "HAS_SUPPORT"
+    },
+    {
+      "relationshipType": "OWNS"
+    }
+  ],
+  "constraints": [],
+  "indices": [
+    {
+      "name": "index_1b9dcc97",
+      "type": "LOOKUP",
+      "labelsOrTypes": null,
+      "properties": null,
+      "state": "ONLINE"
+    },
+    {
+      "name": "index_460996c0",
+      "type": "LOOKUP",
+      "labelsOrTypes": null,
+      "properties": null,
+      "state": "ONLINE"
+    }
+  ],
+  "contagem_por_label": {
+    "Feature": 952948,
+    "Metadata": 153030,
+    "Qualifier": 2684376,
+    "Subtree": 9524,
+    "Support": 9,
+    "Tree": 10,
+    "User": 1
+  },
+  "contagem_por_relacionamento": {
+    "HAS_FEATURE": 952948,
+    "HAS_METADATA": 153030,
+    "HAS_QUALIFIER": 2684376,
+    "HAS_SUBTREE": 9524,
+    "HAS_SUPPORT": 11405,
+    "OWNS": 10
+  },
+  "propriedades_por_label": {
+    "Feature": [
+      "location",
+      "strand",
+      "type"
+    ],
+    "Metadata": [
+      "date",
+      "description",
+      "molecule_type",
+      "newick_id",
+      "organism",
+      "source",
+      "taxonomy",
+      "terminal_hash",
+      "topology"
+    ],
+    "Qualifier": [
+      "key",
+      "value"
+    ],
+    "Subtree": [
+      "name",
+      "uid"
+    ],
+    "Support": [
+      "value"
+    ],
+    "Tree": [
+      "name",
+      "uid"
+    ],
+    "User": [
+      "uid"
+    ]
+  },
+  "total_nos": 3799898,
+  "total_relacionamentos": 3811293
+}

@@ -1,0 +1,366 @@
+# Marcos, metas e gates — o baseline como teste de regressão
+
+[← Automação](README.md) · Refina [`01-plano-mestre.md`](01-plano-mestre.md): as ondas W0→W7 continuam sendo o mapa de escopo; este documento define **marcos com gate executável**, a ordem imposta pela dependência científica, e as trilhas paralelas.
+
+## 0. A ideia central
+
+O plano mestre organiza o trabalho por **tipo de problema** (segurança, performance, correção, estrutura). Isso é útil para atribuir agentes, e insuficiente para saber se a refatoração preservou o que importa.
+
+Este documento acrescenta o eixo que faltava: **um invariante científico externo, verificável por comando, que toda refatoração precisa preservar.**
+
+> **O invariante.** Sobre o dataset de referência derivado de Li *et al.* (2007): a **monofilia de VARV** e o **clado P-II** (África Ocidental + América do Sul, *alastrim minor*) são recuperados por **4 de 4** métodos de inferência; a bipartição aninhada de 10 táxons que posiciona P-II como linhagem basal de VARV também tem suporte 4/4.
+>
+> Fonte: [`../science/01-revisao-variola.md §4.3`](../science/01-revisao-variola.md), validado contra Li *et al.* (2007) PNAS 104:15787-92 e Esposito *et al.* (2006) Science 313:807-812.
+
+Por que isto é melhor que um golden snapshot comum:
+
+| Golden snapshot | Invariante do baseline |
+|---|---|
+| Congela o comportamento **atual**, bugs inclusive | Congela um resultado **externamente validado pela literatura** |
+| Muda quando o bug é corrigido — e aí ninguém sabe se melhorou | **Não pode mudar**: se a monofilia de VARV cair, a refatoração quebrou a ciência |
+| Detecta regressão de implementação | Detecta regressão de **significado** |
+
+Os dois são necessários. O golden snapshot pega refatoração que mudou byte; o invariante pega refatoração que mudou verdade. **Este é o gate final de todo marco de M2 em diante.**
+
+### A hierarquia de gates
+
+```
+gate de lote    → R aprova o diff  +  V executa verde
+gate de marco   → todos os lotes fechados + comando de gate verde
+gate científico → o invariante do baseline continua 4/4     ← M2+
+gate humano     → o usuário decidiu o que é dele            ← §5
+```
+
+---
+
+## 1. Mapa dos marcos
+
+| Marco | Nome | Onda(s) | Trilha | Destrava | Bloqueado por |
+|---|---|---|---|---|---|
+| **M0** | Fundação verificável | W0 | T3 | tudo | — |
+| **M1** | Verdade dos números | W3 (núcleo) | T1 + T2 | M2 | decisão 6 (submódulo) |
+| **M2** | Baseline replicado | novo (E3) | T1 | gate científico | decisões 1-5 |
+| **M3** | Resultado principal | novo (E2/D10) | T1 + T4 | manuscrito | M1 |
+| **M4** | Segurança e desempenho | W1 + W2 | T2 + T4 + T5 | adoção | M0 |
+| **M5** | Estrutural | W4 | T2 + T4 | paralelismo em T2 | M0, M4 |
+| **M6** | Artefato publicável | W7 | T6 | submissão | M2, M3, M5 |
+| **M7** | Heurísticas de inferência auditadas | nova | T1 | confiança em `M` | — (paralelo) |
+
+**Caminho crítico para a submissão: M0 → M1 → M2 → M3 → M6.**
+M4 e M5 são engenharia necessária para *adoção e manutenção*, e rodam **em paralelo** ao caminho crítico a partir do fim de M0.
+**M7** audita como as árvores são construídas — também paralelo, mas **M3.2 é o mesmo trabalho que M7.2**, então os dois se encontram ali.
+
+```
+M0 ─┬─► M1 ──► M2 ──► M3 ─────────────► M6
+    │                     ▲              ▲
+    ├─► M7 (T1) ──────────┘              │   (M7.2 == M3.2)
+    │                                    │
+    ├─► M4 (T2/T4/T5) ──► M5 (T2/T4) ────┤
+    │                                    │
+    └─► T6 documento & manuscrito ───────┘   (contínuo, sempre paralelo)
+```
+
+---
+
+## 2. M0 — Fundação verificável
+
+**Meta.** Tornar executáveis as duas regras que o próprio projeto já se impôs e nunca pôde cumprir: *"golden test antes de mover"* e *"medir antes e depois"*. Hoje não existe **nenhum** teste no repositório ([`08-ficha-de-fatos.md §2`](08-ficha-de-fatos.md)).
+
+**Por que primeiro.** Refatorar `app.py` (2 122 linhas) sem caracterização é aposta, não engenharia. E o loop de agentes não fecha sem V, que precisa de algo para executar.
+
+| # | Lote | Trilha | Perfil |
+|---|---|---|---|
+| M0.1 | Instalar os 5 papéis em `.claude/agents/` + skills em `.claude/skills/`; escrever a skill `oracle-check` | T3 | G |
+| M0.2 | `pytest` + `httpx.AsyncClient` no backend; `vitest` no frontend; `Makefile` de verificação | T3 | A7 |
+| M0.3 | Golden snapshots de `compare`, `pattern-analysis`, `gen_plot`, `metadata`, `paginated` | T3 | A7 |
+| M0.4 | Testes de regressão retroativos do que P0/P1-batch1 já mudou (`resolve_within`, sanitização de upload, flag de cancelamento, `set_ncbi_email`) | T3 | A7 |
+| M0.5 | CI GitHub Actions: lint + pytest + build do front; fixture de Neo4j efêmero | T3 | A1 |
+| M0.6 | Baseline de performance P-0 registrado no ledger | T3 | A4 |
+| M0.7 | Mapa de dados LGPD inicial (gate para snapshots não conterem dado real) | T6 | A8 |
+| M0.8 | Quadro de decisões metodológicas do pipeline (insumo do dataset de referência) | T6 | A11 |
+| M0.9 | Introspecção do modelo real do grafo Neo4j (labels, rels, constraints, índices) | T5 | A12 |
+
+**Gate de M0 — executável:**
+
+```bash
+pytest Backend/tests -q                                  # verde
+npm --prefix Frontend/phylotreeminer run build            # verde
+npm --prefix Frontend/phylotreeminer run lint             # verde
+ls Backend/tests/golden/ | wc -l                          # ≥ 5 snapshots
+gh run list --limit 1                                     # CI verde
+grep -c "P-0" docs/automation/07-log-de-execucao.md       # baseline registrado
+```
+
+Mais: nenhum snapshot contém dado pessoal identificável (parecer de A8); os 5 papéis respondem em `.claude/agents/`.
+
+**Nota de escopo.** M0.4 vai encontrar o residual conhecido de `resolve_within` em `rerun_workflow`/`can_rerun_project` (`app.py:~367,412`), registrado como pendência de W1. **Não corrigir aqui** — escrever o teste que falha, e deixar falhando com `xfail` marcado. O teste vira o critério de aceite do lote de M4.
+
+---
+
+## 3. M1 — Verdade dos números
+
+**Meta.** Fazer o pipeline de produção calcular o que os documentos científicos já provaram ser o correto. Hoje `docs/science/scripts/audit_variola.py` calcula certo e o pipeline calcula errado — **dois universos de identidade paralelos**, que é o próprio [D5](../science/02-defeitos-que-alteram-resultado.md#d5).
+
+**Estratégia.** O script de auditoria é promovido a **oráculo de regressão**: o critério de aceite de cada lote é *"o pipeline de produção passa a concordar com o script"*.
+
+| # | Lote | Defeito | Trilha | Custo | Regra |
+|---|---|---|---|---|---|
+| M1.1 | ✅ Não sobrescrever `support` no FPMax; gravar `min_support_threshold` em coluna separada; deduplicar por itemset | [D4](../science/02-defeitos-que-alteram-resultado.md#d4) | T1 | ○ | 1 lote = 1 defeito |
+| M1.2 | ✅ Pipeline passa a usar a identidade canônica (`canonical_item_id`, 52 bits — limite do `Number` do JavaScript); `legacy` só para auditoria | [D5](../science/02-defeitos-que-alteram-resultado.md#d5) | T1 | ○ | idem |
+| M1.3 | ✅ `clade_sets` guarda **bipartição canônica**; RF normalizada passa de `2(n−2)` para `2(n−3)`; RF indefinida é `None` | [D3](../science/02-defeitos-que-alteram-resultado.md#d3) | T1 | ○ | idem |
+| M1.4 | ✅ `max_pattern_size`: devolver no payload o nº de padrões descartados; UI avisa | [D7](../science/02-defeitos-que-alteram-resultado.md#d7) | T2 | ○ | — |
+| M1.5 | ✅ `tree_coverage`: `hash → {tree_name: subtree_name}` (um-para-muitos) | [D8](../science/02-defeitos-que-alteram-resultado.md#d8) | T2 | ○ | — |
+| M1.6 | ✅ `unique_signatures_count`: implementar a definição ou remover o campo; unificar `quasi_invariant`/`topologically_robust` | [D9](../science/02-defeitos-que-alteram-resultado.md#d9) | T2 | ○ | — |
+| M1.7 | ✅ Metadados: remover fallback de `strain` para ano e país; `organism` ausente é ausente; normalizar hospedeiros; **fonte única** país/região | [D12](../science/02-defeitos-que-alteram-resultado.md#d12), `C-5b`, `C-5d` | T2 | ○ | zona sagrada |
+| M1.8 | ✅ Ler artefato com rótulo truncado sem perder informação: registro mais rico por acesso em `iter_metadata_nodes`; reconciliação de rótulos em `/api/tree/compare` | [D13](../science/02-defeitos-que-alteram-resultado.md#d13) (metade backend) | T2 | ○ | zona sagrada |
+
+Todos são **custo ○** — recomputação sobre artefatos já em disco, sem reexecutar o pipeline bioinformático. É o melhor retorno por unidade de risco do projeto inteiro.
+
+**Protocolo obrigatório por lote** ([`04-rigor-cientifico §3`](04-rigor-cientifico.md#3-protocolo-de-mudança-na-zona-sagrada)): caracterizar → formalizar → **oráculo independente** → casos-limite → tabela de diff → parecer → decisão do usuário.
+
+**Gate de M1 — executável:**
+
+```bash
+# 1. produção e oráculo concordam
+python -m workflow.stability.report --project VARV-49 --json > /tmp/prod.json
+python docs/science/scripts/audit_variola.py --secao 3 --json > /tmp/oracle.json
+python docs/science/scripts/compare_oracle.py /tmp/prod.json /tmp/oracle.json   # Δ = 0
+
+# 2. oráculo externo confirma a RF de bipartição (D3)
+python -c "import dendropy; ..."   # symmetric_difference com is_rooted=False
+
+# 3. nenhum golden snapshot de M0 mudou por acidente
+pytest Backend/tests/golden -q
+```
+
+Mais: cada lote com sua **tabela de diff** (métrica · antes · depois · Δ · afeta número publicado?) e parecer no ledger — **inclusive quando Δ = 0**, porque ausência de mudança também é resultado.
+
+⚠️ **Δ ≠ 0 é esperado e é o objetivo.** Todos os números atuais de Variola mudam. A [decisão 5](08-ficha-de-fatos.md#5-decisões-pendentes-do-usuário-bloqueiam-execução) do usuário — corrigir e re-rodar, corrigir com *erratum*, ou postergar — precisa estar tomada **antes** do primeiro merge de M1.
+
+✅ **M1 FECHADO em 2026-08-24** — 8 de 8 lotes (DEC-016, DEC-018, DEC-019, DEC-021, DEC-022, DEC-023). A decisão 6 ([DEC-020](07-log-de-execucao.md)) liberou a escrita no submódulo e destravou M1.1-M1.3.
+
+⚠️ **O que M1 corrigiu foi o pipeline, não os artefatos.** Os `metadata.json`, `all_results_fpmax.csv` e relatórios em `BioComp_UFF/projects/**` continuam com os números antigos até o experimento ser reexecutado. Nenhum número exibido hoje na aplicação mudou; M1 garante que a próxima execução produz o certo.
+
+---
+
+## 4. M2 — Baseline replicado · `VARV-49-clean`
+
+**Meta.** Transformar a replicação de Li *et al.* (2007) — hoje parcial, contaminada e sem manifesto — no **dataset de referência versionado** do projeto, e com ele instituir o gate científico.
+
+**Ponto de partida já existente** ([`08-ficha-de-fatos.md §4`](08-ficha-de-fatos.md#4-o-baseline--li-et-al-2007)): `BioComp_UFF/workflow/workflow_dataAcquisition.py:798-884` traz, comentado, o experimento com as **48 accessions explícitas** (`DQ437580`–`DQ437594`, `DQ441416`–`DQ441448`) e o grupo externo (Taterapox + Camelpox, `"1900"[PDAT]:"2007"[PDAT]`), com `initial_min_length=180000`, `refined_min_length=183000`, `similarity_threshold=0.999`, `retmax=200`.
+
+| # | Lote | O que resolve | Trilha |
+|---|---|---|---|
+| M2.1 | Descomentar e parametrizar o experimento Variola no script de aquisição; e-mail do Entrez por env, nunca hardcoded | reprodutibilidade | T1 |
+| M2.2 | ✅ **Filtro taxonômico declarado** na consulta **e** verificação pós-download offline, que distingue *fora do clado* de *sem linhagem* ([DEC-035](07-log-de-execucao.md)). Medido: VARV-49 limpo (49/49); VARV-52, VARV-121 e VARV-6 com 1, 4 e 1 táxons fora | [D6](../science/02-defeitos-que-alteram-resultado.md#d6) — crocodilepox, Yoka | T1 |
+| M2.3 | ✅ **Enraizamento explícito e comum** pelo grupo externo declarado, em todos os métodos ([DEC-034](07-log-de-execucao.md)) — a ferramenta existe e está testada; aplicá-la ao dataset de referência é M2.6 | [D3](../science/02-defeitos-que-alteram-resultado.md#d3) — legitima a análise por clados enraizados | T1 |
+| M2.4 | ✅ Proveniência honesta: o padrão é **abortar** com o motivo; a substituição só ocorre se autorizada, e `resolve_aligner` devolve o nome do alinhador que rodou ([DEC-037](07-log-de-execucao.md)). Reexecutar para que os artefatos deixem de mentir é da máquina de validação | [D1](../science/02-defeitos-que-alteram-resultado.md#d1) parte 1 | T1 |
+| M2.5 | ✅ **Manifesto de execução**: `run_id`, UTC, `git_commit` dos dois repositórios, versão de **toda** ferramenta, sementes e paralelização fixas, SHA-256 de entradas e saídas ([DEC-027](07-log-de-execucao.md)) | [D11](../science/02-defeitos-que-alteram-resultado.md#d11), [D17](../science/02-defeitos-que-alteram-resultado.md#d17) | T1 |
+| M2.6 | ✅ Publicado em `Backend/tests/data/reference/` — VARV-49, o único limpo e com delineamento defensável. `make reference-dataset` regenera ([DEC-042](07-log-de-execucao.md)) | [`04-rigor §2`](04-rigor-cientifico.md#2-dataset-de-referência-pré-requisito-de-w3) | T3 |
+| M2.7 | ✅ `make reference-check` (rápido, qualquer máquina) e `make reference-check-full` (reexecuta). Três códigos: 0 satisfeito, 2 M incompleto, 1 invariante violado. **Hoje devolve 2** — invariante 3/3, falta `mafft_raxml` ([DEC-042](07-log-de-execucao.md)) | institui o gate | T3 |
+
+**Composição alvo:** 45 VARV + CMLV/CPXV/TATV como grupo externo declarado. M = 4 métodos de inferência sobre um alinhamento (não 8 — ver [D2](../science/02-defeitos-que-alteram-resultado.md#d2): o denominador 8 conta cópias byte a byte).
+
+**Casos-limite que o dataset deve conter** (é o que expõe os bugs de `C-5*`): árvore não-binária/politomia, `organism` ausente, país fora do dicionário, `;` dentro de string em bloco CQL, duas árvores no mesmo arquivo.
+
+**Gate de M2 — o gate científico, executável:**
+
+```bash
+make reference-check
+# equivalente a:
+#   1. reexecuta os M=4 pipelines sobre Backend/tests/data/reference/
+#   2. confere SHA-256 de toda entrada contra MANIFEST.sha256
+#   3. assere o invariante:
+#        - monofilia de VARV .................. 4/4
+#        - clado P-II (AfOc + Am.Sul) ......... 4/4
+#        - bipartição aninhada de 10 táxons ... 4/4
+#   4. confere contra dendropy/ete3 como oráculo externo
+#   5. nenhum táxon fora de txid10242
+```
+
+**Este comando passa a ser exigido em todo marco seguinte.** Uma refatoração que o quebre é revertida, independentemente de quantos testes unitários passem.
+
+⚠️ **Divergência de versão a resolver antes de reexecutar** ([`08-ficha-de-fatos.md §1`](08-ficha-de-fatos.md#ferramentas-de-bioinformática-no-path)): os logs de VARV registram **FastTree 2.2.0**; a máquina tem **2.1.11**. Ou se pina 2.2.0, ou se declara 2.1.11 como a versão do experimento e se reexecuta tudo. IQ-TREE coincide (2.2.2.6) — a semente, porém, foi gerada pela ferramenta e não fixada pelo pipeline: **reexecutar hoje não reproduz a árvore**. M2.5 resolve.
+
+🔓 **Destravado em 2026-08-24** ([DEC-024](07-log-de-execucao.md)): decisões 2, 3, 4, 5 e 6 tomadas. Os três conjuntos ficam e o UPGMA fica, com `sup` reportado com e sem. A decisão 1 (segundo alinhador) segue aberta e **não bloqueia M2** — ela governa E4 e a correção plena de D1, posteriores a M3.
+
+➕ **M2.5 ganha um requisito** vindo de [D17](../science/02-defeitos-que-alteram-resultado.md#d17): fixar `--threads N --workers 1` no RAxML-NG e registrar o esquema efetivo. Medido: com a mesma semente, mudar só a paralelização produz **RF = 8** entre as árvores. Fixar semente é necessário e não é suficiente.
+
+➕ **A exclusão do RAxML pode ser revertida** em VARV-49, VARV-52 e VARV-121 — o método conclui nesses dados em ~4 min quando a paralelização é fixada. Devolve `M` de 4 para 5 e resolve DM-11.
+
+---
+
+## 5. M3 — Resultado principal
+
+**Meta.** Levar à UI e ao manuscrito o contraste **bootstrap × robustez metodológica**, que é o argumento do artigo e hoje é jogado fora pelo pipeline.
+
+**Por que é o melhor custo-benefício científico do projeto:** o IQ-TREE já roda 1000 réplicas de UFBoot e grava `out/tmp/iqtree_*/*.contree` **com** os valores; o `.nexus` gravado em `out/Trees/` os descarta ([D10](../science/02-defeitos-que-alteram-resultado.md#d10)). **O suporte já foi pago e é desperdiçado.**
+
+| # | Lote | Trilha |
+|---|---|---|
+| M3.1 | Propagar `confidence` do `.contree` ao Nexus, ao `metadata.json` e ao grafo | T1 |
+| M3.2 | Habilitar `-B 1000` no RAxML-NG e `-boot` no FastTree — simetria entre métodos ML | T1 |
+| M3.3 | UI exibe, por clado, **bootstrap e suporte metodológico lado a lado** | T4 |
+| M3.4 | Regenerar as três tabelas cruzadas (VARV-49, VARV-52, VARV-121) por um comando | T3 |
+
+**Gate de M3:**
+
+```bash
+make main-result     # regenera as 3 tabelas UFBoot × suporte metodológico
+```
+
+Assere as duas afirmações do artigo, quantificadas e replicadas:
+
+- **(i)** UFBoot = 100 não garante robustez: 35/86 (VARV-121), 13/27 (VARV-49), 14/30 (VARV-52) sobrevivem à troca de método.
+- **(ii)** UFBoot alto é necessário, não suficiente: **0 de 167** ramos com UFBoot ≥ 95 recuperado por um único pipeline.
+
+Mais: toda árvore ML em `out/Trees/` carrega suporte de ramo; Pearson recalculado (esperado 0,27–0,44).
+
+---
+
+## 6. M4 — Segurança e desempenho · M5 — Estrutural
+
+Estes marcos **não estão no caminho crítico da submissão**, mas são o que decide se a ferramenta é adotável. Rodam em paralelo a M1→M3 desde o fim de M0, em trilhas de lock disjunto.
+
+### M4 — Segurança (W1) e desempenho (W2)
+
+| Bloco | Itens | Trilha |
+|---|---|---|
+| Segurança | Resiliência Neo4j → `503` (`C-3c`/`B-9`); residual de `resolve_within` em `rerun_workflow`/`can_rerun_project`; `S-4` logging estruturado (parar de vazar `str(e)`); `S-5` limites rígidos + `ADMIN_TOKEN` nas rotas administrativas + checagem de `origin` no WebSocket | T2 |
+| Grafo | Credenciais leitura/escrita separadas; `$user_id` parametrizado; restrição de APOC → fecha `S-1` **sem login** ([DEC-004](07-log-de-execucao.md)) | T5 |
+| Desempenho | `asyncio.to_thread` em NCBI (`B-4`) e bioinformática pesada (`B-5`); `psutil interval=None`; reescrita de `stream_workflow_output` com duas tasks + EOF; `treePlot` recebendo `dict` em vez de lista | T2 |
+| Frontend | Índice memoizado (`F-4`); leak de zoom D3 (`F-5`); update incremental do vis-network; tratar `503` na UI | T4 |
+| Grafo/perf | Índices em `uid`/`q.key` justificados por `PROFILE`; `LIMIT` obrigatório no servidor; ingest em transação por lote (`P-3`) | T5 |
+
+**Gate de M4:** bateria [`security-probe`](../skills/security-probe/SKILL.md) verde; Cypher destrutivo recusado na rota de consulta; ingest legítimo continua funcionando; rota administrativa rejeita requisição sem token; **medição antes/depois anexada a cada item de performance** (≥3 repetições, mediana e dispersão, ambiente reportado); `getEventListeners(svg)` estável entre cliques; **nenhum golden snapshot de M0 mudou**; `make reference-check` verde.
+
+### M5 — Estrutural (W4)
+
+| Bloco | Itens | Trilha |
+|---|---|---|
+| Arq-A | `Dockerfile` de backend (micromamba, `QT_QPA_PLATFORM=offscreen`) e frontend (build → nginx com fallback SPA + proxy `/api`, `/ws`); compose full-stack; `conda-lock` | T3 |
+| Arq-B | Quebrar `app.py` em `config`/`logging_conf`/`routers/*`/`services/*`; DI em vez de singleton Neo4j | T2 |
+| Arq-C | `services/http.js` + módulos por domínio; decompor `PhylogeneticTreeViewer`; React Query | T4 |
+| Grafo | Esquema versionado com migrações idempotentes (e o inverso de cada uma); catálogo de consultas predefinidas | T5 |
+
+**Gate de M5:** golden snapshots **idênticos byte a byte** (é refatoração, não mudança de comportamento); `docker compose up` sobe tudo; `grep -rl "localhost:8000" Frontend/` vazio; `make reference-check` verde.
+
+> **Arq-B tem valor de processo além do técnico:** enquanto `app.py` for um monólito de 2 122 linhas, a trilha T2 é **serial** e é o gargalo de paralelismo do projeto inteiro ([§7 da arquitetura](09-arquitetura-de-agentes.md#7-paralelismo--seis-trilhas)). Quebrá-lo multiplica a vazão de todos os marcos seguintes.
+
+---
+
+## 7. M6 — Artefato publicável
+
+**Meta.** Um terceiro reproduz o resultado principal do zero, seguindo só o README.
+
+| Bloco | Itens |
+|---|---|
+| Artefato (A9) | `CITATION.cff` + DOI Zenodo; *code/data availability statements*; README de reprodução em um comando; **manifesto de análise ligando cada figura a script + commit + hash**; benchmark de escalabilidade com ambiente reportado |
+| Manuscrito (A13) | Enquadramento e veículo; mapa afirmação → evidência → limitação; figuras de publicação; carta; pacote de submissão |
+| Métodos (A11 + A6) | Inferência e métricas; Limitações; conferência técnica do que A13 redigiu |
+| Governança (A8) | Declaração de ética/LGPD; política de retenção do demo; Nagoya/SisGen se houver material biológico brasileiro; licença e compatibilidade de dependências |
+
+**Gate de M6:** o checklist completo de [`04-rigor-cientifico §6`](04-rigor-cientifico.md#6-checklist-de-artefato-para-submissão-gate-de-w7); e **nenhuma afirmação do manuscrito sem evidência rastreável no ledger**.
+
+**Definição de sucesso do [plano mestre §2](01-plano-mestre.md), hoje 0 de 5:**
+
+| # | Condição | Fecha em |
+|---|---|---|
+| 1 | `git clone --recursive` + um comando → stack de pé | M5 |
+| 2 | `pytest` + testes do front verdes, cobrindo endpoints e núcleo científico | M0 |
+| 3 | Dataset de referência versionado reproduz os números publicados | **M2** |
+| 4 | Está escrito que dados a ferramenta trata, com que base legal e por quanto tempo | M0.7 + M6 |
+| 5 | Cada figura reproduzível por script + hash + commit | M2.5 + M6 |
+
+---
+
+---
+
+## 8. M7 — Heurísticas de inferência: corretas, parametrizáveis, escaláveis
+
+**Meta.** Auditar a integração de **cada método avançado** — FastTree, IQ-TREE, RAxML-NG, MrBayes — e garantir três coisas que hoje nenhuma delas tem por inteiro: que a chamada esteja **correta** (parâmetros que fazem o que se supõe), **parametrizável** (o experimento decide, não uma constante no código) e **escalável** (o custo cresce de forma previsível e conhecida).
+
+**Por que existe como marco separado.** M1 corrigiu o que o pipeline **calcula depois** que as árvores existem — identidade de clado, suporte, distância. M7 é o degrau anterior: **como as árvores são feitas**. Um erro aqui não é corrigível a jusante, porque a árvore errada já entrou no conjunto. E a evidência acumulada mostra que este degrau nunca foi auditado:
+
+| Achado | O que revelou |
+|---|---|
+| [D17](../science/02-defeitos-que-alteram-resultado.md#d17) | `--threads auto` no RAxML: mesma semente, árvores diferentes (RF = 8); `SIGSEGV` em outra máquina |
+| [D11](../science/02-defeitos-que-alteram-resultado.md#d11) | IQ-TREE gerava a própria semente; reexecutar não reproduzia |
+| [D18](../science/02-defeitos-que-alteram-resultado.md#d18) | o modo `auto` nunca chamava nenhum método avançado, e dizia ter concluído |
+| [D20](../science/02-defeitos-que-alteram-resultado.md#d20) | MrBayes: sem semente, sem verificação de convergência, diretório relativo, `burnin` fixo |
+| medição de 2026-08-25 | parcimônia 25× mais lenta que qualquer método de ML; RAxML é o terceiro mais rápido |
+
+Cada um foi achado por acaso, ao investigar outra coisa. **Nenhum método foi auditado deliberadamente**, e três dos quatro tinham defeito.
+
+**Trilha.** T1 (`BioComp_UFF/**`). **Paralelo:** não bloqueia M2 nem M3, mas **M3 depende de M7.2** — habilitar bootstrap no RAxML e no FastTree é, ao mesmo tempo, o lote M3.2 e um item de auditoria de chamada.
+
+| # | Lote | O que resolve | Origem |
+|---|---|---|---|
+| M7.1 | **Ficha de chamada por método**: para cada um, documentar linha de comando efetiva, o que cada parâmetro faz, o que é fixo, o que é parametrizável e o que deveria ser | dá a linha de base — hoje não existe  — |
+| M7.2 | **Suporte de ramo simétrico**: UFBoot no IQ-TREE já existe; habilitar `--bs-trees` no RAxML-NG e `-boot` no FastTree, com o mesmo número de réplicas declarado | [D10](../science/02-defeitos-que-alteram-resultado.md#d10), e é o M3.2  — |
+| M7.3 | **Modelo de substituição declarado e coerente**: hoje o IQ-TREE recebe `GTR+G` fixo (sem ModelFinder), o RAxML `GTR+G`, o FastTree usa o padrão e o MrBayes `nst=6 rates=gamma`. São quatro decisões separadas que ninguém comparou | `DM-2`  — |
+| M7.4 | **MrBayes correto**: caminho absoluto, semente, `ngen`/`burnin`/`nruns`/`nchains` por configuração, e **recusar a árvore se o ASDSF não indicar convergência** | [D20](../science/02-defeitos-que-alteram-resultado.md#d20)  — |
+| M7.5 | **Parcimônia viável ou declarada inviável**: o construtor do Biopython é Python puro e custa 25× um método de ML. Ou se troca por uma implementação em C (TNT, PAUP\*), ou se declara que a parcimônia só entra em conjuntos pequenos — **com o limite medido, não estimado** | [E7](../science/04-agenda-de-pesquisa.md), `DM-11`  — |
+| M7.6 | **Falha nunca é silenciosa**: todo método que não produzir árvore precisa aparecer no manifesto como *tentado e falhou*, com o motivo. Hoje o `ignore_mode` mistura "excluído de propósito" com "quebrou e foi excluído depois" | [D18](../science/02-defeitos-que-alteram-resultado.md#d18), `DM-11`  — |
+| M7.7 | **Curva de custo calibrada em ≥2 máquinas**: tempo e pico de RSS por método em função de `n` e de **colunas distintas** (não `L` bruto — 259 496 sítios comprimiram para 3 713 padrões). Com pontos de uma máquina só, expoente e deslocamento ficam confundidos: qualquer curva passa por dois pontos. Só com duas máquinas o `fitted=True` é honesto | responde "o que roda em que escala **e em que máquina**" com número | [R2](../respostasUteis/r2.md) |
+| M7.8 | **Eixo de núcleos no modelo de custo**: hoje o modelo só prevê memória, e [D17](../science/02-defeitos-que-alteram-resultado.md#d17) mostrou que o número de núcleos muda o **resultado**, não só o tempo. Registrar o esquema de paralelização efetivo como parte do fingerprint científico, e prever quando ele diverge | torna o resultado comparável entre máquinas | [D17](../science/02-defeitos-que-alteram-resultado.md#d17) |
+
+**Gate de M7 — executável:**
+
+```bash
+# 1. toda chamada de ferramenta está no manifesto, com semente e paralelização
+python - <<'EOF'
+import json; m = json.load(open('.../out/outputs/manifest.json'))
+assert set(m['tools_invoked']) >= {'iqtree2','raxml-ng','FastTree','mb'}
+assert all('seed' in v for v in m['tools_invoked'].values())
+EOF
+
+# 2. duas execuções da mesma entrada produzem os mesmos hashes de árvore
+#    (o teste de reprodutibilidade da skill validar-workflow)
+
+# 3. nenhum método falha em silêncio
+#    manifesto declara, para cada método: executado | ignorado por configuração | falhou (com motivo)
+
+# 4. curva de custo publicada em docs/science/, com ambiente declarado
+```
+
+Mais: **nenhum método entra em `M` sem ter passado por M7.1** — um pipeline cuja chamada ninguém conferiu não é um voto válido no suporte metodológico.
+
+⚠️ **M7.5 e M7.7 exigem a máquina de validação.** M7.1, M7.3, M7.4 e M7.6 são código e podem ser feitos em qualquer lugar.
+
+---
+
+## 9. Limitações honestas deste plano
+
+Escritas aqui porque um plano que não declara o que não sabe é propaganda.
+
+1. **M2 pode falhar, e falhar é informação.** Se o invariante não sobreviver à limpeza taxonômica e ao enraizamento explícito, a conclusão não é "o pipeline está quebrado" — é que o resultado dependia da contaminação. Isso precisa ser reportado, não contornado. O critério de invalidação está em [E3](../science/04-agenda-de-pesquisa.md#e3--◐--varv-49-clean-replicação-depurada-de-li-et-al-2007).
+
+2. **O gate científico só existe depois de M2.** Entre M0 e M2, a única rede é o golden snapshot — que congela bugs junto com o comportamento. É um risco aceito e datado, não um descuido.
+
+3. **M1 muda todos os números publicados.** Não há caminho que corrija D1-D5 e preserve os valores atuais. A escolha é do autor ([decisão 5](08-ficha-de-fatos.md#5-decisões-pendentes-do-usuário-bloqueiam-execução)).
+
+4. **D1 é o item mais caro e não está em nenhum marco.** Corrigir de verdade o braço `clustalo` exige decidir o segundo alinhador ([decisão 1](08-ficha-de-fatos.md#5-decisões-pendentes-do-usuário-bloqueiam-execução)) **e** reexecutar tudo. M2.4 corrige só a *proveniência* (nome honesto), que é barato e obrigatório. O fator alinhador como resultado científico é [E4](../science/04-agenda-de-pesquisa.md#e4--◐--o-fator-alinhador-medido-onde-ele-existe), posterior a M3.
+
+5. **O FPMax pode não ser necessário na escala atual.** Com M ≤ 10, `2^M ≤ 1024` e a enumeração exata é trivial — é o que `workflow/stability/maximal_patterns` já faz. Como o FPMax é o núcleo declarado da pesquisa, [E7](../science/04-agenda-de-pesquisa.md#e7--◐--onde-o-fpmax-passa-a-ser-necessário) precisa achar o ponto de cruzamento. **Ausência de cruzamento também é resultado publicável** — e honesto.
+
+6. **A ferramenta, sozinha, dificilmente entra em veículo de alto impacto.** O que entra é a descoberta que ela viabilizou. A escada realista está em [`../agents/13-escrita-cientifica.md §5`](../agents/13-escrita-cientifica.md). A recomendação permanece: preparar o manuscrito para o degrau que a evidência sustenta hoje (o contraste bootstrap × método, M3), construindo desde já o que o degrau seguinte exige.
+
+---
+
+## 10. Quadro de decisões que destravam o plano
+
+Nenhum agente decide estas seis. Estão em [`08-ficha-de-fatos.md §5`](08-ficha-de-fatos.md#5-decisões-pendentes-do-usuário-bloqueiam-execução) e replicadas aqui com o que cada uma libera:
+
+| # | Decisão | Libera | Urgência |
+|---|---|---|---|
+| ~~**6**~~ | ✅ **Tomada** (DEC-020): sim, com lock e histórico separados | ~~M1.1-M1.3, M2, M3.1-M3.2~~ — destravados |
+| ~~**5**~~ | ✅ **Tomada** (DEC-018): corrigir e re-rodar | ~~merge de M1~~ | — |
+| ~~**4**~~ | ✅ **Tomada** (DEC-024): fica, reportando com e sem | ~~números de suporte~~ | — |
+| ~~**2**~~ | ✅ **Tomada** (DEC-024): fica, como histórico de experimentos e caso de escala | ~~composição de M2~~ | — |
+| ~~**3**~~ | ✅ **Tomada** (DEC-024): fica, como demo didático | ~~composição de M2~~ | — |
+| ~~**1**~~ | ✅ **Tomada** (DEC-036): a biblioteca é **MAFFT + Clustal Omega + MUSCLE**. Substitui a recomendação de duas estratégias do MAFFT | ~~E4~~ | — |
+
+> Sobre a decisão 1: a ficha de fatos registra que o MUSCLE instalado é **3.8.1551, não MUSCLE5**. Isso reforça a recomendação de contrastar duas *estratégias* do MAFFT — não exige instalação nova, e isola melhor a variável de interesse (esforço de refinamento) do que contrastar dois programas com heurísticas independentes.
+
+**Situação em 2026-08-25: as seis estão tomadas.** Nenhuma decisão do usuário bloqueia qualquer marco.
