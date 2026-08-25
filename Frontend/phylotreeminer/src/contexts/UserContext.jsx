@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 
 const UserContext = createContext();
 
@@ -10,7 +9,7 @@ export const UserProvider = ({ children }) => {
     let storedId = localStorage.getItem('phylo_user_id');
     
     if (!storedId) {
-      storedId = uuidv4();
+      storedId = crypto.randomUUID();
       localStorage.setItem('phylo_user_id', storedId);
     }
     

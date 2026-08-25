@@ -555,7 +555,12 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       case "table":
         return <TableView content={modalContent} />;
       case "json_paginated": {
-        return <PaginatedJsonViewer filePath={modalContent?.path} />;
+        return (
+          <PaginatedJsonViewer
+            filePath={modalContent?.path}
+            fileName={modalItem?.name}
+          />
+        );
       }
       case "image":
         return (

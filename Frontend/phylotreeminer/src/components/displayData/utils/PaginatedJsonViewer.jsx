@@ -1,36 +1,71 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, Button, Spin, message, Alert } from "antd";
 import MetadataViewer from "./MetadataViewer";
+import JsonViewer from "./JsonViewer";
 
-const PaginatedJsonViewer = ({ filePath }) => {
+const API_BASE_URL = "http://localhost:8000";
+
+/**
+ * Abre um JSON do explorador de arquivos.
+ *
+ * O backend devolve `kind`, que diz qual é a forma da raiz, e é isso que decide
+ * a apresentação:
+ *
+ *   `array_of_arrays` — é o `metadata.json`: uma árvore por página, com o
+ *                       visualizador de metadados e controles de navegação;
+ *   `array`           — pagina por elemento, com o leitor genérico;
+ *   `object`          — é o `manifest.json`, o `config_backup.json` e qualquer
+ *                       arquivo de configuração: vem inteiro, sem paginação.
+ *
+ * Antes, este componente supunha que todo JSON fosse uma lista de árvores e
+ * rotulava as páginas como "Tree N of M". Um manifesto abria como erro.
+ */
+const PaginatedJsonViewer = ({ filePath, fileName }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentData, setCurrentData] = useState(null);
-  const [loading, setLoading] = useState(false);
-
   const [totalItems, setTotalItems] = useState(1);
+  const [kind, setKind] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [filePath]);
 
   useEffect(() => {
     if (!filePath) return;
 
     const fetchData = async () => {
       setLoading(true);
+      setErro(null);
       try {
-        const API_BASE_URL = "http://localhost:8000";
         const response = await fetch(
           `${API_BASE_URL}/api/file/paginated?path=${encodeURIComponent(filePath)}&index=${currentIndex}`,
         );
 
         if (!response.ok) {
-          throw new Error("Falha ao carregar os dados paginados.");
+          // O backend explica o motivo — arquivo grande demais, índice fora dos
+          // limites, arquivo vazio. Repetir a mensagem dele é mais útil que
+          // inventar "falha ao carregar".
+          let detalhe = `HTTP ${response.status}`;
+          try {
+            const corpo = await response.json();
+            if (corpo?.detail) detalhe = corpo.detail;
+          } catch {
+            /* resposta sem corpo JSON */
+          }
+          throw new Error(detalhe);
         }
 
         const result = await response.json();
         setCurrentData(result.content);
-        setTotalItems(result.totalItems);
+        setTotalItems(result.totalItems ?? 1);
+        setKind(result.kind ?? null);
       } catch (error) {
-        console.error("Erro ao buscar página JSON:", error);
-        message.error("Erro ao carregar o índice solicitado.");
+        console.error("Erro ao buscar JSON:", error);
+        setErro(error.message);
         setCurrentData(null);
+        message.error(error.message);
       } finally {
         setLoading(false);
       }
@@ -41,75 +76,66 @@ const PaginatedJsonViewer = ({ filePath }) => {
 
   if (loading && !currentData) {
     return (
-      <Card style={{ marginTop: "16px", padding: "50px", textAlign: "center" }}>
-        <Spin size="large" tip="Carregando árvore..." />
+      <Card style={{ marginTop: 16, padding: 50, textAlign: "center" }}>
+        <Spin size="large" tip="Carregando…" />
       </Card>
     );
   }
 
-  if (!currentData && !loading) {
+  if (erro) {
     return (
-      <Card
-        style={{
-          marginTop: "16px",
-          padding: "16px",
-          color: "#d32f2f",
-          backgroundColor: "#ffebee",
-        }}
-      >
-        <strong>Erro:</strong> The metadata could not be processed or the file is empty.
+      <Card style={{ marginTop: 16 }}>
+        <Alert type="error" showIcon message="Não foi possível abrir o arquivo" description={erro} />
       </Card>
     );
   }
+
+  if (!currentData) {
+    return (
+      <Card style={{ marginTop: 16 }}>
+        <Alert type="warning" showIcon message="Arquivo sem conteúdo para exibir." />
+      </Card>
+    );
+  }
+
+  const ehMetadado = kind === "array_of_arrays";
+  const paginado = totalItems > 1;
+  const rotulo = ehMetadado ? "Árvore" : "Item";
 
   const handlePrev = () => setCurrentIndex((prev) => Math.max(0, prev - 1));
-  const handleNext = () =>
-    setCurrentIndex((prev) => Math.min(totalItems - 1, prev + 1));
+  const handleNext = () => setCurrentIndex((prev) => Math.min(totalItems - 1, prev + 1));
 
   return (
-    <Card style={{ marginTop: "16px", padding: "16px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "16px",
-          paddingBottom: "16px",
-          borderBottom: "1px solid #eee",
-        }}
-      >
-        <Button
-          onClick={handlePrev}
-          disabled={currentIndex === 0 || loading}
-          style={{ padding: "6px 12px" }}
+    <Card style={{ marginTop: 16 }}>
+      {paginado && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 16,
+            paddingBottom: 16,
+            borderBottom: "1px solid #eee",
+          }}
         >
-          Back
-        </Button>
-
-        <span style={{ fontWeight: "bold" }}>
-          Tree {currentIndex + 1} of {totalItems}
-        </span>
-
-        <Button
-          onClick={handleNext}
-          disabled={currentIndex === totalItems - 1 || loading}
-          style={{ padding: "6px 12px" }}
-        >
-          Next
-        </Button>
-      </div>
+          <Button onClick={handlePrev} disabled={currentIndex === 0 || loading}>
+            Anterior
+          </Button>
+          <span style={{ fontWeight: 600 }}>
+            {rotulo} {currentIndex + 1} de {totalItems}
+          </span>
+          <Button onClick={handleNext} disabled={currentIndex === totalItems - 1 || loading}>
+            Próxima
+          </Button>
+        </div>
+      )}
 
       <Spin spinning={loading}>
-        <div style={{ overflowX: "auto", maxHeight: "60vh" }}>
-          {loading ? (
-            <Alert
-              message="Loading"
-              description="This may take a while."
-              type="info"
-              showIcon
-            />
-          ) : (
+        <div style={{ overflowX: "auto" }}>
+          {ehMetadado ? (
             <MetadataViewer data={currentData} />
+          ) : (
+            <JsonViewer data={currentData} nomeArquivo={fileName} />
           )}
         </div>
       </Spin>

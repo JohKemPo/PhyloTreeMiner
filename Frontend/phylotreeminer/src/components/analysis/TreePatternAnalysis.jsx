@@ -385,6 +385,21 @@ const TreePatternAnalysis = ({ projectName }) => {
         style={{ marginBottom: 16 }}
       />
 
+      {pattern_statistics.discarded_by_size > 0 && (
+        <Alert
+          message={`${pattern_statistics.discarded_by_size} of ${pattern_statistics.patterns_in_source} patterns are hidden by the size filter`}
+          description={
+            `Sizes discarded: ${pattern_statistics.discarded_sizes.join(", ")}. ` +
+            `Current filter keeps patterns between ${pattern_statistics.size_filter.min} and ` +
+            `${pattern_statistics.size_filter.max} items. The largest patterns carry the most ` +
+            `phylogenetic content, so this filter can hide precisely what matters.`
+          }
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col span={6}>
           <Card>
@@ -398,8 +413,8 @@ const TreePatternAnalysis = ({ projectName }) => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="Unique Signatures"
-              value={pattern_statistics.unique_signatures_count}
+              title="Method-Sensitive Patterns"
+              value={pattern_statistics.method_sensitive_count}
               valueStyle={{ color: "#cf1322" }}
             />
           </Card>
@@ -407,8 +422,8 @@ const TreePatternAnalysis = ({ projectName }) => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="Quasi-Invariant Patterns"
-              value={pattern_statistics.quasi_invariant_count}
+              title="Topologically Robust Patterns"
+              value={pattern_statistics.topologically_robust_count}
               valueStyle={{ color: "#389e0d" }}
             />
           </Card>

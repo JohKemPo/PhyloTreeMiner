@@ -21,7 +21,6 @@ import {
   DeleteOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import { width } from "@mui/system";
 
 const { Text } = Typography;
 

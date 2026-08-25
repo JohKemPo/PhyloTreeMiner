@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "lint:ratchet": "node scripts/lint-ratchet.mjs",
+    "lint:baseline": "node scripts/lint-ratchet.mjs --write"
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.4",
@@ -30,6 +33,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/leaflet": "^1.9.20",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
@@ -38,8 +43,10 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
+    "jsdom": "^25.0.1",
     "tailwindcss": "^4.1.10",
     "vite": "^6.3.6",
-    "vite-plugin-svgr": "^4.3.0"
+    "vite-plugin-svgr": "^4.3.0",
+    "vitest": "^2.1.9"
   }
 }

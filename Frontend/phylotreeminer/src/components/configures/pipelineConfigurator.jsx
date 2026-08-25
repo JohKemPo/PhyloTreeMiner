@@ -35,6 +35,7 @@ import {
   UpCircleOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import AlignerSelect from "./AlignerSelect";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -717,12 +718,14 @@ const PipelineConfigurator = () => {
                 <Form.Item
                   name={["trees", "alignment_method"]}
                   label="Alignment Method"
-                  initialValue="MAFFT"
+                  initialValue="mafft"
                 >
-                  <Select>
-                    <Option value="mafft">MAFFT</Option>
-                    <Option value="clustalw">ClustalW</Option>
-                  </Select>
+                  {/* Antes eram duas opções fixas, e uma delas — `clustalw` —
+                      não é implementada pelo pipeline: escolhê-la fazia a
+                      execução falhar. O seletor agora lê a biblioteca do
+                      backend e avisa quando o alinhador pode não concluir
+                      neste conjunto, sem bloquear a escolha. */}
+                  <AlignerSelect datasetPath={pipelineData?.dataset?.name} />
                 </Form.Item>
               </Col>
               <Col span={6}>

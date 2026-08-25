@@ -171,7 +171,7 @@ const ProjectGallery = ({ onProjectSelect }) => {
     const intervalId = setInterval(() => {
       // console.log("Atualizando status dos jobs...");
       fetchJobsData();
-    }, 8000);
+    }, 30000);
 
     return () => clearInterval(intervalId);
   }, [fetchJobsData]);
