@@ -1,4 +1,7 @@
-.claude/
+# `.claude/` é versionado: os contratos de agente e as skills precisam viajar
+# junto do código, senão cada máquina reinventa o processo. Fica de fora só o
+# worktree, que é uma cópia do próprio repositório dentro dele.
+.claude/worktrees/
 .vscode/*
 __pycache__/*
 
