@@ -1,45 +1,56 @@
+import json
+import pathlib
+
 from ete3 import Tree, TreeStyle, NodeStyle, TextFace, CircleFace
 
-# Mapeamento baseado nos clusters definidos na legenda do estudo base
-REGION_MAPPING = {
-    # Americas
-    "Jamaica": "Americas",
-    "USA": "Americas",
-    "Dominican Republic": "Americas",
-    "Mexico": "Americas",
-    "Brazil": "Americas",
-    "Colombia": "Americas",
-    
-    # Africa
-    "Uganda": "Africa",
-    "Senegal": "Africa",
-    
-    # South-East Asia (Agrupamento semântico do estudo)
-    "Thailand": "South-East Asia",
-    "Philippines": "South-East Asia",
-    "Malaysia": "South-East Asia",
-    "Micronesia": "South-East Asia", 
-    
-    # Clusters Isolados
-    "Singapore": "Singapore",
-    "French Polynesia": "French Polynesia"
-}
+_REGIONS_PATH = pathlib.Path(__file__).resolve().parents[1] / "data" / "regions.json"
+
+
+def _load_region_index(path=_REGIONS_PATH):
+    """Índice país -> região, case-insensitive, com resolução de alias.
+
+    Fonte única de verdade (D16): substitui a tabela antiga que só cobria os
+    14 países do estudo de Zika. Os aliases existem porque os isolados de
+    Variola são de 1944-1977 e trazem nomes de países da época (ex.: Dahomey,
+    Zaire, USSR).
+    """
+    dados = json.loads(path.read_text(encoding="utf-8"))
+    unknown = dados.get("unknown_label", "Unknown")
+
+    paises = dict(dados.get("regions", {}))
+    paises.update(dados.get("regions_extra", {}))
+    indice = {nome.strip().lower(): regiao for nome, regiao in paises.items()}
+
+    aliases = {alias.strip().lower(): canonico
+               for alias, canonico in dados.get("aliases", {}).items()}
+
+    return indice, aliases, unknown
+
+
+_REGION_INDEX, _COUNTRY_ALIASES, _UNKNOWN_REGION = _load_region_index()
+
 
 def map_country_to_region(country: str) -> str:
-    """
-    Mapeia o país extraído para a região/cluster correspondente.
+    """Mapeia o país extraído para a região/sub-região correspondente.
+
+    Busca case-insensitive: primeiro o nome direto, depois via alias
+    histórico. País ausente ou desconhecido nunca é inferido — devolve
+    "Unknown" (regra de 03-metricas.md §5: metadado ausente é ausente).
     """
     if not country or country == "Unknown":
-        return "Unknown"
-        
-    # Normalização básica: remove espaços em branco extras e capitaliza a primeira letra de cada palavra
-    country_clean = country.strip().title() 
-    
-    # Correção de casos específicos (ex: USA geralmente é maiúsculo)
-    if country_clean.upper() == "USA":
-        country_clean = "USA"
-        
-    return REGION_MAPPING.get(country_clean, "Unknown")
+        return _UNKNOWN_REGION
+
+    chave = country.strip().lower()
+
+    regiao = _REGION_INDEX.get(chave)
+    if regiao is not None:
+        return regiao
+
+    canonico = _COUNTRY_ALIASES.get(chave)
+    if canonico is not None:
+        return _REGION_INDEX.get(canonico.strip().lower(), _UNKNOWN_REGION)
+
+    return _UNKNOWN_REGION
 
 def render_annotated_tree(tree_file, metadata_dict, output_file="tree_plot.png"):
     """
@@ -55,13 +66,22 @@ def render_annotated_tree(tree_file, metadata_dict, output_file="tree_plot.png")
     t = Tree(tree_file, format=0) 
 
     # 2. Definir o mapeamento de cores para os clusters (Localização)
+    # Paleta agrupada por continente (mesma família de matiz, variando em
+    # luminosidade) para que a região exata seja secundária e o continente
+    # seja reconhecível à primeira vista.
     color_map = {
-        "Americas": "#D35400",          # Laranja/Marrom
-        "French Polynesia": "#E74C3C",  # Vermelho
-        "Singapore": "#F1C40F",         # Amarelo
-        "South-East Asia": "#8E44AD",   # Roxo
-        "Africa": "#7F8C8D",            # Cinza
-        "Unknown": "#BDC3C7"            # Cinza claro para dados faltantes
+        "Northern Africa": "#D35400", "Western Africa": "#E67E22",
+        "Middle Africa": "#CA6F1E", "Eastern Africa": "#A04000",
+        "Southern Africa": "#935116",
+        "Western Asia": "#8E44AD", "Central Asia": "#A569BD",
+        "Southern Asia": "#6C3483", "Eastern Asia": "#5B2C6F",
+        "South-Eastern Asia": "#7D3C98",
+        "Eastern Europe": "#2471A3", "Northern Europe": "#1B4F72",
+        "Southern Europe": "#2E86C1", "Western Europe": "#21618C",
+        "Northern America": "#117864", "Central America": "#148F77",
+        "Caribbean": "#1E8449", "South America": "#0B5345",
+        "Oceania": "#B7950B",
+        "Unknown": "#BDC3C7"
     }
 
     # 3. Configurar o estilo geral da árvore

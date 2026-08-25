@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 
 from typing import List, Dict, Literal, Optional, Any, Tuple
-import os, datetime, mimetypes, asyncio, re, psutil, json, ijson, random, glob, zipfile 
+import os, sys, datetime, mimetypes, asyncio, re, psutil, json, ijson, random, glob, zipfile 
 import pandas as pd
 from collections import defaultdict, Counter
 import threading
@@ -33,8 +33,27 @@ PROJECTS_ROOT = os.path.join(PATH_BASE_WORKFLOW, "projects")
 
 WORKFLOW_SCRIPT_PATH = os.path.join(PATH_BASE_WORKFLOW, "workflow.py")
 
+# O registro de alinhadores vive no submódulo, junto do código que os executa.
+# Duplicar a tabela aqui criaria dois universos de verdade sobre os mesmos
+# limites — que é exatamente o defeito D5, agora em outro assunto.
+if PATH_BASE_WORKFLOW not in sys.path:
+    sys.path.insert(0, PATH_BASE_WORKFLOW)
+from workflow.alignment.aligners import (ALIGNERS, memoria_disponivel_bytes,
+                                         viability as aligner_viability)
+
 NCBI_WORK_DIR = os.path.join(BASE_DIR, "temp_ncbi")
 os.makedirs(NCBI_WORK_DIR, exist_ok=True)
+
+def resolve_within(base: str, *parts: str) -> str:
+    """Resolve base/parts e garante que o resultado permanece dentro de base."""
+    base = os.path.abspath(base)
+    target = os.path.abspath(os.path.join(base, *parts))
+    try:
+        if os.path.commonpath([base, target]) != base:
+            raise HTTPException(status_code=403, detail="Acesso negado: caminho fora do diretório permitido.")
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Acesso negado: caminho fora do diretório permitido.")
+    return target
 
 if not os.path.exists(PROJECTS_ROOT) or not os.path.isdir(PROJECTS_ROOT):
     raise RuntimeError(f"O diretório base de projetos não foi encontrado em: {PROJECTS_ROOT}")
@@ -63,9 +82,12 @@ ncbi_service = NCBIAcquisition(
     data_root=DATA_ROOT
 )
 
+_ORIGENS_PADRAO = "http://localhost:5173,http://127.0.0.1:5173"
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", _ORIGENS_PADRAO).split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -141,19 +163,7 @@ class NCBISearchRequest(BaseModel):
     query: str = Field(..., description="Termo para busca de espécies")
     retmax: int = Field(10, description="Número máximo de resultados")
 
-class TreeAnalysisRequest(BaseModel):
-    min_support: float = Field(0.1, description="Suporte mínimo para considerar padrões")
-    max_support: float = Field(0.9, description="Suporte máximo para considerar padrões quase-invariantes")
-    min_pattern_size: int = Field(2, description="Tamanho mínimo dos padrões")
-    max_pattern_size: int = Field(10, description="Tamanho máximo dos padrões")
 
-class PatternAnalysisResult(BaseModel):
-    unique_signatures: List[Dict]
-    quasi_invariant_patterns: List[Dict]
-    pattern_statistics: Dict
-    tree_coverage: Dict
-    
-    
 #  WebSocket para Monitoramento de Progresso 
 class ProgressConnectionManager:
     """Gerencia as conexões de WebSocket por projeto."""
@@ -308,13 +318,14 @@ async def run_workflow(project_name: str, workflow_config: WorkflowConfig):
         HTTPException 409: Se já houver um workflow em execução para o mesmo projeto.
         HTTPException 500: Se ocorrer falha ao iniciar o processo.
     """
-    project_path = os.path.abspath(os.path.join(PROJECTS_ROOT, project_name))
-    print(project_path)
-    # if not project_path.startswith(PROJECTS_ROOT) or not os.path.isdir(project_path):
-    #     raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+    if not re.match(r'^[A-Za-z0-9_-]+$', project_name):
+        raise HTTPException(status_code=400, detail="Nome de projeto inválido.")
+    project_path = resolve_within(PROJECTS_ROOT, project_name)
+    if not os.path.isdir(project_path):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
-    # if project_name in running_workflows:
-    #     raise HTTPException(status_code=409, detail=f"O workflow para o projeto '{project_name}' já está em execução.")
+    if project_name in running_workflows:
+        raise HTTPException(status_code=409, detail=f"O workflow para o projeto '{project_name}' já está em execução.")
 
     config_dict = workflow_config.configs
     data_input_folder = config_dict['tree_config']['input_path']
@@ -353,6 +364,8 @@ async def run_workflow(project_name: str, workflow_config: WorkflowConfig):
 
         return {"message": f"Workflow para o projeto '{project_name}' iniciado com sucesso."}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Falha ao iniciar o workflow: {e}")
 
@@ -361,10 +374,12 @@ async def rerun_workflow(project_name: str):
     """
     Re-executa um workflow existente usando as configurações salvas.
     """
-    project_path = os.path.abspath(os.path.join(PROJECTS_ROOT, project_name))
+    if not re.match(r'^[A-Za-z0-9_-]+$', project_name):
+        raise HTTPException(status_code=400, detail="Nome de projeto inválido.")
+    project_path = resolve_within(PROJECTS_ROOT, project_name)
     config_backup_path = os.path.join(project_path, "out", "outputs", "config_backup.json")
-    
-    if not project_path.startswith(PROJECTS_ROOT) or not os.path.isdir(project_path):
+
+    if not os.path.isdir(project_path):
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     
     if not os.path.exists(config_backup_path):
@@ -398,6 +413,8 @@ async def rerun_workflow(project_name: str):
 
         return {"message": f"Workflow do projeto '{project_name}' reexecutado com sucesso."}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Falha ao reexecutar o workflow: {e}")
 
@@ -406,10 +423,12 @@ async def can_rerun_project(project_name: str):
     """
     Verifica se um projeto pode ser reexecutado (tem configurações salvas).
     """
-    project_path = os.path.abspath(os.path.join(PROJECTS_ROOT, project_name))
+    if not re.match(r'^[A-Za-z0-9_-]+$', project_name):
+        raise HTTPException(status_code=400, detail="Nome de projeto inválido.")
+    project_path = resolve_within(PROJECTS_ROOT, project_name)
     config_backup_path = os.path.join(project_path, "out", "outputs", "config_backup.json")
-    
-    if not project_path.startswith(PROJECTS_ROOT) or not os.path.isdir(project_path):
+
+    if not os.path.isdir(project_path):
         return {"can_rerun": False, "reason": "Projeto não encontrado"}
     
     if not os.path.exists(config_backup_path):
@@ -482,6 +501,8 @@ async def get_owid_metadata(request: Request):
         analyzer = GenericOWIDAnalyzer(data)
         report = analyzer.generate_comprehensive_report()
         return JSONResponse(content=report)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao processar JSON: {str(e)}")
 
@@ -502,7 +523,7 @@ def build_metadata_index(metadata_path):
     for node in iter_metadata_nodes(metadata_path):
 
         _, annotations, features, qualifiers = get_metadata_node(node)
-        accession=node['newick'].split('.')[0]
+        accession=accession_base(node['newick'])
         info = get_node_information(annotations, features, qualifiers, accession=accession)
 
         nodes.append(info)
@@ -570,30 +591,82 @@ def get_metadata_cache(metadata_path: str):
 
         return data
     
+def accession_base(label: str) -> str:
+    """Acesso sem a versão.
+
+    IQ-TREE e RAxML gravam o rótulo truncado em 10 caracteres pelo limite de
+    nome do PHYLIP: `NC_008030.1` vira `NC_008030.` (D13). Os dois rótulos
+    designam o mesmo registro do GenBank, e é por este acesso que os dois se
+    reencontram."""
+    return label.split('.')[0] if label else label
+
+
+def _riqueza_metadado(node: dict) -> tuple:
+    """Quanto metadado real o registro carrega. Ordena registros do mesmo
+    acesso: o rótulo truncado vem sempre com `features` vazio."""
+    metadata = node.get('metadata') or {}
+    return (len(metadata.get('features') or []),
+            len(metadata.get('annotations') or {}))
+
+
 def iter_metadata_nodes(file_path: str, only_first: bool = True, iter_tree: bool = False):
-    accessions = set()
-    
-    with open(file_path, 'rb') as f:
-        for base_node in ijson.items(f, 'item.item'): 
-            if isinstance(base_node, dict):
-                if iter_tree: 
+    """Terminais do metadata.json, um por acesso, com o registro mais rico.
+
+    D13 — o arquivo guarda cada terminal uma vez por árvore, e as árvores de
+    IQ-TREE e RAxML trazem o rótulo truncado, sem `features`. Ler só a
+    primeira árvore (o comportamento anterior) descartava metadado genuíno
+    sempre que essa árvore era uma delas: em VARV-6 a primeira é
+    `clustalo_raxml` e 3 dos 6 táxons — incluindo `NC_001611`, o genoma de
+    referência de Variola — chegavam à API sem organismo, país, hospedeiro
+    nem data.
+
+    Por isso lê-se árvore a árvore, guardando o registro mais rico de cada
+    acesso, e para-se na primeira árvore em que nenhum táxon esteja vazio.
+    Quando a primeira árvore já está completa — o caso de todos os projetos
+    de Zika e de VARV-49 — o custo é idêntico ao anterior.
+
+    `only_first` não tem efeito: no código anterior o `continue` do ramo
+    `iter_tree` pulava o `break`, e o ramo de terminais agora decide sozinho
+    quando parar. Mantido só para não quebrar chamadas existentes.
+    """
+    if iter_tree:
+        with open(file_path, 'rb') as f:
+            for base_node in ijson.items(f, 'item.item'):
+                if isinstance(base_node, dict):
                     yield base_node
-                    continue
-                for tree_name, tree_content in base_node.items():
-                    for subtree_name, subtree_content in tree_content.items():
-                        if isinstance(subtree_content, dict) and 'data_terminals' in subtree_content:
-                            for node in subtree_content['data_terminals']:
-                                accession = node['newick']
-                                if accession and accession not in accessions:
-                                    accessions.add(accession)
-                                    yield node
-                                
-            # elif isinstance(base_node, list):
-            #     for n in base_node:
-            #         yield n
-                    
-            if only_first: break
-                    
+        return
+
+    # acesso -> (riqueza, ordem de primeira aparição, nó)
+    melhores = {}
+
+    with open(file_path, 'rb') as f:
+        for base_node in ijson.items(f, 'item.item'):
+            if not isinstance(base_node, dict):
+                continue
+            for tree_name, tree_content in base_node.items():
+                for subtree_name, subtree_content in tree_content.items():
+                    if isinstance(subtree_content, dict) and 'data_terminals' in subtree_content:
+                        for node in subtree_content['data_terminals']:
+                            rotulo = node.get('newick')
+                            if not rotulo:
+                                continue
+                            acesso = accession_base(rotulo)
+                            riqueza = _riqueza_metadado(node)
+                            anterior = melhores.get(acesso)
+                            if anterior is None:
+                                melhores[acesso] = (riqueza, len(melhores), node)
+                            elif riqueza > anterior[0]:
+                                melhores[acesso] = (riqueza, anterior[1], node)
+
+            if melhores and all(r > (0, 0) for r, _, _ in melhores.values()):
+                break
+
+    # Ordem de primeira aparição no arquivo: determinística, e a mesma que a
+    # versão anterior produzia (04-rigor-cientifico §4).
+    for _, (_, _, node) in sorted(melhores.items(), key=lambda kv: kv[1][1]):
+        yield node
+
+
 def get_metadata_node(node: dict): 
     """
     Extrai campos 
@@ -625,34 +698,30 @@ def get_node_information(annotations, features, qualifiers, accession: str):
     if accessionId == 'Unknown':
         accessionId = accession
         
-    lineage = annotations.get("organism", 'Unknown') or annotations.get("source", 'Unknown')
+    lineage = annotations.get("organism") or annotations.get("source") or "Unknown"
 
     isolate = qualifiers.get("isolate", ["Unknown"])
 
     host_list = qualifiers.get("host", ["Unknown"])
-    host = host_list[0] if isinstance(host_list, list) else host_list
+    host_raw = host_list[0] if isinstance(host_list, list) else host_list
+    # O GenBank permite anexar atributos estruturados após ';' (sex, age, breed).
+    # Não faz parte do nome do organismo; mantê-los fragmenta hospedeiros
+    # idênticos em entradas distintas (D12d).
+    host = host_raw.split(';')[0].strip() if host_raw else host_raw
 
+    # Um metadado ausente é ausente — não é inferido de outro campo (D12a/b).
+    # `strain` é um identificador de isolado, não uma localização nem uma data;
+    # extrair país/ano dele por regex já produziu falsos positivos (ex.:
+    # "China Horn 1948; Sabin Lab" -> país "China Horn", que não existe).
     geo_loc = qualifiers.get("geo_loc_name", [None])[0]
-    
-    strain_info = qualifiers.get("strain", [""])[0]
-    if not geo_loc:
-        # Fallback: Tenta extrair do 'strain' via Regex se geo_loc_name falhar
-        # Regex para buscar algo como "Brazil/2016" ou "[Brazil 2016]"
-        match = re.search(r'([a-zA-Z\s]+)', strain_info)
-        country = match.group(1).strip() if match else "Unknown"
-    else:
-        # geo_loc_name geralmente vem como "Country: State/City"
-        country = geo_loc.split(':')[0].strip()
+    country = geo_loc.split(':')[0].strip() if geo_loc else "Unknown"
 
     region = map_country_to_region(country)
 
     coll_date = qualifiers.get("collection_date", [None])[0]
-    raw_date = coll_date if coll_date else strain_info
-    
-    
     year = "Unknown Date"
-    if raw_date:
-        year_match = re.search(r'\d{4}', raw_date)
+    if coll_date:
+        year_match = re.search(r'\d{4}', coll_date)
         year = year_match.group(0) if year_match else "Unknown Date"
         
     return {
@@ -680,6 +749,8 @@ async def search_tree_nodes(
 
         return nodes
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -701,6 +772,8 @@ async def get_node_details(project_name: str, node_id: str):
             raise HTTPException(status_code=404, detail="Node not found in metadata")
 
         return node
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -717,6 +790,8 @@ async def get_tree_insights(project_name: str):
         cache = get_metadata_cache(metadata_path)
 
         return cache["insights"]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -740,6 +815,8 @@ async def get_tree_metadata(project_name: str):
 
         return [metadata[0][0]]
             
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading metadata: {e}")
 
@@ -763,6 +840,8 @@ async def generate_tree_plot(project_name: str):
             try:
                 print("Convertendo arquivo NEXUS para Newick...")
                 Phylo.convert(nexus_path, 'nexus', tree_path, 'newick')
+            except HTTPException:
+                raise
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Erro ao converter NEXUS para Newick: {str(e)}")
         else:
@@ -789,6 +868,8 @@ async def generate_tree_plot(project_name: str):
         # Retorna o arquivo binário da imagem gerada
         return FileResponse(plot_path, media_type="image/png")
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar a visualização: {str(e)}")
 
@@ -833,10 +914,7 @@ async def browse_path(path: str = Query("", description="O caminho relativo a se
         HTTPException 403: Tentativa de acessar diretórios fora de `PROJECTS_ROOT`.
         HTTPException 404: Caminho inexistente ou não é diretório.
     """
-    requested_path = os.path.abspath(os.path.join(PROJECTS_ROOT, path))
-
-    if not requested_path.startswith(PROJECTS_ROOT):
-        raise HTTPException(status_code=403, detail="Acesso negado: tentativa de acessar um caminho inválido.")
+    requested_path = resolve_within(PROJECTS_ROOT, path)
 
     if not os.path.exists(requested_path) or not os.path.isdir(requested_path):
         raise HTTPException(status_code=404, detail="Caminho não encontrado ou não é um diretório.")
@@ -884,27 +962,80 @@ async def inputs_data_path(path: str = Query("", description="O caminho relativo
     return items
 
 
-def get_json_total_items(file_path: str):
+#: Acima disto, um JSON não é carregado inteiro na memória para pré-visualização.
+#: Os `metadata.json` chegam a 3,2 GB — lê-los de uma vez derruba o processo.
+MAX_JSON_INLINE_BYTES = 8 * 1024 * 1024
+
+
+def json_root_kind(file_path: str) -> str:
+    """
+    Descobre a forma da raiz de um JSON sem carregá-lo.
+
+    O explorador precisa abrir três coisas diferentes: o `metadata.json`, que é
+    uma lista de listas de árvores e tem gigabytes; e os `manifest.json` e
+    `config_backup.json`, que são objetos de poucos KB. Antes, a paginação era
+    fixa no prefixo `item.item` e **todo JSON que não fosse lista de listas
+    devolvia 404 dizendo que o arquivo estava vazio** — que é o oposto do que
+    acontecia.
+
+    Lê apenas os dois primeiros eventos do parser incremental, então o custo
+    independe do tamanho do arquivo.
+
+    Return
+    ------
+    str
+        ``"object"``, ``"array_of_arrays"``, ``"array"``, ``"scalar"``,
+        ``"empty"`` (arquivo vazio ou só espaços) ou ``"invalid"`` (não é JSON).
+        Arquivo malformado é um estado próprio, e não um 500: o explorador
+        precisa dizer ao usuário o que há de errado com o arquivo.
+    """
+    if os.path.getsize(file_path) == 0:
+        return "empty"
+
+    with open(file_path, 'rb') as f:
+        eventos = ijson.parse(f)
+        try:
+            _, primeiro, _ = next(eventos)
+        except StopIteration:
+            return "empty"
+        except ijson.JSONError:
+            return "invalid"
+
+        if primeiro == "start_map":
+            return "object"
+        if primeiro != "start_array":
+            return "scalar"
+
+        try:
+            _, segundo, _ = next(eventos)
+        except StopIteration:
+            return "array"
+        except ijson.JSONError:
+            return "invalid"
+        return "array_of_arrays" if segundo == "start_array" else "array"
+
+
+def get_json_total_items(file_path: str, prefixo: str = "item.item"):
     """
     Obtém o total de itens de um JSON iterável.
     Usa cache baseado no tempo de modificação do arquivo para evitar reprocessamento.
     """
     file_mtime = os.path.getmtime(file_path)
-    
+    chave = (file_path, prefixo)
+
     with json_count_lock:
-        cache_entry = json_count_cache.get(file_path)
-        
+        cache_entry = json_count_cache.get(chave)
+
         if cache_entry and cache_entry["mtime"] == file_mtime:
             return cache_entry["total_items"]
-    
-    print(f"    Construindo cache de contagem para {file_path}...")
+
     total = 0
     with open(file_path, 'rb') as f:
-        for _ in ijson.items(f, 'item.item'):
+        for _ in ijson.items(f, prefixo):
             total += 1
             
     with json_count_lock:
-        json_count_cache[file_path] = {
+        json_count_cache[chave] = {
             "mtime": file_mtime,
             "total_items": total
         }
@@ -917,40 +1048,85 @@ async def get_paginated_json(
     index: int = Query(0, description="Índice do item no array JSON (0-based).")
 ):
     """
-    Retorna apenas o item específico do array JSON usando leitura iterativa e cache de contagem.
+    Devolve um JSON para pré-visualização, paginando quando ele é grande demais
+    para caber numa resposta.
+
+    A forma da raiz decide o modo (`json_root_kind`):
+
+    ==================  ====================================================
+    `kind`              Comportamento
+    ==================  ====================================================
+    `array_of_arrays`   `metadata.json` — pagina por árvore, um item por vez
+    `array`             pagina por elemento
+    `object`            devolve inteiro; é o caso de `manifest.json` e
+                        `config_backup.json`, que têm poucos KB
+    ==================  ====================================================
+
+    O campo `kind` vai na resposta porque o cliente precisa dele para decidir se
+    mostra controles de paginação e qual visualizador usar — um manifesto não é
+    uma árvore.
     """
-    full_path = os.path.abspath(os.path.join(PROJECTS_ROOT, path))
-    
-    if not full_path.startswith(PROJECTS_ROOT):
-        raise HTTPException(status_code=403, detail="Acesso negado.")
+    full_path = resolve_within(PROJECTS_ROOT, path)
     if not os.path.isfile(full_path):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
 
     try:
-        total_items = get_json_total_items(full_path)
-        
+        kind = json_root_kind(full_path)
+
+        if kind == "empty":
+            raise HTTPException(status_code=404, detail="O arquivo JSON está vazio.")
+        if kind == "invalid":
+            raise HTTPException(status_code=400, detail="O arquivo não contém JSON válido.")
+
+        if kind in ("object", "scalar"):
+            tamanho = os.path.getsize(full_path)
+            if tamanho > MAX_JSON_INLINE_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(f"JSON de {tamanho / 1e6:.1f} MB é grande demais para "
+                            f"pré-visualização inteira (limite {MAX_JSON_INLINE_BYTES / 1e6:.0f} MB)."))
+            try:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    conteudo = json.load(f)
+            except json.JSONDecodeError as e:
+                # Arquivo corrompido é 400, não 500: o problema está no arquivo,
+                # e o explorador precisa poder dizer isso a quem clicou nele.
+                raise HTTPException(status_code=400,
+                                    detail=f"O arquivo não contém JSON válido: {e}")
+            return {"content": conteudo, "currentIndex": 0, "totalItems": 1, "kind": kind}
+
+        prefixo = "item.item" if kind == "array_of_arrays" else "item"
+        try:
+            total_items = get_json_total_items(full_path, prefixo)
+        except ijson.JSONError as e:
+            raise HTTPException(status_code=400,
+                                detail=f"O arquivo não contém JSON válido: {e}")
+
         if total_items == 0:
-            raise HTTPException(status_code=404, detail="O arquivo JSON está vazio ou não é um array válido.")
+            raise HTTPException(status_code=404, detail="O arquivo JSON está vazio.")
         if index >= total_items or index < 0:
             raise HTTPException(status_code=404, detail=f"Índice {index} fora dos limites (0 a {total_items - 1}).")
 
         target_item = None
-        
+
         with open(full_path, 'rb') as f:
-            for i, item in enumerate(ijson.items(f, 'item.item')):
+            for i, item in enumerate(ijson.items(f, prefixo)):
                 if i == index:
                     target_item = item
-                    break 
-        
+                    break
+
         if target_item is None:
             raise HTTPException(status_code=404, detail="Índice não encontrado no arquivo.")
-            
+
         return {
             "content": target_item,
             "currentIndex": index,
-            "totalItems": total_items
+            "totalItems": total_items,
+            "kind": kind,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao ler JSON de forma paginada: {e}")
 
@@ -975,9 +1151,7 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
         HTTPException 415: Tipo de arquivo não suportado.
         HTTPException 500: Erro ao abrir ou processar arquivo.
     """
-    full_path = os.path.abspath(os.path.join(PROJECTS_ROOT, path))
-    if not full_path.startswith(PROJECTS_ROOT):
-        raise HTTPException(status_code=403, detail="Acesso negado.")
+    full_path = resolve_within(PROJECTS_ROOT, path)
     if not os.path.isfile(full_path):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
 
@@ -985,8 +1159,16 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
     content = ""
 
     try:
-        if os.path.getsize(full_path) == 0:
+        tamanho = os.path.getsize(full_path)
+        if tamanho == 0:
             raise HTTPException(status_code=400, detail="O arquivo selecionado está vazio (0 bytes) no servidor.")
+        if tamanho > MAX_JSON_INLINE_BYTES:
+            # `f.read()` abaixo carrega o arquivo inteiro; com um metadata.json de
+            # 3,2 GB isso derruba o processo. Quem é grande é servido paginado.
+            raise HTTPException(
+                status_code=413,
+                detail=(f"Arquivo de {tamanho / 1e6:.1f} MB é grande demais para pré-visualização "
+                        f"(limite {MAX_JSON_INLINE_BYTES / 1e6:.0f} MB). Use /api/file/paginated."))
 
         mime_type, _ = mimetypes.guess_type(full_path)
         if mime_type and mime_type.startswith("image/"):
@@ -1011,14 +1193,18 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
         elif full_path.endswith(".json"):
             file_type = "json"
             try:
-                parsed_json = json.loads(content)
-                return {"content": parsed_json[0], "type": file_type}
+                # Devolve o JSON como está. Antes era `parsed_json[0]`, o que supunha
+                # que todo JSON fosse uma lista — e fazia `manifest.json` e
+                # `config_backup.json`, que são objetos, responderem 500.
+                return {"content": json.loads(content), "type": file_type}
             except json.JSONDecodeError:
                 pass 
         
         if file_type != "unsupported":
              return {"content": content, "type": file_type}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao ler arquivo: {e}")
 
@@ -1138,56 +1324,98 @@ async def get_projects_details(project_names: List[str]):
         
     return details
 
-def extract_trees_from_nexus(nexus_content: str, taxon_namespace: TaxonNamespace = None) -> List[Tree]:
+def extract_trees_from_nexus(nexus_content: str) -> List[Tree]:
     """
     Extrai árvores do conteúdo Nexus usando processamento em memória
+
+    Sempre no próprio namespace: reaproveitar o namespace de outra árvore
+    aborta a leitura quando os rótulos divergem (D13). A reconciliação é feita
+    depois, por `canonical_label_map` e `align_taxon_namespaces`.
     """
     try:
-        if taxon_namespace:
-            trees = TreeList.get_from_string(
-                nexus_content, 
-                'nexus', 
-                taxon_namespace=taxon_namespace,
-                rooting='force-unrooted'
-            )
-        else:
-            trees = TreeList.get_from_string(
-                nexus_content, 
-                'nexus', 
-                rooting='force-unrooted'
-            )
-        
+        trees = TreeList.get_from_string(
+            nexus_content,
+            'nexus',
+            rooting='force-unrooted'
+        )
+
         return trees
-        
+
     except Exception as e:
         raise ValueError(f"Failed to parse Nexus content: {str(e)}")
 
-def align_taxon_namespaces(tree1: Tree, tree2: Tree) -> Tuple[Tree, Tree]:
+def leaf_labels(tree: Tree) -> set:
+    """Rótulos efetivamente usados pelas folhas — não os declarados no bloco
+    `TaxLabels`, que em IQ-TREE e RAxML divergem deles (D13)."""
+    return {node.taxon.label for node in tree.leaf_node_iter() if node.taxon is not None}
+
+
+def canonical_label_map(tree1: Tree, tree2: Tree):
+    """Reconcilia rótulos truncados entre duas árvores (D13).
+
+    IQ-TREE e RAxML gravam `NC_008030.` onde FastTree e as árvores de
+    distância gravam `NC_008030.1`. Sem reconciliar, as duas árvores não têm
+    táxon nenhum em comum e a comparação é recusada — em VARV-6 isso derrubava
+    24 dos 45 pares.
+
+    Devolve `rótulo -> rótulo canônico`, ou `None` quando não há reconciliação
+    a fazer ou quando ela não é segura. Nunca funde dois táxons distintos:
+    se dois rótulos da mesma árvore compartilham o acesso, ou se os conjuntos
+    de acessos diferem, devolve `None` e a comparação segue pelos rótulos
+    originais — recusar é preferível a comparar clados errados.
+    """
+    rotulos1, rotulos2 = leaf_labels(tree1), leaf_labels(tree2)
+    if rotulos1 == rotulos2:
+        return None
+
+    por_acesso = []
+    for rotulos in (rotulos1, rotulos2):
+        agrupado = defaultdict(list)
+        for rotulo in rotulos:
+            agrupado[accession_base(rotulo)].append(rotulo)
+        if any(len(v) > 1 for v in agrupado.values()):
+            return None
+        por_acesso.append(agrupado)
+
+    if set(por_acesso[0]) != set(por_acesso[1]):
+        return None
+
+    return {
+        rotulo: max(por_acesso[0][acesso] + por_acesso[1][acesso],
+                    key=lambda r: (len(r), r))
+        for acesso in por_acesso[0]
+        for rotulo in por_acesso[0][acesso] + por_acesso[1][acesso]
+    }
+
+
+def align_taxon_namespaces(tree1: Tree, tree2: Tree, label_map: dict = None) -> Tuple[Tree, Tree]:
     """
     Alinha os taxon namespaces das duas árvores preservando todas as informações
     """
+    canonico = (lambda rotulo: label_map.get(rotulo, rotulo)) if label_map else (lambda rotulo: rotulo)
     unified_ns = TaxonNamespace()
-    
+
     taxon_map = {}
     for tree in [tree1, tree2]:
         for taxon in tree.taxon_namespace:
-            if taxon.label not in taxon_map:
-                new_taxon = unified_ns.new_taxon(label=taxon.label)
-                taxon_map[taxon.label] = new_taxon
-    
+            rotulo = canonico(taxon.label)
+            if rotulo not in taxon_map:
+                new_taxon = unified_ns.new_taxon(label=rotulo)
+                taxon_map[rotulo] = new_taxon
+
     # Clonar árvores com novo namespace
     tree1_aligned = tree1.__class__(tree1)
     tree2_aligned = tree2.__class__(tree2)
-    
+
     # Substituir taxon namespace
     tree1_aligned.taxon_namespace = unified_ns
     tree2_aligned.taxon_namespace = unified_ns
-    
+
     # Mapear todos os nós para os novos táxons
     for tree in [tree1_aligned, tree2_aligned]:
         for node in tree.leaf_node_iter():
-            if node.taxon is not None and node.taxon.label in taxon_map:
-                node.taxon = taxon_map[node.taxon.label]
+            if node.taxon is not None and canonico(node.taxon.label) in taxon_map:
+                node.taxon = taxon_map[canonico(node.taxon.label)]
     
     return tree1_aligned, tree2_aligned
 
@@ -1452,22 +1680,32 @@ async def compare_trees(tree_data: dict):
         trees1 = extract_trees_from_nexus(tree1_nexus)
         if len(trees1) == 0:
             raise HTTPException(status_code=400, detail="No trees found in tree1 Nexus content")
-        
-        taxon_namespace = trees1[0].taxon_namespace
-        
-        trees2 = extract_trees_from_nexus(tree2_nexus, taxon_namespace)
+
+        # Cada árvore é lida no próprio namespace. Impor o da primeira à
+        # segunda fazia o dendropy abortar sempre que os rótulos divergiam,
+        # e é assim que D13 derrubava metade das comparações de VARV-6.
+        trees2 = extract_trees_from_nexus(tree2_nexus)
         if len(trees2) == 0:
             raise HTTPException(status_code=400, detail="No trees found in tree2 Nexus content")
-        
+
         tree1 = trees1[0]
         tree2 = trees2[0]
-        
+
         tree1.is_rooted = False
         tree2.is_rooted = False
-        
-        if tree1.taxon_namespace is not tree2.taxon_namespace:
-            tree1, tree2 = align_taxon_namespaces(tree1, tree2)
-        
+
+        tree1, tree2 = align_taxon_namespaces(tree1, tree2, canonical_label_map(tree1, tree2))
+
+        rotulos1, rotulos2 = leaf_labels(tree1), leaf_labels(tree2)
+        if rotulos1 != rotulos2:
+            somente1 = sorted(rotulos1 - rotulos2)
+            somente2 = sorted(rotulos2 - rotulos1)
+            raise HTTPException(
+                status_code=400,
+                detail=("Trees do not share the same taxon set; RF and quartet "
+                        f"distances are undefined. Only in tree1: {somente1}. "
+                        f"Only in tree2: {somente2}."))
+
         rf_distance = calculate_rf_distance(tree1, tree2)
         quartet_distance = calculate_quartet_distance(tree1, tree2)
         common_clades, common_clade_descriptions = find_common_clades(tree1, tree2)
@@ -1495,6 +1733,8 @@ async def compare_trees(tree_data: dict):
             }
         }
         
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -1579,7 +1819,7 @@ async def analyze_tree_patterns(
         analysis_result = dict()
         
         for metadata in iter_metadata_nodes(metadata_path, iter_tree=True):
-            hash_subtrees_infos.update(get_hash_to_subtree(metadata))
+            merge_hash_to_subtree(hash_subtrees_infos, get_hash_to_subtree(metadata))
         
         analysis_result = analyze_patterns(
             fpmax_df=fpmax_df, 
@@ -1592,35 +1832,64 @@ async def analyze_tree_patterns(
         
         return analysis_result
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)}")
 
 def get_hash_to_subtree(metadata):
-    """_summary_
+    """Mapeia hash de clado -> informação da subárvore.
 
-    Args:
-        metadata (_type_): _description_
-
-    Returns:
-        _type_: _description_
+    Um clado conservado aparece na MESMA posição de hash em várias árvores. O
+    mapa é, portanto, um-para-muitos: `trees` guarda todas as árvores em que o
+    clado ocorre. `tree_name`/`subtree_name` seguem existindo para compatibilidade
+    e apontam para a primeira ocorrência em ordem estável.
     """
     hash_to_subtree_info = {}
     if isinstance(metadata, dict):
-        for tree_name, subtrees in metadata.items():
-            for subtree_name, subtree_info in subtrees.items():
-                terminals = [d.get("newick", "Unknown") for d in subtree_info.get('data_terminals', [])]
-                    
-                hash_to_subtree_info[subtree_info['List_terminals_hash']] = {
-                    "tree_name": tree_name,
-                    "subtree_name": subtree_name,
-                    "terminals": terminals, 
-                    "nodes": {}
-                }
-                
-                get_newick = lambda h: next((d["newick"] for d in  subtree_info['data_terminals'] if d["terminal_hash"] == h), None)
+        for tree_name in sorted(metadata):
+            subtrees = metadata[tree_name]
+            for subtree_name in sorted(subtrees):
+                subtree_info = subtrees[subtree_name]
+                chave = subtree_info['List_terminals_hash']
+                terminals = [d.get("newick", "Unknown")
+                             for d in subtree_info.get('data_terminals', [])]
+
+                entrada = hash_to_subtree_info.get(chave)
+                if entrada is None:
+                    entrada = {
+                        "tree_name": tree_name,
+                        "subtree_name": subtree_name,
+                        "trees": {},
+                        "terminals": terminals,
+                        "nodes": {}
+                    }
+                    hash_to_subtree_info[chave] = entrada
+                entrada["trees"][tree_name] = subtree_name
+
+                get_newick = lambda h: next(
+                    (d["newick"] for d in subtree_info['data_terminals']
+                     if d["terminal_hash"] == h), None)
                 for terminal_hash in subtree_info['Terminals']:
-                    hash_to_subtree_info[subtree_info['List_terminals_hash']]['nodes'][terminal_hash] = get_newick(terminal_hash)
+                    entrada['nodes'].setdefault(terminal_hash, get_newick(terminal_hash))
     return hash_to_subtree_info
+
+
+def merge_hash_to_subtree(destino, origem):
+    """Funde mapas preservando o um-para-muitos.
+
+    `dict.update` faria a última árvore vencer e descartaria as demais — era o
+    que perdia 50-62% das árvores no painel de cobertura.
+    """
+    for chave, entrada in origem.items():
+        atual = destino.get(chave)
+        if atual is None:
+            destino[chave] = entrada
+            continue
+        atual["trees"].update(entrada["trees"])
+        for h, newick in entrada["nodes"].items():
+            atual["nodes"].setdefault(h, newick)
+    return destino
 
 def analyze_patterns(fpmax_df, rare_threshold, robust_threshold, min_size, max_size, hash_to_subtree_info = {}):
     """
@@ -1634,27 +1903,34 @@ def analyze_patterns(fpmax_df, rare_threshold, robust_threshold, min_size, max_s
         except:
             return set()  
     
+    # D4 — até M1.1 o pipeline gravava o LIMIAR da varredura na coluna `support`,
+    # e o mesmo itemset aparecia em várias linhas com "suportes" diferentes. Um CSV
+    # gravado antes daquela correção não tem `min_support_threshold`; é por essa
+    # ausência que se reconhece o artefato antigo. Ler os dois como se fossem a
+    # mesma coisa é exibir o parâmetro da varredura como se fosse suporte.
+    colunas = set(fpmax_df.columns)
+    esquema_corrigido = 'min_support_threshold' in colunas
+
     patterns = []
-    high_support_raw = fpmax_df[fpmax_df['support'] >= robust_threshold]
-    print(f"Padrões com suporte >= {robust_threshold} no CSV: {len(high_support_raw)}")
-    print(high_support_raw['itemsets'].head())
-    
+    descartados = []
+    ilegiveis = 0
+
     for _, row in fpmax_df.iterrows():
         try:
             itemset = parse_frozenset(row['itemsets'])
             support = row['support']
-            
-            if min_size <= len(itemset) <= max_size:
-                patterns.append({
-                    'itemset': itemset,
-                    'support': support,
-                    'size': len(itemset)
-                })
-        except Exception as e:
+        except Exception:
+            ilegiveis += 1
             continue
-    
-    # Encontrar padrões únicos (baixo suporte)
-    unique_signatures = []
+
+        if min_size <= len(itemset) <= max_size:
+            patterns.append({
+                'itemset': itemset,
+                'support': support,
+                'size': len(itemset)
+            })
+        else:
+            descartados.append(len(itemset))
     
     method_sensitive_signatures = []
     topologically_robust = []
@@ -1685,34 +1961,32 @@ def analyze_patterns(fpmax_df, rare_threshold, robust_threshold, min_size, max_s
         elif pattern['support'] >= robust_threshold:
             topologically_robust.append(pattern_data)
     
-    # Encontrar padrões quase-invariantes (alto suporte)
-    quasi_invariant = []
-    for pattern in patterns:
-        if pattern['support'] >= robust_threshold:
-            node_names = []
-            for h in pattern['itemset']:
-                if h in hash_to_subtree_info:
-                    node_names.append(hash_to_subtree_info[h]["subtree_name"])
-                else:
-                    node_names.append(f"Unknown_{h}")
-            
-            quasi_invariant.append({
-                'pattern': list(pattern['itemset']),
-                'node_names': node_names,
-                'support': pattern['support'],
-                'size': pattern['size']
-            })
-    
     pattern_sizes = [p['size'] for p in patterns]
     support_values = [p['support'] for p in patterns]
     
     statistics = {
         'total_patterns': len(patterns),
-        'unique_signatures_count': len(unique_signatures),
-        'quasi_invariant_count': len(quasi_invariant),
+        'patterns_in_source': int(len(fpmax_df)),
+        'discarded_by_size': len(descartados),
+        'discarded_sizes': sorted(descartados),
+        'unreadable_rows': ilegiveis,
+        'size_filter': {'min': min_size, 'max': max_size},
+        'method_sensitive_count': len(method_sensitive_signatures),
+        'topologically_robust_count': len(topologically_robust),
         'avg_pattern_size': sum(pattern_sizes) / len(pattern_sizes) if pattern_sizes else 0,
         'avg_support': sum(support_values) / len(support_values) if support_values else 0,
         'size_distribution': dict(Counter(pattern_sizes)),
+        'support_schema': {
+            'corrected': esquema_corrigido,
+            'support_means': ('fração de árvores que contêm o padrão'
+                              if esquema_corrigido
+                              else 'LIMIAR da varredura do FPMax, não o suporte real'),
+            'warning': (None if esquema_corrigido else
+                        'Este projeto foi gerado antes da correção de D4 (M1.1). A coluna '
+                        '`support` guarda o limiar da varredura, não a fração de árvores, e o '
+                        'mesmo padrão pode aparecer em mais de uma linha. Reexecute o projeto '
+                        'para obter os valores corretos.'),
+        },
         'support_distribution': {
             'low': len([s for s in support_values if s <= 0.3]),
             'medium': len([s for s in support_values if 0.3 < s <= 0.7]),
@@ -1737,10 +2011,10 @@ def analyze_tree_coverage(patterns, hash_to_subtree_info):
 
     for pattern in patterns:
         for h in pattern['itemset']:
-            if h in hash_to_subtree_info:
-                tree_info = hash_to_subtree_info[h]
-                tree_name = tree_info["tree_name"]
-                
+            if h not in hash_to_subtree_info:
+                continue
+            tree_info = hash_to_subtree_info[h]
+            for tree_name in tree_info.get("trees") or {tree_info["tree_name"]: None}:
                 tree_patterns[tree_name].append({
                     'pattern_hash': h,
                     'support': pattern['support'],
@@ -1829,6 +2103,8 @@ async def ncbi_download_sequences(request: NCBIDownloadRequest):
         else:
             raise HTTPException(status_code=400, detail=result["message"])
             
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no download: {str(e)}")
     
@@ -1857,6 +2133,8 @@ async def ncbi_download_by_accessions(request: NCBIAccessionRequest):
         else:
             raise HTTPException(status_code=400, detail=result["message"])
             
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no download: {str(e)}")
     
@@ -1877,6 +2155,8 @@ async def ncbi_search_species(request: NCBISearchRequest):
             "species": species_list
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na busca: {str(e)}")
 
@@ -1892,21 +2172,11 @@ async def set_ncbi_email(email: str = Form(...)):
     """
     Define o email para consultas ao NCBI.
     """
-    try:
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-            raise HTTPException(status_code=400, detail="Formato de email inválido")
-        
-        Entrez.email = email
-        ncbi_service = NCBIAcquisition(
-            email=email,
-            work_dir=NCBI_WORK_DIR,
-            data_root=DATA_ROOT
-        )
-        
-        return {"success": True, "message": f"Email configurado: {email}"}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao configurar email: {str(e)}")
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        raise HTTPException(status_code=400, detail="Formato de email inválido")
+
+    Entrez.email = email
+    return {"success": True, "message": f"Email configurado: {email}"}
     
 @app.post("/upload-data")
 async def upload_data(
@@ -1940,7 +2210,7 @@ async def upload_data(
             if uploaded_file.filename.endswith('.zip'):
                 with zipfile.ZipFile(BytesIO(file_content), 'r') as zip_ref:
                     zip_files = zip_ref.namelist()
-                    fasta_files = [f for f in zip_files if f.lower().endswith(('.fasta', '.fa', '.fas', '.faa',''))]
+                    fasta_files = [f for f in zip_files if f.lower().endswith(('.fasta', '.fa', '.fas', '.faa'))]
                     
                     for fasta_file in fasta_files:
                         with zip_ref.open(fasta_file) as f:
@@ -1956,7 +2226,10 @@ async def upload_data(
                 processed_files.append(uploaded_file.filename)
             
             else:
-                other_file_path = os.path.join(target_dir, uploaded_file.filename)
+                safe_name = os.path.basename(uploaded_file.filename or "")
+                if not re.match(r'^[A-Za-z0-9._-]+$', safe_name):
+                    raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
+                other_file_path = resolve_within(target_dir, safe_name)
                 with open(other_file_path, 'wb') as f:
                     f.write(file_content)
                 processed_files.append(uploaded_file.filename)
@@ -1973,6 +2246,8 @@ async def upload_data(
             "output_file": "concatenated_sequences.fasta" if all_sequences else None
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro durante o upload: {str(e)}")
 
@@ -2080,6 +2355,117 @@ async def websocket_performance_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         performance_clients.remove(websocket)
         print("Cliente de performance desconectado.")
+
+def _dimensoes_do_fasta(caminho: str):
+    """Número de sequências e comprimento da MAIOR delas, sem carregar o arquivo.
+
+    O máximo, e não a média: é uma sequência só que estoura a memória do
+    alinhador."""
+    n = 0
+    maior = 0
+    atual = 0
+    with open(caminho, "r", encoding="utf-8", errors="ignore") as f:
+        for linha in f:
+            if linha.startswith(">"):
+                n += 1
+                maior = max(maior, atual)
+                atual = 0
+            else:
+                atual += len(linha.strip())
+    return n, max(maior, atual)
+
+
+@app.get("/api/aligners")
+async def listar_alinhadores():
+    """
+    A biblioteca de alinhadores: o que existe, o que está instalado, e que
+    limites cada um impõe.
+
+    Serve à tela de configuração do experimento. O campo `note` é obrigatório
+    na resposta porque limite sem motivo declarado vira superstição — e este
+    projeto já carregou um limite de 20 kb que ninguém sabia de onde vinha.
+    """
+    return {
+        "aligners": [
+            {
+                "key": a.key,
+                "label": a.label,
+                "binary": a.binary,
+                "installed": a.installed(),
+                "version": a.version(),
+                "max_sequence_bp": a.max_sequence_bp,
+                "max_sequences": a.max_sequences,
+                "note": a.note,
+            }
+            for a in ALIGNERS.values()
+        ]
+    }
+
+
+@app.get("/api/aligners/viability")
+async def viabilidade_de_alinhadores(
+    path: str = Query(..., description="Caminho relativo do FASTA ou do diretório de entrada, sob data/."),
+):
+    """
+    Diz, para um conjunto concreto, quais alinhadores são viáveis e **por que**
+    os outros não são.
+
+    O veredito é **desta máquina**, não da ferramenta: `estimated_bytes` e
+    `available_bytes` vêm separados para que a mensagem seja *"precisa de ~19 GB
+    e há 31"* em vez de *"indisponível"*. A primeira é um requisito e diz o que
+    mudaria a resposta; a segunda é um veto sem apelação, e esconde que noutra
+    máquina seria possível ([R2](../../docs/respostasUteis/r2.md)).
+
+    A política é **avisar, não bloquear**: a resposta traz `viable` e `reasons`,
+    e a interface esmaece o inviável mostrando o motivo. Bloquear remove agência
+    de quem sabe o que está fazendo; substituir em silêncio é o defeito D1, que
+    custou metade do delineamento dos experimentos de *Variola*. Informar é o
+    meio-termo que preserva as duas coisas.
+    """
+    alvo = resolve_within(DATA_ROOT, path)
+
+    if os.path.isdir(alvo):
+        fastas = sorted(
+            os.path.join(alvo, f) for f in os.listdir(alvo)
+            if f.endswith((".fasta", ".fa", ".fna"))
+        )
+        if not fastas:
+            raise HTTPException(status_code=404, detail="Nenhum FASTA no diretório informado.")
+    elif os.path.isfile(alvo):
+        fastas = [alvo]
+    else:
+        raise HTTPException(status_code=404, detail="Caminho não encontrado.")
+
+    n_total = 0
+    maior_bp = 0
+    for caminho in fastas:
+        n, maior = _dimensoes_do_fasta(caminho)
+        n_total += n
+        maior_bp = max(maior_bp, maior)
+
+    if n_total == 0:
+        raise HTTPException(status_code=400, detail="O arquivo não contém nenhuma sequência.")
+
+    vereditos = aligner_viability(n_total, maior_bp)
+
+    return {
+        "dataset": {
+            "path": path,
+            "files": [os.path.basename(f) for f in fastas],
+            "n_sequences": n_total,
+            "max_sequence_bp": maior_bp,
+        },
+        # O orçamento da máquina faz parte da resposta porque o veredito é dela,
+        # não da ferramenta: o mesmo conjunto pode ser inviável aqui e viável
+        # numa máquina maior. Ver docs/respostasUteis/r2.md.
+        "machine": {
+            "memory_bytes": memoria_disponivel_bytes(),
+            "cpu_count": os.cpu_count(),
+        },
+        "aligners": [v.summary() for v in vereditos.values()],
+        "policy": "warn",
+    }
+
 
 @app.get("/api/system/health")
 async def system_health():
