@@ -155,7 +155,7 @@ Mais: cada lote com sua **tabela de diff** (métrica · antes · depois · Δ ·
 | M2.2 | ✅ **Filtro taxonômico declarado** na consulta **e** verificação pós-download offline, que distingue *fora do clado* de *sem linhagem* ([DEC-035](07-log-de-execucao.md)). Medido: VARV-49 limpo (49/49); VARV-52, VARV-121 e VARV-6 com 1, 4 e 1 táxons fora | [D6](../science/02-defeitos-que-alteram-resultado.md#d6) — crocodilepox, Yoka | T1 |
 | M2.3 | ✅ **Enraizamento explícito e comum** pelo grupo externo declarado, em todos os métodos ([DEC-034](07-log-de-execucao.md)) — a ferramenta existe e está testada; aplicá-la ao dataset de referência é M2.6 | [D3](../science/02-defeitos-que-alteram-resultado.md#d3) — legitima a análise por clados enraizados | T1 |
 | M2.4 | ✅ Proveniência honesta: o padrão é **abortar** com o motivo; a substituição só ocorre se autorizada, e `resolve_aligner` devolve o nome do alinhador que rodou ([DEC-037](07-log-de-execucao.md)). Reexecutar para que os artefatos deixem de mentir é da máquina de validação | [D1](../science/02-defeitos-que-alteram-resultado.md#d1) parte 1 | T1 |
-| M2.5 | ✅ **Manifesto de execução**: `run_id`, UTC, `git_commit` dos dois repositórios, versão de **toda** ferramenta, sementes e paralelização fixas, SHA-256 de entradas e saídas ([DEC-027](07-log-de-execucao.md)) | [D11](../science/02-defeitos-que-alteram-resultado.md#d11), [D17](../science/02-defeitos-que-alteram-resultado.md#d17) | T1 |
+| M2.5 | ✅ **Manifesto de execução**: `run_id`, UTC, `git_commit` dos dois repositórios, versão de **toda** ferramenta, sementes e paralelização fixas, SHA-256 de entradas e saídas ([DEC-027](07-log-de-execucao.md)). Completado em [DEC-046](07-log-de-execucao.md): `tools_invoked` deixa de sair vazio e passa a registrar **a linha de comando de cada chamada** — era o campo que separava *disponível* de *executado* | [D11](../science/02-defeitos-que-alteram-resultado.md#d11), [D17](../science/02-defeitos-que-alteram-resultado.md#d17) | T1 |
 | M2.6 | ✅ Publicado em `Backend/tests/data/reference/` — VARV-49, o único limpo e com delineamento defensável. `make reference-dataset` regenera ([DEC-042](07-log-de-execucao.md)) | [`04-rigor §2`](04-rigor-cientifico.md#2-dataset-de-referência-pré-requisito-de-w3) | T3 |
 | M2.7 | ✅ `make reference-check` (rápido, qualquer máquina) e `make reference-check-full` (reexecuta). Três códigos: 0 satisfeito, 2 M incompleto, 1 invariante violado. **Hoje devolve 2** — invariante 3/3, falta `mafft_raxml` ([DEC-042](07-log-de-execucao.md)) | institui o gate | T3 |
 
@@ -180,7 +180,7 @@ make reference-check
 
 **Este comando passa a ser exigido em todo marco seguinte.** Uma refatoração que o quebre é revertida, independentemente de quantos testes unitários passem.
 
-⚠️ **Divergência de versão a resolver antes de reexecutar** ([`08-ficha-de-fatos.md §1`](08-ficha-de-fatos.md#ferramentas-de-bioinformática-no-path)): os logs de VARV registram **FastTree 2.2.0**; a máquina tem **2.1.11**. Ou se pina 2.2.0, ou se declara 2.1.11 como a versão do experimento e se reexecuta tudo. IQ-TREE coincide (2.2.2.6) — a semente, porém, foi gerada pela ferramenta e não fixada pelo pipeline: **reexecutar hoje não reproduz a árvore**. M2.5 resolve.
+✅ **Divergência de versão resolvida.** A de FastTree 2.2.0 × 2.1.11 era sombreamento de PATH e foi **retratada** em [DEC-043](07-log-de-execucao.md). A real — RAxML-NG 1.2.2 × 2.0.2 entre as duas máquinas — foi decidida em [DEC-044](07-log-de-execucao.md): **2.0.2 é a versão do experimento**, e as versões passaram a ser pinadas no `environment.yml`. A semente, que a ferramenta gerava, é fixada pelo pipeline desde M2.5.
 
 🔓 **Destravado em 2026-08-24** ([DEC-024](07-log-de-execucao.md)): decisões 2, 3, 4, 5 e 6 tomadas. Os três conjuntos ficam e o UPGMA fica, com `sup` reportado com e sem. A decisão 1 (segundo alinhador) segue aberta e **não bloqueia M2** — ela governa E4 e a correção plena de D1, posteriores a M3.
 
@@ -311,8 +311,13 @@ Cada um foi achado por acaso, ao investigar outra coisa. **Nenhum método foi au
 # 1. toda chamada de ferramenta está no manifesto, com semente e paralelização
 python - <<'EOF'
 import json; m = json.load(open('.../out/outputs/manifest.json'))
+# `tools_invoked` é `ferramenta -> {parâmetros, "runs": [uma por chamada]}`
+# desde `manifest_version: 2` (DEC-046). Uma entrada por chamada, e não por
+# ferramenta: dois alinhadores invocam o mesmo inferidor duas vezes.
 assert set(m['tools_invoked']) >= {'iqtree','raxml-ng','fasttree','mrbayes'}
-assert all('seed' in v for v in m['tools_invoked'].values())
+assert all(v['runs'] for v in m['tools_invoked'].values())
+assert all('seed' in v for k, v in m['tools_invoked'].items()
+           if k in {'iqtree', 'raxml-ng'})   # fasttree e mrbayes não aceitam
 EOF
 
 # 2. duas execuções da mesma entrada produzem os mesmos hashes de árvore

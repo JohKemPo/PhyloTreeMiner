@@ -22,7 +22,7 @@ completa está em [R2](../respostasUteis/r2.md).
 | **Memória** | processo morto pelo OOM killer | Clustal Omega (código 137) em Zika479; MUSCLE, **19,4 GB** em 52×228 kb |
 | **Núcleos** | o esquema de paralelização muda **o resultado** | [D17](../science/02-defeitos-que-alteram-resultado.md#d17): **RF = 8** com a mesma semente |
 | **Núcleos** | autoconfiguração escolhe esquema que quebra | D17: `SIGSEGV` com `5 workers × 3 threads` |
-| **Versão da ferramenta** | algoritmo diferente sob o mesmo nome | MUSCLE 3.8 (`-in/-out`) × MUSCLE 5 (`-align/-output`) — interfaces incompatíveis |
+| **Versão da ferramenta** | algoritmo diferente sob o mesmo nome | MUSCLE 3.8 (`-in/-out`) × MUSCLE 5 (`-align/-output`) — interfaces incompatíveis; RAxML-NG **1.2.2 × 2.0.2** entre as duas máquinas do projeto. ✅ **fechado em [DEC-044](07-log-de-execucao.md)**: a receita passa a pinar |
 | **Origem do binário** | a mesma máquina dá duas versões conforme o PATH | env: FastTree 2.2.0, RAxML-NG 1.2.2, IQ-TREE 3.0.1 · sistema: 2.1.11, 1.1.0, 2.2.2.6 |
 | **Nome do binário** | o pacote instala, o pipeline não acha | `iqtree` 3.x instala `iqtree`/`iqtree3` e **não** instala `iqtree2` |
 
@@ -37,6 +37,14 @@ entre máquinas" que não existia: era o PATH resolvendo `/usr/bin` em vez do en
 O **nome do binário** fez a instalação correta da receita não conseguir rodar,
 porque o pipeline chamava `iqtree2` fixo. Ambos são resolvidos por
 `workflow/utils/external_tools.py` e sinalizados por `check_dependencies.sh`.
+
+A **versão da ferramenta** foi a que sobrou, e ela só apareceu quando a segunda
+máquina rodou `make setup` — meses depois da primeira, com o canal já noutro
+estado. Resolvido o sombreamento de PATH, o env entregava RAxML-NG **2.0.2** onde
+o outro entregava 1.2.2, sem que nada estivesse errado: a receita listava
+`- raxml-ng` sem versão. **Tirar o ambiente da máquina não basta; é preciso
+tirá-lo também do calendário** ([DEC-044](07-log-de-execucao.md)). Ao subir uma
+versão pinada, registre no ledger e reexecute o que dependia dela.
 
 ---
 

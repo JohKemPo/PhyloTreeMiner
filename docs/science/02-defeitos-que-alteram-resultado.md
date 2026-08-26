@@ -682,3 +682,62 @@ O MrBayes emite o *average standard deviation of split frequencies* (ASDSF) e os
 | 6 | modelo declarado e coerente com os demais métodos | `builder.py` |
 
 Os itens 2 a 6 são o marco [M7](../automation/10-marcos-e-metas.md), que trata de todos os métodos avançados e não só deste.
+
+---
+
+<a id="d21"></a>
+
+## D21 · Alta · `-nt N` do IQ-TREE: duas execuções idênticas produzem árvores diferentes
+
+> **Estado:** ⚠️ **aberto**. Medido em 2026-08-26 ([DEC-046](../automation/07-log-de-execucao.md)). O pipeline usa `-nt 4`, e é essa a configuração de todas as árvores de IQ-TREE em disco.
+
+**Descoberto em 2026-08-26**, ao comparar duas execuções do conjunto de validação **na mesma máquina** para conferir que a instrumentação do manifesto não tinha alterado nada. Doze dos catorze pipelines saíram idênticos; **os dois de IQ-TREE, não**.
+
+**Onde.** A chamada do IQ-TREE fixa a semente e o número de threads — o que [D17](#d17) prescreveu — e isso **não basta**:
+
+```
+iqtree3 -s ... -m GTR+G -bb 1000 -seed 12345 -pre ... -nt 4
+```
+
+**A medição.** Três repetições, mesmo arquivo, mesma linha de comando, mesma máquina, mesma versão (IQ-TREE 3.1.3):
+
+| Configuração | Repetições | Topologias distintas | RF entre elas |
+|---|---:|---:|---:|
+| `-nt 4` | 3 | **3** | **2** |
+| `-nt 1` | 3 | **1** | 0 |
+| RAxML-NG `--threads 4 --workers 1` (controle) | 3 | **1** | 0 |
+
+As verossimilhanças finais diferem na terceira casa decimal (−21882,207 · −21882,207 · −21882,203): são ótimos quase equivalentes, e a ordem em que as reduções de ponto flutuante chegam decide em qual deles a busca para. Com `-nt 1` não há redução paralela, e o resultado é bit a bit reprodutível.
+
+**Por que o controle importa.** O RAxML-NG, na mesma máquina e com 4 threads, é **determinístico** — porque `--workers 1` serializa a busca. É a prova de que o problema não é a máquina nem o número de núcleos em si: é a **ausência, no IQ-TREE, de um equivalente ao `--workers 1`**. D17 corrigiu a ferramenta onde o controle existia e deixou passar a outra.
+
+**Número afetado.** Toda árvore de IQ-TREE, e por arrasto tudo que se deriva do conjunto de árvores: itens do FPMax, clados canônicos, bipartições universais. Medido no conjunto de validação, entre duas execuções idênticas:
+
+| Medida | Execução A | Execução B |
+|---|---:|---:|
+| itemsets do FPMax | 38 | **34** |
+| clados canônicos | 47 | **43** |
+| bipartições universais | 6 | **7** |
+
+**Nenhuma das duas está errada.** É o mesmo experimento devolvendo números diferentes — que é precisamente o que o checklist de submissão proíbe no item "cada figura reproduzível por script + commit + hash".
+
+**Interação com D17 e com a atribuição de causa.** Este defeito **corrige uma conclusão anterior**: [DEC-045](../automation/07-log-de-execucao.md) atribuiu à *versão do inferidor* toda a divergência entre a máquina de desenvolvimento e a de validação. Para o RAxML-NG a atribuição continua de pé — ele é determinístico na mesma máquina, logo a diferença entre máquinas é a versão. Para o **IQ-TREE, não**: a divergência era ruído entre execuções, e teria aparecido igual sem trocar de máquina nem de versão.
+
+**Correção — é decisão do usuário, não de um agente**, porque muda árvore publicada:
+
+1. **`-nt 1`**, comprando reprodutibilidade com tempo. No conjunto de validação o IQ-TREE custa 4-5 s; falta medir o custo em *Variola*, onde o alinhamento tem ~250 kb.
+2. **Manter `-nt N` e declarar o método como não reprodutível**, reportando a árvore como uma amostra de um conjunto de ótimos equivalentes — o que exigiria reportar também a variação entre repetições.
+3. **`-nt N` com repetições e consenso**, o mais caro e o mais defensável.
+
+Enquanto não houver decisão, o manifesto passa a registrar `-nt` efetivo em `tools_invoked` ([DEC-046](../automation/07-log-de-execucao.md)), de modo que a irreprodutibilidade fica pelo menos **declarada** em vez de invisível.
+
+**Evidência.**
+
+```bash
+# três repetições, mesma semente, mesma entrada
+for R in 1 2 3; do
+  iqtree3 -s <phylip> -m GTR+G -bb 1000 -seed 12345 -pre r$R -nt 4 -redo
+done
+md5sum r{1,2,3}.treefile      # três hashes distintos
+# o mesmo com -nt 1           # um hash só
+```

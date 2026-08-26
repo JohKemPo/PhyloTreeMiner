@@ -65,6 +65,7 @@ O script confere, direto nos arquivos gravados:
 |---|---|
 | `manifest.json` com `run_id`, `finished_at`, versões, commits, SHA-256 | M2.5 / [D11](../../science/02-defeitos-que-alteram-resultado.md#d11) |
 | nenhum caminho absoluto no manifesto | [D15](../../science/02-defeitos-que-alteram-resultado.md#d15) tratado na origem |
+| `tools_invoked` com uma entrada por chamada de ferramenta | [DEC-046](../../automation/07-log-de-execucao.md) — *disponível* não é *executado* |
 | `all_results_fpmax.csv` com uma linha por itemset e as quatro colunas | M1.1 / [D4](../../science/02-defeitos-que-alteram-resultado.md#d4) |
 | nenhum limiar acima do suporte real | o `support` é suporte, não parâmetro |
 | nenhum padrão frágil **e** robusto ao mesmo tempo | a contradição que D4 produzia na UI |
@@ -108,3 +109,13 @@ No [log de execução](../../automation/07-log-de-execucao.md), com o número DE
 - **Parcimônia é lenta.** O `ParsimonyTreeConstructor` do Biopython é Python puro e domina o tempo total mesmo em 20 táxons. Se estiver medindo outra coisa, ponha `parsimony` no `ignore_mode` — e **declare** que pôs.
 - **O workflow reaproveita árvore existente.** Rodar duas vezes no mesmo diretório não refaz nada. Para reexecutar, use diretório novo.
 - **MrBayes não está em todas as máquinas.** O manifesto grava `"mrbayes": null` — não invente uma versão, e não silencie a ausência.
+- **Confira `tools_invoked`, não só `tools_available`.** O primeiro diz o que **rodou**; o segundo, o que estava instalado. O campo saiu vazio de toda execução até [DEC-046](../../automation/07-log-de-execucao.md), e um manifesto que lista sete ferramentas e nenhuma chamada parece completo à primeira vista:
+
+  ```bash
+  python - <<'PY'
+  import json; m = json.load(open('.../out/outputs/manifest.json'))
+  for ferramenta, dados in sorted(m['tools_invoked'].items()):
+      print(f"{ferramenta:10s} {len(dados['runs'])} chamada(s)  "
+            f"seed={dados.get('seed', '—')} threads={dados.get('threads', '—')}")
+  PY
+  ```

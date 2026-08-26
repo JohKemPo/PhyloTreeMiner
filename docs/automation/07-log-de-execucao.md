@@ -9,8 +9,8 @@ Este é o arquivo que a próxima janela de contexto lê para saber o que já aco
 | Campo | Valor |
 |---|---|
 | Marco corrente | **M2 — Baseline replicado** — **6 de 7 lotes**: M2.2, M2.3, M2.4, M2.5, M2.6 e M2.7 entregues. Falta **M2.1** e a **reexecução** que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
-| Última atualização | 2026-08-25 — **independência de hardware vira requisito de projeto** (DEC-041): limites deixam de ser escalares e passam a ser requisito × orçamento da máquina; M2.6 e M2.7 entregues (DEC-042). Antes, no mesmo dia: política de alinhador (DEC-039), relatório de gargalos (DEC-040), MUSCLE e fim da substituição silenciosa (DEC-037) |
-| Lotes em andamento | nenhum. **M2 em 6 de 7**; o portão científico existe e devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ⚠️ **Migração para máquina robusta em curso**: ver [`12-portabilidade-e-migracao.md`](12-portabilidade-e-migracao.md) |
+| Última atualização | 2026-08-26 — **`tools_invoked` deixa de sair vazio** (DEC-046): o manifesto passa a registrar a linha de comando de **cada chamada**, e a conferência achou **[D21](../science/02-defeitos-que-alteram-resultado.md#d21) — o IQ-TREE com `-nt 4` não é determinístico**, o que corrige parte de DEC-045. Antes: pré-voo §4.0 na máquina de validação (DEC-045); a máquina entra em operação e as versões passam a ser **pinadas** (DEC-044); ambiente conda próprio e pnpm (DEC-043) |
+| Lotes em andamento | nenhum. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
 | Write-locks ativos | nenhum |
 | Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Nada pendente |
 
@@ -1166,6 +1166,274 @@ bash -n application_ui.sh            → sem erro de sintaxe
 
 **Write-lock:** `environment.yml`, `application_ui.sh`, `scripts/{setup_env,cleanup_env,check_dependencies,lib_env}.sh`, `BioComp_UFF/workflow/utils/{external_tools,manifest}.py`, `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow/tests/{test_external_tools,test_manifest}.py`, `Frontend/phylotreeminer/{package.json,pnpm-lock.yaml,pnpm-workspace.yaml}`, `Makefile`, `.github/workflows/ci.yml`, `README.md`, `docs/automation/{07,10,11,12}`. **Reversível:** sim.
 
+### DEC-044 · 2026-08-25 · A máquina de validação entra em operação — e as versões deixam de ser sorteadas
+
+**Gatilho:** primeira sessão de trabalho na máquina de validação (`geomesh`), com `BioComp_UFF/projects/` já repovoado. O objetivo era rodar o portão de sanidade de [`11-handoff §3`](11-handoff-maquina-de-validacao.md); o portão passou e expôs, no caminho, um problema que [DEC-043](#dec-043--2026-08-25--ambiente-isolado-binário-resolvido-por-nome--e-a-retratação-de-um-fato-que-nunca-existiu) não tinha fechado.
+
+#### O portão de sanidade: 6 de 6
+
+Submódulo em `rigor-cientifico-m1-m2`, HEAD `0f80941`, env `Phylotreeminer` ativo. A tabela item a item está em [`11-handoff §3.1`](11-handoff-maquina-de-validacao.md); em resumo: **216 passed / 1 xfailed**, **Ran 150 tests OK**, **137 pares e 0 divergências** no oráculo dendropy, **5 de 5 conjuntos com 0 divergência** na §3 do `audit_variola.py`, **8 passed · 68/68 · 27/27 · ✓ built**, e `reference-check` com **invariante 3/3**.
+
+Três expectativas escritas no handoff estavam desatualizadas e foram corrigidas **contra a execução real**, não o contrário: `182 passed` → **216**, `Ran 81 tests` → **82**, `erros 69/69` → **68/68**.
+
+O ambiente da máquina — Threadripper 2970WX, 24 núcleos físicos / **48 lógicos**, 47 GB de RAM, 786 GB livres — está registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md). É a máquina que a §4 do handoff estava esperando.
+
+#### O que o portão expôs: **a receita não pinava versão**
+
+As 7 ferramentas resolvem todas dentro do env — não é o sombreamento de PATH de [DEC-043](#dec-043--2026-08-25--ambiente-isolado-binário-resolvido-por-nome--e-a-retratação-de-um-fato-que-nunca-existiu). E mesmo assim as versões diferem da máquina de desenvolvimento:
+
+| Ferramenta | Validação | Desenvolvimento | |
+|---|---|---|---|
+| RAxML-NG | **2.0.2** | 1.2.2 | ❌ salto de versão maior |
+| MUSCLE | **5.3** | 3.8.1551 (fora do env) | ❌ interfaces incompatíveis (`-align/-output` × `-in/-out`) |
+| IQ-TREE | 3.1.3 | 3.0.1 | ~ |
+| MAFFT | 7.526 | 7.525 | ~ |
+| Clustal Omega · FastTree · MrBayes | 1.2.4 · 2.2.0 · 3.2.7 | idem | ✅ |
+
+A causa é única e banal: `environment.yml` listava `- raxml-ng` sem versão. **Duas máquinas que rodam `make setup` em datas diferentes recebem o que o canal tiver no dia.** DEC-043 tirou o env da máquina e o pôs no projeto; faltava o passo seguinte — tirá-lo também do calendário.
+
+É o eixo *"versão da ferramenta"* de [`12-portabilidade §1`](12-portabilidade-e-migracao.md), e ele interage com a zona sagrada: a versão do inferidor **faz parte do resultado**, não do ambiente.
+
+#### Decisão do usuário: adotar 2.0.2 e pinar
+
+Perguntado entre pinar 1.2.2 (a versão dos logs dos artefatos) ou adotar 2.0.2, o usuário decidiu **adotar 2.0.2 e pinar no `environment.yml`**. O fundamento é que os artefatos em disco são **pré-M1** e vão ser substituídos pela reexecução de [`§4.1`](11-handoff-maquina-de-validacao.md) de qualquer forma — preservar comparabilidade item a item com números que já se sabe errados não paga uma versão de 2024.
+
+**Consequências que ficam declaradas:**
+
+1. Reexecutar VARV **não reproduz** as árvores de RAxML em disco, por construção. Não é defeito; é a versão declarada mudando.
+2. A medição que declarou o **MUSCLE inviável em *Variola*** (19,4 GB e OOM, [DEC-041](#dec-041--2026-08-25-independência-de-hardware-vira-requisito-de-projeto--limites-deixam-de-ser-escalares)) foi feita contra o **3.8.1551 do sistema**. Ela **não transfere** para o 5.3 e precisa ser refeita antes de valer como veredito.
+3. Com **48 núcleos lógicos** contra 12, [D17](../science/02-defeitos-que-alteram-resultado.md#d17) deixa de ser hipótese: `--threads N --workers 1` é obrigatório e **o próprio `N` entra no manifesto**.
+
+**O que foi pinado:** as 7 ferramentas e o `pyqt` no `environment.yml`; e, no `requirements.txt`, as 8 dependências Python que ainda estavam soltas (`fastapi`, `uvicorn[standard]`, `python-multipart`, `aiofiles`, `owid-catalog`, `ijson`, `ete3`, `PyQt5`). Pinar metade da lista é o mesmo que não pinar: basta uma dependência solta para dois commits idênticos produzirem ambientes diferentes.
+
+#### O bloqueio operacional do frontend: **existir não é servir**, de novo
+
+O `pnpm` 11.6.0 fixado em `packageManager` exige **Node ≥ 22.13**. Nesta máquina `/usr/bin/node` é o **18.19.1**, e o Node 22.23.2 já estava no **nvm** — só nunca era carregado nos shells não interativos que rodam os scripts. Sintoma: `start.sh` imprimia `✓ pnpm` com a versão **em branco**, subia Neo4j, backend e frontend, e o frontend morria 15 s depois.
+
+Duas correções, e as duas são a mesma regra de `check_dependencies.sh`:
+
+- **`garantir_pnpm` aprovava um `pnpm` que não executa.** `command -v` só responde se o arquivo existe. A checagem passa a **executar** `pnpm --version` e exigir saída não vazia.
+- **`lib_node.sh` resolve o Node como as ferramentas de bioinformática são resolvidas**: `PTM_NODE_BIN` > o do PATH, se atender > nvm > pedir ação do usuário. `make` passa a ir pelo `scripts/pnpm.sh`, que garante o Node antes de chamar o pnpm.
+
+Exercitado com o PATH podado ao Node 18: os três alvos do frontend passam.
+
+#### Pinar sem verificar não fecha nada
+
+Pinar a receita corrige quem **cria** o env a partir daqui. Não corrige quem já
+tem um: um env criado antes do pino continua com a versão antiga, e
+`check_dependencies.sh` dizia **✓** para ele — reportava o número e não o
+comparava com nada. É a mesma classe de defeito que o script foi escrito para
+pegar, um nível acima.
+
+`check_dependencies.sh` passa a ler o pino do `environment.yml` — **a receita é a
+única fonte**, manter uma segunda lista de versões dentro do script seria
+[D5](../science/02-defeitos-que-alteram-resultado.md#d5) noutro assunto — e a
+comparar com o que está instalado. A divergência aparece na linha da ferramenta,
+entra no resumo e **entra no comando de instalação já com a versão certa**. Por
+padrão é aviso; com `--strict` reprova, que é o modo do portão de sanidade e do
+CI. A comparação é por prefixo, porque a receita pina `muscle=5.3` e o binário
+imprime `5.3.linux64`.
+
+Exercitado nos dois sentidos — o negativo com uma receita de teste
+(`PTM_RECEITA`) pedindo as versões da máquina de desenvolvimento:
+
+```
+bash scripts/check_dependencies.sh              → 7 ✓, exit 0 (env bate com a receita)
+PTM_RECEITA=<receita pedindo 1.2.2 e 3.8.1551>  → ⚠ MUSCLE 5.3≠3.8.1551
+                                                  ⚠ RAxML-NG 2.0.2≠1.2.2
+                                                  e sugere: conda install -n Phylotreeminer
+                                                            muscle=3.8.1551 raxml-ng=1.2.2
+  … com --strict                                → exit 1
+```
+
+#### Docker e Neo4j
+
+Resolvidos pelo usuário durante a sessão. `docker ps` responde e o contêiner `phylotree_neo4j` (`neo4j:2026.01.3`) está de pé em `127.0.0.1:7474` e `7687`; `curl` devolve **http 200**. A pendência aberta em §2.3.3 do handoff está encerrada.
+
+**Evidência de execução:**
+```
+make test-backend                       → 216 passed, 1 xfailed (67 s)
+python -m unittest (9 módulos)          → Ran 150 tests, OK
+oraculo_rf_dendropy.py                  → 137 pares, 0 divergências
+audit_variola.py --secao 3 --secao 5    → 5 de 5 conjuntos, 0 divergência(s); §5 completa os 4 (125 s)
+make test-frontend / lint / build       → 8 passed · 68/68, 27/27 · ✓ built em 20,8 s
+make reference-check                    → invariante 3/3; M = 4 de 5 (falta mafft_raxml)
+conda env create -f environment.yml --dry-run  → exit 0 (os pinos resolvem nos canais)
+bash scripts/check_dependencies.sh --strict    → 7 ✓, exit 0
+docker ps                               → phylotree_neo4j Up; curl :7474 → http 200
+```
+
+**Write-lock:** `environment.yml`, `requirements.txt`, `requirements-dev.txt`, `scripts/{lib_node,pnpm,check_dependencies}.sh`, `Makefile`, `application_ui.sh`, `CLAUDE.md`, `docs/automation/{07,11,12}`. **Reversível:** sim.
+
+### DEC-045 · 2026-08-25 · Pré-voo §4.0 na máquina de validação — o que muda entre máquinas é a **versão**, e só ela
+
+**Gatilho:** [`11-handoff §4.0`](11-handoff-maquina-de-validacao.md) manda rodar o conjunto de validação antes de qualquer conjunto grande. Era o primeiro uso real do pipeline nesta máquina, e o primeiro sob o env pinado de [DEC-044](#dec-044--2026-08-25--a-máquina-de-validação-entra-em-operação--e-as-versões-deixam-de-ser-sorteadas).
+
+Projeto novo `Zika_21seq_validacao_mv` — o original é a evidência do "antes" e **não foi sobrescrito**. `mode: "advanced"` ([D18](../science/02-defeitos-que-alteram-resultado.md#d18)), `ignore_mode: ["mrbayes"]`, semente 12345, `raxml_threads=4`, `iqtree_threads=4`. `run_id` `e66311b836c8`.
+
+#### O portão: TUDO VERDE, e 3 de 14 pipelines com topologia diferente
+
+`conferir_correcoes_m1.py` devolveu **TUDO VERDE** nos três blocos (M2.5, M1.1, M1.2, M1.3) e o oráculo dendropy confirmou **91 pares, 0 divergências**. Os números derivados, porém, não são os mesmos da máquina de desenvolvimento ([DEC-030](#dec-030--2026-08-25--o-conjunto-de-validação-roda-fim-a-fim)):
+
+| Medida | Desenvolvimento | Validação | |
+|---|---|---|---|
+| árvores / pipelines | 14 / 14 | **14 / 14** | ✅ |
+| duração total | 11 min 03 s (12 núcleos) | **9 min 40 s** (48 núcleos) | ✅ |
+| FPMax | 37 linhas, 37 itemsets | **38 / 38** | ⚠ |
+| frágeis ∩ robustos | ∅ | **∅** (17 frágeis, 9 robustos) | ✅ |
+| clados canônicos × legados | 46 × 109 | **47 × 115** | ⚠ |
+| bipartições | \|B\| = 17 = n − 3 · **7** universais | \|B\| = **17** · **6** universais | ⚠ |
+| oráculo dendropy | 91 pares, 0 divergências | **91 pares, 0 divergências** | ✅ |
+
+Comparando árvore a árvore contra a execução de desenvolvimento, a diferença é **localizada**:
+
+```
+clustalo_iqtree   RF = 8      |  os outros 11 pipelines:  RF = 0
+clustalo_raxml    RF = 4      |  (fasttree, nj/upgma × distance/parsimony,
+mafft_raxml       RF = 2      |   nos dois braços de alinhamento — idênticos)
+```
+
+#### Isolar a causa: **não é a máquina, é a versão**
+
+Três diferenças candidatas mudaram ao mesmo tempo — 48 núcleos contra 12, RAxML-NG 2.0.2 contra 1.2.2, IQ-TREE 3.1.3 contra 3.0.1 — e "as duas coisas mudaram" não é uma explicação. Duas medições descartam as outras duas hipóteses:
+
+**1. O alinhamento é byte a byte idêntico.** MAFFT 7.526 aqui e 7.525 lá produzem o mesmo arquivo, e o Clustal Omega 1.2.4 também:
+
+```
+a879a6e9…  dataset_final_clustalo.aln   (desenvolvimento)
+a879a6e9…  dataset_final_clustalo.aln   (validação)
+aa754c13…  dataset_final_mafft.aln      (desenvolvimento)
+aa754c13…  dataset_final_mafft.aln      (validação)
+```
+
+A divergência nasce **depois** do alinhamento. O fator alinhador está fora.
+
+**2. O número de núcleos não muda a topologia — com `--workers 1`.** Mesmo alinhamento, mesma semente, variando só a paralelização, nesta máquina:
+
+| | 2 threads | 4 threads | 8 threads | 16 threads |
+|---|---|---|---|---|
+| RAxML-NG 2.0.2 | logLK −21861,779444 | −21861,779446 | −21861,779445 | *recusado* |
+| IQ-TREE 3.1.3 | −21882,206 | −21882,205 | −21882,208 | — |
+| **RF entre elas** | **0** | **0** | **0** | — |
+
+A árvore que o pipeline gravou (`threads=4`) também tem RF = 0 contra a de 2 threads. **A fixação de [D17](../science/02-defeitos-que-alteram-resultado.md#d17) funciona**: `--threads N --workers 1` neutraliza o efeito da paralelização numa máquina de 48 núcleos, que é justamente onde ele deveria aparecer com mais força. Isso não retira `N` do manifesto — retira dele o poder de explicar esta divergência.
+
+**Conclusão:** eliminados o alinhador e a paralelização, o que resta é a **versão do inferidor**. RAxML-NG mudou nos dois braços e é o único a divergir nos dois; IQ-TREE mudou e diverge num braço só — o que é o comportamento esperado de um ótimo de verossimilhança quase empatado, não o de um defeito. É a consequência 1 de DEC-044, agora **medida** em vez de prevista.
+
+> ⚠️ **Corrigido em [DEC-046](#dec-046--2026-08-26--tools_invoked-deixa-de-sair-vazio--o-manifesto-passa-a-registrar-o-que-rodou).** A conclusão acima vale para o **RAxML-NG** e **não vale para o IQ-TREE**. Duas execuções na mesma máquina, mesma versão e mesma semente mostraram que o IQ-TREE com `-nt 4` **não é determinístico** ([D21](../science/02-defeitos-que-alteram-resultado.md#d21)): a divergência dos braços de IQ-TREE era ruído entre execuções, e teria aparecido sem trocar de máquina nem de versão. O RAxML-NG, no mesmo teste, é determinístico — logo a atribuição à versão continua de pé para ele. O erro de raciocínio foi tratar "eliminei duas hipóteses" como "provei a terceira", sem medir a repetibilidade da própria medida.
+
+> Pela mesma razão, a coluna **Validação** da tabela acima e a de [`11-handoff §4.0`](11-handoff-maquina-de-validacao.md) não são expectativa estável: `38 / 47 / 6` é **uma** amostra. Uma segunda execução idêntica devolveu `34 / 43 / 7`.
+
+O resto move-se por arrasto: 3 topologias diferentes produzem clados distintos diferentes (47 × 46), um itemset a mais no FPMax (38 × 37) e uma bipartição universal a menos (6 × 7) — a bipartição que os 14 pipelines compartilhavam lá deixou de ser compartilhada aqui. Nenhum desses números é "o certo" ou "o errado": são **duas versões declaradas do mesmo experimento**, e é por isso que a versão passou a ser pinada.
+
+#### O achado que o pré-voo entregou de graça: **`tools_invoked` está vazio**
+
+O manifesto grava `tools_available` com as 7 versões e grava `tools_invoked: {}` — **nas duas máquinas**. `ExecutionManifest.register_tool_run` existe, tem docstring que diz exatamente por que existe ("é o que responde 'com que semente e com que paralelização esta árvore foi feita' — e, depois de D17, sabe-se que a paralelização muda a topologia"), tem teste de unidade em `test_manifest.py:178`… e **nenhum ponto do pipeline a chama**.
+
+O teste passa porque chama o método direto. O artefato prova que ninguém chama. É o mesmo padrão de [D18](../science/02-defeitos-que-alteram-resultado.md#d18): o registro diz o que estava **disponível**, não o que foi **executado** — e era precisamente essa distinção que o campo existia para fazer.
+
+**Não corrigido neste lote**, por escopo: mexe em `BioComp_UFF/**`, muda o artefato e obriga a refazer o pré-voo. Vai como lote próprio de T1, e é pré-requisito da reexecução de [`§4.1`](11-handoff-maquina-de-validacao.md) — reexecutar os cinco conjuntos gravando `tools_invoked: {}` é gastar a execução cara e não registrar a linha de comando que a produziu.
+
+**Evidência de execução:**
+```
+python workflow.py -p <config Zika-21 advanced>   → 14 árvores, real 9m40,047s, exit 0
+python Backend/scripts/conferir_correcoes_m1.py Zika_21seq_validacao_mv
+                                                  → TUDO VERDE em M2.5/M1.1/M1.2/M1.3
+                                                    38 linhas / 38 itemsets; 17 frágeis, 9 robustos
+                                                    47 canônicos × 115 legados; n=20, |B| 17..17
+                                                    14 pipelines, 6 bipartições universais
+python docs/science/scripts/oraculo_rf_dendropy.py projects/Zika_21seq_validacao_mv
+                                                  → 91 pares, 0 divergências
+md5sum out/Align/*.aln (as duas execuções)        → idênticos nos dois alinhadores
+raxml-ng --threads {2,4,8} --workers 1 (mesma semente)  → RF = 0 entre todas
+iqtree3 -nt {2,4,8} -seed 12345                   → RF = 0 entre todas
+raxml-ng --threads 16                             → ERROR: Too few patterns per thread
+```
+
+**Write-lock:** nenhum arquivo de produção. Projeto novo `BioComp_UFF/projects/Zika_21seq_validacao_mv/` e `docs/automation/{07,11}`. **Reversível:** sim.
+
+### DEC-046 · 2026-08-26 · `tools_invoked` deixa de sair vazio — o manifesto passa a registrar o que **rodou**
+
+**Gatilho:** o achado de [DEC-045](#dec-045--2026-08-25--pré-voo-40-na-máquina-de-validação--o-que-muda-entre-máquinas-é-a-versão-e-só-ela), aberto pelo usuário como lote próprio por ser pré-requisito da reexecução de [`§4.1`](11-handoff-maquina-de-validacao.md).
+
+#### O defeito era de ligação, não de cálculo
+
+`ExecutionManifest.register_tool_run` existia desde M2.5, com docstring justificando-se por [D17](../science/02-defeitos-que-alteram-resultado.md#d17) e com teste de unidade próprio. **Nenhum ponto do pipeline a chamava.** O teste passava porque chamava o método direto; o artefato em disco saía com `tools_invoked: {}` de toda execução, nas duas máquinas.
+
+É a lição que este repositório já pagou em outras moedas: **um teste que exercita a função e não o caminho não prova que o caminho existe.** O teste de regressão agora entra pelo construtor de árvore, com a ferramenta externa substituída por um duplo que grava o arquivo que o método real vai ler — se alguém retirar a instrumentação, ele reprova.
+
+#### Três defeitos, não um
+
+Ao ligar o campo, dois outros apareceram — e nenhum apareceria sem executar e olhar o artefato.
+
+**1. A forma antiga perdia chamadas.** `tools_invoked` era `ferramenta -> {command, ...}`: um dicionário chaveado por ferramenta. O delineamento tem **dois alinhadores**, então o RAxML-NG roda duas vezes por execução, e a segunda sobrescreveria a primeira — o manifesto declararia como único o comando que produziu metade das árvores. É a mesma classe de [D18](../science/02-defeitos-que-alteram-resultado.md#d18): declarar o disponível no lugar do executado. A forma passa a ser `ferramenta -> {parâmetros, "runs": [uma entrada por chamada]}`, cada chamada apontando a **saída que produziu** — que é o que responde "com que semente *esta* árvore foi feita". `manifest_version` vai a **2**; como o campo nunca chegou a ser populado, **nenhum artefato em disco tem a forma antiga**.
+
+**2. Gravar a linha de comando crua reintroduziria D15.** `require_tool` devolve o caminho absoluto do binário, que mora no ambiente conda **do usuário**: `/home/<usuário>/miniconda3/envs/...`. E `os.path.relpath` de um caminho fora da raiz do projeto devolve `../../..` seguido do resto do caminho absoluto — relativizar não resolve, espalha. A regra passa a ser explícita: **dentro do projeto, caminho relativo; fora, só o nome do arquivo.** A versão de cada ferramenta já está em `tools_available`, e *onde* ela estava instalada não é reproduzível noutra máquina de qualquer forma.
+
+**3. `params` vazava caminho absoluto — e a conferência dizia que não.** O módulo promete, na sua primeira linha, que "todo caminho é relativo à raiz do projeto". `params` era gravado **cru**, com `input_path` e `output_path` absolutos, nome de usuário incluído. `conferir_correcoes_m1.py` imprimia `[ ok ] nenhum caminho absoluto no manifesto (D15)` porque varre apenas as **chaves** de `inputs_sha256`/`outputs_sha256` — nunca olhou `params`. Um verde falso, de pé desde M2.5.
+
+Corrigido no mesmo lote por três razões: é o mesmo arquivo, é a mesma promessa escrita no mesmo docstring, e a ferramenta de higienização acabou de ser construída dez linhas acima. Nada lê `manifest["params"]` — a configuração para reexecutar é o `config_backup.json`, que segue intacto.
+
+#### O que passa a ser registrado
+
+Uma chamada por invocação, com os parâmetros que decidem o resultado e **não se leem da linha de comando sem interpretá-la**:
+
+| Ferramenta | Chamadas | Parâmetros registrados |
+|---|---:|---|
+| `mafft` | 1 | `threads`, **`estrategia`** (`--auto` × `--parttree`) |
+| `clustalo` | 1 | `threads`, `n_sequencias` |
+| `muscle` | — | `versao_maior` (a sintaxe muda entre 3.8 e 5.x), `n_sequencias` |
+| `fasttree` | 2 | `model` — **sem semente**, e o registro diz isso |
+| `iqtree` | 2 | `seed`, `threads`, `model`, `bootstrap` |
+| `raxml-ng` | 2 | `seed`, `threads`, **`workers=1`** (D17), `model` |
+| `mrbayes` | — | `ngen`, `burnin`, `samplefreq`, `model`, e a nota de que **não há semente** |
+
+Três escolhas que valem registro:
+
+- **A estratégia do MAFFT** (`--auto` × `--parttree`) é decidida pelo tamanho do conjunto, muda o alinhamento e portanto muda a árvore. Até aqui só existia no log da execução, que não acompanha o artefato.
+- **O MrBayes registra `seed=None` como ausência declarada**, não como valor. A ferramenta gera a própria semente e a árvore **não é reprodutível** — é [D11](../science/02-defeitos-que-alteram-resultado.md#d11) vivo, e o manifesto passa a declará-lo em vez de omiti-lo. Regra 5 do projeto: "não aplicável" nunca é um número.
+- **O FastTree é registrado mesmo sem semente nem paralelização.** Registrar a ausência é o que distingue *não se aplica* de *ninguém registrou* — que era exatamente a confusão que este lote veio desfazer.
+
+O coletor (`workflow/utils/tool_runs.py`) é de processo, e a separação é deliberada: **quem chama registra o fato bruto; o manifesto decide o que pode ser gravado.** O `TreeBuilder` é construído seis vezes por execução, do fundo da pilha do controlador, e não tem — nem deve ter — referência ao manifesto.
+
+#### Δ em métrica publicada: **nenhum por este lote — mas a conferência achou D21**
+
+Nada aqui toca cálculo, e a conferência confirma: reexecutado o conjunto de validação, **12 dos 14 pipelines saem byte a byte idênticos** aos do pré-voo de DEC-045. Os dois que não saem são os de **IQ-TREE**, e a causa não é este lote.
+
+Foi assim que apareceu [**D21**](../science/02-defeitos-que-alteram-resultado.md#d21): **o IQ-TREE com `-nt 4` não é determinístico**. Três repetições, mesma máquina, mesma versão, mesma semente, mesmo arquivo:
+
+| Configuração | Repetições | Topologias distintas | RF |
+|---|---:|---:|---:|
+| IQ-TREE `-nt 4` | 3 | **3** | **2** |
+| IQ-TREE `-nt 1` | 3 | 1 | 0 |
+| RAxML-NG `--threads 4 --workers 1` (controle) | 3 | 1 | 0 |
+
+O controle é o que dá o diagnóstico: o RAxML-NG, na mesma máquina e com quatro threads, **é** determinístico, porque `--workers 1` serializa a busca. D17 corrigiu a ferramenta onde o controle existia e **deixou passar a outra** — o IQ-TREE não tem equivalente a `--workers 1`, e fixar `-seed` e `-nt` não basta.
+
+Isso **corrige uma conclusão de DEC-045**, que atribuiu à versão do inferidor toda a divergência entre as duas máquinas. Vale para o RAxML-NG; não vale para o IQ-TREE, cuja divergência era ruído entre execuções. O erro de raciocínio foi tratar "eliminei duas hipóteses" como "provei a terceira" sem medir a repetibilidade da própria medida — a correção está anotada na entrada de DEC-045.
+
+Consequência prática para [`§4.1`](11-handoff-maquina-de-validacao.md): os números derivados do conjunto de árvores (**itemsets do FPMax, clados canônicos, bipartições universais**) variam entre duas execuções idênticas — medido `38 / 47 / 6` contra `34 / 43 / 7`. Nenhum dos dois está errado, e é exatamente o que o item "cada figura reproduzível por script + commit + hash" proíbe. **A escolha entre `-nt 1`, declarar o método não reprodutível, ou repetições com consenso é do usuário** e está em D21.
+
+**Evidência de execução:**
+```
+python -m unittest (10 módulos)          → Ran 162 tests, OK   (eram 150: +8 test_tool_runs, +4 test_manifest)
+make test-backend                        → 216 passed, 1 xfailed
+python workflow.py (Zika-21 advanced)    → 14 árvores, exit 0, real 10m20s
+  manifest_version                       → 2
+  tools_invoked                          → 8 chamadas: mafft 1, clustalo 1,
+                                             fasttree 2, iqtree 2, raxml-ng 2
+  tokens absolutos em tools_invoked      → nenhum
+  nome de usuário no manifesto inteiro   → ausente
+conferir_correcoes_m1.py                 → TUDO VERDE
+oraculo_rf_dendropy.py                   → 91 pares, 0 divergências
+comparação com o pré-voo (DEC-045)       → 12 de 14 idênticos; os 2 de IQ-TREE não (D21)
+iqtree3 -nt 4, 3 repetições, mesma semente → 3 md5 distintos, RF = 2
+iqtree3 -nt 1, 3 repetições                → 1 md5
+raxml-ng --threads 4 --workers 1, 3 rep.   → 1 md5 (controle)
+```
+
+**Write-lock:** `BioComp_UFF/workflow.py`, `BioComp_UFF/workflow/utils/{manifest,tool_runs}.py`, `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow/alignment/alignmentSeq.py`, `BioComp_UFF/workflow/tests/{test_manifest,test_tool_runs}.py`, `docs/automation/{07,10}`, `docs/skills/validar-workflow/SKILL.md`. **Reversível:** sim. **Não toca `Backend/`** — a correção do verde falso em `conferir_correcoes_m1.py` é lote seguinte, pela regra 6.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1206,6 +1474,7 @@ Toda mudança na zona sagrada ([04-rigor-cientifico §1](04-rigor-cientifico.md)
 | M1.1 — D4, `support` do FPMax era o limiar da varredura | 2026-08-24 | **Sim** — toda linha de `all_results_fpmax.csv`, as duas tabelas da Deep Analysis, `pattern_statistics.avg_support` e `support_distribution` | [DEC-021](#dec-021--2026-08-24--m11--d4-o-support-do-fpmax-deixa-de-ser-o-limiar-da-varredura). Confronto contra `audit_variola.py --secao 5`: **Δ = 0 em 37 de 37 itemsets** nos quatro experimentos de *Variola*. A contradição de exibir o mesmo padrão como frágil e como robusto cai a zero em todos. **Os CSVs em disco não mudam** — só reexecutando o experimento. | **Coberta** pela decisão 5 ("corrigir e re-rodar"); a reexecução é o passo que materializa o número novo |
 | M1.2 — D5, identidade de clado de 16 bits e dependente da ordem | 2026-08-24 | **Sim** — todo item do FPMax e todo padrão da Deep Analysis | [DEC-022](#dec-022--2026-08-24--m12--d5-o-pipeline-passa-a-usar-a-identidade-canônica-de-clado). Itens distintos caem de 155/194/405/20 para 101/120/270/11, batendo com a contagem de clados canônicos do oráculo (+1, o clado universal, que o builder inclui). O padrão de maior suporte de VARV-49 vai de **1 clado a 6/8** para **16 clados a 8/8** — `02-defeitos` previa 15 a 8/8. | **Coberta** pela decisão 5; materializa na reexecução |
 | M1.3 — D3, RF sobre clados enraizados | 2026-08-24 | **Sim** — `rf_matrix`, `factor_effects`, `support_profile`, `universal_clades` e todo padrão maximal | [DEC-023](#dec-023--2026-08-24--m13--d3-a-unidade-de-comparação-passa-a-ser-a-bipartição-e-m1-fecha). Confronto contra dendropy: **137 pares, 0 divergências**. VARV-6 sai de 0 para 1 clado universal e a discordância entre três métodos de topologia idêntica cai de 75% para 0%. A distância **sobe** em pares genuinamente diferentes (fasttree × nj, +2,2%), o que descarta a hipótese de redutor cego. | **Coberta** pela decisão 5; a análise enraizada legítima é M2.3 |
+| M2.5 — DEC-046, instrumentação do manifesto | 2026-08-26 | **Não pelo lote; sim pelo que ele revelou** | [DEC-046](#dec-046--2026-08-26--tools_invoked-deixa-de-sair-vazio--o-manifesto-passa-a-registrar-o-que-rodou). A mudança é de registro, não de cálculo: **12 dos 14 pipelines saem idênticos** à execução anterior e o oráculo dendropy devolve **91 pares, 0 divergências**. Os 2 divergentes são os de IQ-TREE e a causa é [D21](../science/02-defeitos-que-alteram-resultado.md#d21), anterior a este lote: com `-nt 4` a ferramenta devolve **3 topologias em 3 repetições** da mesma semente. Por arrasto, itemsets do FPMax, clados canônicos e bipartições universais **variam entre execuções idênticas** (38/47/6 contra 34/43/7). Corrige a atribuição de causa de [DEC-045](#dec-045--2026-08-25--pré-voo-40-na-máquina-de-validação--o-que-muda-entre-máquinas-é-a-versão-e-só-ela) para o braço do IQ-TREE. | **Pendente** — D21 oferece três saídas (`-nt 1`, declarar não reprodutível, ou repetições com consenso) e **bloqueia §4.1** até ser decidida |
 
 ## Handoffs e relatórios
 
@@ -1284,3 +1553,15 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-25 | `check_dependencies.sh --install` rodava `conda install` **sem `-n`** (helper meu, `4214c36`; o instalador do projeto sempre usou `-n`). Medido: o `base` desta máquina está limpo | `scripts/check_dependencies.sh` | DEC-043 | ✅ corrigido; `cleanup_env.sh` diagnostica onde tiver ocorrido |
 | 2026-08-25 | O script `test` do frontend era `vitest` puro: só não travava porque o `npm run test -- --run` repassava a flag. Qualquer chamada não interativa sem esse repasse fica pendurada | `Frontend/.../package.json` | DEC-043 | ✅ corrigido — `test` é `vitest run`, watch virou `test:watch` |
 | 2026-08-25 | **MUSCLE não está no env do projeto** desta máquina — só em `/usr/bin` (3.8.1551). Toda medição de MUSCLE registrada até aqui usou o binário do sistema, não o da receita | `check_dependencies.sh` | DEC-043 | Instalar no env antes da próxima medição de alinhador |
+| 2026-08-25 | A medição que declarou **MUSCLE inviável em *Variola*** (19,4 GB, OOM) foi feita contra o **3.8.1551 do sistema**. O env pinado tem **MUSCLE 5.3**, de interface incompatível (`-align/-output` × `-in/-out`): o veredito **não transfere** e o `ResourceModel` do MUSCLE foi calibrado na ferramenta errada | `aligners.py`, `ResourceModel` | DEC-044 | **M7.7** — refazer a sonda no 5.3 antes de reafirmar |
+| 2026-08-25 | `environment.yml` **não pinava versão de nenhuma ferramenta**: duas máquinas com o mesmo commit recebiam RAxML-NG 1.2.2 × 2.0.2 e MUSCLE 3.8 × 5.3. A versão do inferidor é parte do resultado, não do ambiente | `environment.yml`, `requirements.txt` | DEC-044 | ✅ **corrigido** — 7 ferramentas + `pyqt` + 8 deps Python pinadas; `--dry-run` resolve |
+| 2026-08-25 | `garantir_pnpm` aprovava um `pnpm` **que não executa**: `command -v` só responde pela existência do arquivo. Sintoma: `start.sh` imprimia `✓ pnpm` com versão em branco, subia tudo, e o frontend morria 15 s depois | `scripts/lib_node.sh` | DEC-044 | ✅ **corrigido** — a checagem executa `pnpm --version` e exige saída não vazia |
+| 2026-08-26 | **D21 — o IQ-TREE com `-nt 4` não é determinístico.** Três repetições com a mesma semente, entrada, máquina e versão dão **três topologias** (RF = 2); com `-nt 1`, uma só. O RAxML-NG com `--workers 1` é determinístico no mesmo teste — D17 corrigiu a ferramenta que tinha o controle e deixou passar a que não tem | `builder.iqtree_constructor` | DEC-046 | **Bloqueia §4.1 — decisão do usuário** ([D21](../science/02-defeitos-que-alteram-resultado.md#d21)) |
+| 2026-08-26 | `manifest["params"]` gravava `input_path` e `output_path` **absolutos**, com nome de usuário — enquanto a primeira linha do módulo promete que todo caminho é relativo. `conferir_correcoes_m1.py` dava **verde falso** porque só varre as chaves de `inputs_sha256`/`outputs_sha256`, nunca `params` | `workflow/utils/manifest.py` | DEC-046 | ✅ **corrigido no manifesto**; estender a conferência é lote de `Backend/` (regra 6) |
+| 2026-08-26 | A conferência de D15 em `conferir_correcoes_m1.py` varre **só as chaves de SHA-256**. Passou verde durante todo M2.5 sobre um manifesto que vazava caminho absoluto em `params` | `Backend/scripts/conferir_correcoes_m1.py` | DEC-046 | **Alta** — lote curto de `Backend/`, não tocado por disciplina de escopo |
+| 2026-08-26 | Os alinhadores chamam o binário por **nome fixo** (`"mafft"`, `"muscle"`) em vez de `external_tools.require_tool`, que existe justamente para isso desde DEC-043. Funciona hoje porque os nomes coincidem | `workflow/alignment/alignmentSeq.py` | DEC-046 | Média — mesma classe de defeito que o `iqtree2` fixo |
+| 2026-08-25 | **`tools_invoked` do manifesto está vazio nas duas máquinas.** `ExecutionManifest.register_tool_run` existe, tem docstring justificando-se por D17 e tem teste de unidade — e **nenhum ponto do pipeline a chama**. O manifesto registra o que estava *disponível*, nunca o que foi *executado*, que é a distinção que o campo existia para fazer | `BioComp_UFF/workflow/utils/manifest.py:277`, chamadores ausentes | DEC-045 | **Alta — pré-requisito de §4.1**; lote próprio de T1 |
+| 2026-08-25 | RAxML-NG **recusa** `--threads 16` no conjunto de validação: *Too few patterns per thread*. Os 48 núcleos da máquina são inutilizáveis nesta escala de dado — o teto é do dado, não do hardware | sonda medida | DEC-045 | Insumo de **M7.8** / [DEC-041](#dec-041--2026-08-25-independência-de-hardware-vira-requisito-de-projeto--limites-deixam-de-ser-escalares): o `ResourceModel` precisa de um piso, não só de um teto |
+| 2026-08-25 | Com `--threads N --workers 1` e semente fixa, RAxML-NG 2.0.2 e IQ-TREE 3.1.3 dão **RF = 0** entre 2, 4 e 8 threads numa máquina de 48 núcleos. A mitigação de [D17](../science/02-defeitos-que-alteram-resultado.md#d17) **funciona onde deveria falhar** | sonda medida | DEC-045 | ✅ **D17 mitigado e verificado**; `N` continua obrigatório no manifesto |
+| 2026-08-25 | `check_dependencies.sh` **reportava** a versão de cada ferramenta e não a **comparava** com nada. Pinar a receita não alcança um env criado antes do pino: ele fica na versão antiga e o script diz ✓ | `scripts/check_dependencies.sh` | DEC-044 | ✅ **corrigido** — lê o pino do `environment.yml`, avisa, sugere a instalação certa, e reprova com `--strict` |
+| 2026-08-25 | A máquina de validação tem **48 núcleos lógicos** contra 12 da de desenvolvimento. É o gatilho direto de [D17](../science/02-defeitos-que-alteram-resultado.md#d17): com a mesma semente, o esquema de paralelização muda a topologia | máquina | DEC-044 | **Aberto** — `--threads N --workers 1` obrigatório, e o próprio `N` vai ao manifesto |
