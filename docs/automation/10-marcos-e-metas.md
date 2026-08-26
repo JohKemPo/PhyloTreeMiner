@@ -230,7 +230,7 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 | Grafo | Credenciais leitura/escrita separadas; `$user_id` parametrizado; restrição de APOC → fecha `S-1` **sem login** ([DEC-004](07-log-de-execucao.md)) | T5 |
 | Desempenho | `asyncio.to_thread` em NCBI (`B-4`) e bioinformática pesada (`B-5`); `psutil interval=None`; reescrita de `stream_workflow_output` com duas tasks + EOF; `treePlot` recebendo `dict` em vez de lista | T2 |
 | Frontend | Índice memoizado (`F-4`); leak de zoom D3 (`F-5`); update incremental do vis-network; tratar `503` na UI | T4 |
-| **Observabilidade** | **M4.O — estado e duração vindos do manifesto, não do log** ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)). Um manifesto por execução com `run_id` no nome (**pré-requisito**: hoje duas execuções do mesmo dia se fundem no mesmo arquivo); estado como enumeração fechada, com `desconhecido` distinto de `nunca executado`; `duration` indefinido devolve `null` **com motivo**; progresso por etapas concluídas / planejadas; `stream_workflow_output` para de rotular todo stderr como `ERROR`; apagar `progress_percent`, que é código morto | T2 + T4 |
+| **Observabilidade** | ⚙️ **M4.O — 7 de 8 entregues** ([DEC-048](07-log-de-execucao.md)): estado e duração vindos do manifesto, não do log ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)). **Falta o item 4** — um arquivo por execução, com `run_id` no nome —, que é `BioComp_UFF/` e por ora está mitigado por heurística. Um manifesto por execução com `run_id` no nome (**pré-requisito**: hoje duas execuções do mesmo dia se fundem no mesmo arquivo); estado como enumeração fechada, com `desconhecido` distinto de `nunca executado`; `duration` indefinido devolve `null` **com motivo**; progresso por etapas concluídas / planejadas; `stream_workflow_output` para de rotular todo stderr como `ERROR`; apagar `progress_percent`, que é código morto | T2 + T4 |
 | Grafo/perf | Índices em `uid`/`q.key` justificados por `PROFILE`; `LIMIT` obrigatório no servidor; ingest em transação por lote (`P-3`) | T5 |
 
 **Gate de M4:** bateria [`security-probe`](../skills/security-probe/SKILL.md) verde; Cypher destrutivo recusado na rota de consulta; ingest legítimo continua funcionando; rota administrativa rejeita requisição sem token; **medição antes/depois anexada a cada item de performance** (≥3 repetições, mediana e dispersão, ambiente reportado); `getEventListeners(svg)` estável entre cliques; **nenhum golden snapshot de M0 mudou**; `make reference-check` verde.
@@ -239,14 +239,24 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 
 ```bash
 # 1. nenhum projeto com execução real aparece como 'nunca executado'
-#    hoje: Zika_..._480seq_ADVANCED devolve idle com 31 407 s de log
+#    era: Zika_..._480seq_ADVANCED devolvia idle ("Waiting") com 31 407 s de log
+#    ✅ agora: interrupted
 # 2. a duração reportada é a de UMA execução
-#    hoje: Teste_Neo4j devolve 1 960 s onde a última execução levou 396 s (5,0x)
+#    era: Teste_Neo4j devolvia 1 960 s onde a última execução levou 396 s (5,0x)
+#    ✅ agora: 396 s
 # 3. o progresso não é sempre 0
-#    hoje: 0% em 21 de 21 projetos — os três regex de progresso são caminhos mortos
+#    era: 0% em 21 de 21 — os três regex de progresso eram caminhos mortos
+#    ✅ agora: null quando indeterminado, 100 quando concluída, e a UI mostra
+#       a contagem real de árvores no lugar da barra
 # 4. os três endpoints têm teste sobre log truncado, duas execuções anexadas,
 #    log sem timestamp final e projeto sem log
-#    hoje: zero testes em Backend/tests/ para /projects/status e /projects/details
+#    era: zero testes
+#    ✅ agora: 16 testes em Backend/tests/unit/test_execution_state.py
+#
+# ⚠️ 5. um arquivo de log e um manifesto por execução (item 4 de D22)
+#    REPROVA: o pipeline segue nomeando o log por dia e abrindo em append.
+#    O leitor mitiga separando cauda de execução nova por intervalo de 60 s,
+#    o que não cobre duas execuções em que a primeira morreu sem concluir.
 ```
 
 ### M5 — Estrutural (W4)

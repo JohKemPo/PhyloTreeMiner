@@ -13,10 +13,6 @@ import {
   Segmented,
 } from "antd";
 import {
-  CheckCircleOutlined,
-  SyncOutlined,
-  ClockCircleOutlined,
-  CloseCircleOutlined,
   FilterOutlined,
   AppstoreOutlined,
   TableOutlined,
@@ -27,6 +23,7 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 const { Search } = Input;
 
+import { STATUS_MAP, VALID_STATUSES } from "../../constants/executionStatus";
 import ProjectsCardsView from "./projectsCardsView";
 import ProjectsTableView from "./projectsTableView";
 import { useNavigate } from "react-router-dom";
@@ -73,17 +70,23 @@ const ProjectGallery = ({ onProjectSelect }) => {
 
         projectsData = projectsData.map((p) => ({
           ...p,
-          status: statusData[p.name] || "idle",
+          // D22 — o padrão de quem não tem status é "unknown", não "never_run".
+          // Coagir o desconhecido para um estado concreto foi o defeito: o
+          // backend devolvia "idle" no `else` do parse e a interface o exibia
+          // como "Waiting", de modo que uma execução morta no meio ficava
+          // indistinguível de uma que nunca começou.
+          status: statusData[p.name] || "unknown",
           details: detailsData[p.name] || {
-            input_file: "N/A",
-            current_step: "N/A",
+            input_file: null,
+            current_step: null,
+            progress: null,
+            trees_built: 0,
           },
         }));
 
-        const validStatuses = ["completed", "running", "idle", "failed"];
-        projectsData = projectsData.map(p => ({
+        projectsData = projectsData.map((p) => ({
           ...p,
-          status: validStatuses.includes(p.status) ? p.status : "idle"
+          status: VALID_STATUSES.includes(p.status) ? p.status : "unknown",
         }));
       }
 
@@ -176,25 +179,15 @@ const ProjectGallery = ({ onProjectSelect }) => {
     return () => clearInterval(intervalId);
   }, [fetchJobsData]);
 
-  const statusMap = {
-    completed: {
-      color: "green",
-      icon: <CheckCircleOutlined />,
-      text: "Completed",
-    },
-    running: {
-      color: "blue",
-      icon: <SyncOutlined spin />,
-      text: "In Progress",
-    },
-    idle: { color: "gold", icon: <ClockCircleOutlined />, text: "Waiting" },
-    failed: { color: "red", icon: <CloseCircleOutlined />, text: "Failure" },
-  };
+  const statusMap = STATUS_MAP;
 
   const filteredProjects = projects
     .map((p) => ({
       ...p,
-      progress: progressData[p.name] || 0,
+      // Durante a execução o WebSocket manda o percentual; fora dela, vale o
+      // que o backend calculou — que é `null` quando indeterminado. `|| 0`
+      // aqui transformava "não sei" em "0%", que era metade de D22.
+      progress: progressData[p.name] ?? p.details?.progress ?? null,
     }))
     .filter(
       (p) =>
@@ -223,11 +216,12 @@ const ProjectGallery = ({ onProjectSelect }) => {
                   style={{ width: 150 }}
                   onChange={(value) => setStatusFilter(value)}
                 >
-                  <Option value="all">All</Option>
-                  <Option value="running">In Progress</Option>
-                  <Option value="completed">Completed</Option>
-                  <Option value="idle">Waiting..</Option>
-                  <Option value="failed">Failure</Option>
+                  <Option value="all">Todos</Option>
+                  {VALID_STATUSES.map((estado) => (
+                    <Option key={estado} value={estado}>
+                      {STATUS_MAP[estado].text}
+                    </Option>
+                  ))}
                 </Select>
               </Space>
             </Col>

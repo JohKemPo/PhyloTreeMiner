@@ -9,8 +9,8 @@ Este é o arquivo que a próxima janela de contexto lê para saber o que já aco
 | Campo | Valor |
 |---|---|
 | Marco corrente | **M2 — Baseline replicado** — **6 de 7 lotes**: M2.2, M2.3, M2.4, M2.5, M2.6 e M2.7 entregues. Falta **M2.1** e a **reexecução** que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
-| Última atualização | 2026-08-26 — **estado e duração da execução caracterizados como [D22](../science/02-defeitos-que-alteram-resultado.md#d22)** (DEC-047): são raspados do log, `idle` é o `else`, a duração erra por até **5×** e o progresso é **0% em 21 de 21** projetos. Novo lote **M4.O**. Antes, no mesmo dia: `tools_invoked` deixa de sair vazio e a conferência acha **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** — o IQ-TREE com `-nt 4` não é determinístico (DEC-046). Antes: pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
-| Lotes em andamento | nenhum. Aberto e caracterizado: **M4.O — estado e duração pelo manifesto** ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)), com gate que hoje reprova nos 4 critérios. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
+| Última atualização | 2026-08-26 — **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) corrigido no backend e no frontend** (DEC-048): estado e duração vêm do manifesto, `idle` deixa de existir, a duração de `Teste_Neo4j` cai de 1 960 s para os **396 s** reais, e o progresso deixa de ser 0 por decreto. **7 de 8 itens** — falta um arquivo por execução, que é `BioComp_UFF/`. Antes, no mesmo dia, a caracterização (DEC-047): são raspados do log, `idle` é o `else`, a duração erra por até **5×** e o progresso é **0% em 21 de 21** projetos. Novo lote **M4.O**. Antes, no mesmo dia: `tools_invoked` deixa de sair vazio e a conferência acha **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** — o IQ-TREE com `-nt 4` não é determinístico (DEC-046). Antes: pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
+| Lotes em andamento | nenhum. ⚙️ **M4.O em 7 de 8** — o gate passa nos 4 critérios originais; o 5º (um arquivo por execução) reprova e é lote de `BioComp_UFF/`. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
 | Write-locks ativos | nenhum |
 | Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Nada pendente |
 
@@ -1502,6 +1502,65 @@ grep -c progress_percent projectsTableView.jsx       → 1   (definido, nunca us
 
 **Write-lock:** `docs/science/02-defeitos-que-alteram-resultado.md`, `docs/automation/{07,10}`, `Backend/scripts/sonda_status_execucao.py`. **Nenhum arquivo de produção alterado.** **Reversível:** sim.
 
+### DEC-048 · 2026-08-26 · M4.O — estado e duração passam a vir do manifesto, no backend e no frontend
+
+**Gatilho:** o usuário perguntou se a correção de [D22](../science/02-defeitos-que-alteram-resultado.md#d22) já tinha sido feita e mandou atacar o problema. Não tinha: [DEC-047](#dec-047--2026-08-26--estado-e-duração-são-raspados-do-log--caracterizado-como-d22-e-o-manifesto-já-tinha-a-resposta) foi só caracterização.
+
+**7 dos 8 itens entregues.** O que falta é o item 4 — um arquivo por execução —, que é `BioComp_UFF/` e a regra 6 mantém fora deste lote.
+
+#### O que mudou
+
+**`Backend/src/services/execution_state.py`** (novo) concentra a decisão num lugar só, com precedência declarada: **manifesto primeiro, log depois**. `app.py` não voltou a crescer com isso — a extração é na direção de Arq-B.
+
+| Antes | Depois |
+|---|---|
+| `idle` no `else` do parse, exibido como *"Waiting"* | enumeração **fechada** de 6 estados: `running`, `completed`, `failed`, `interrupted`, `never_run`, `unknown` |
+| duração do primeiro ao último carimbo do **arquivo** | duração da **última execução**, recortada nas fronteiras |
+| `duration` sumia como `None` sem motivo | `duration` `null` **com `duration_note`**, e `duration_source` dizendo `manifesto` ou `log` |
+| `progress` = 0 por padrão | `progress` `null` quando indeterminado; `trees_built` traz a contagem real |
+| `"ERROR" in log_content` sobre o arquivo inteiro | erro reconhecido pelo **nível do registro**, na execução corrente |
+| todo stderr transmitido como `ERROR` | barra do `tqdm` vira progresso; o resto é `WARNING` salvo quando se declara erro |
+
+No frontend, `constants/executionStatus.jsx` (novo) é a **fonte única** dos estados: a galeria e a tabela mantinham mapas próprios, e duas listas divergindo é D5 noutro assunto. O filtro de status passa a ser derivado do mapa em vez de repetido à mão. `progress_percent` — 6 etapas mapeadas, ~30 comentadas, **nunca referenciado** — foi apagado; o débito de lint caiu de 68 para 67.
+
+#### O resultado, medido nos mesmos 21 projetos
+
+| Projeto | Antes | Depois |
+|---|---|---|
+| `Teste_Neo4j` | completed, **1 960 s** | completed, **396 s** — a duração da última execução |
+| `Zika_..._480seq_ADVANCED` | **idle** ("Waiting"), 31 407 s | **interrupted**, 31 407 s, 9 árvores, parou em `Construction of Subtrees.` |
+| `test` | **idle** ("Waiting") | **interrupted** |
+| `test_variola_noITRs` | failed, duração **ausente** | failed, **12 219 s** |
+| `Zika_21seq_manifesto` | completed, 618 s (do log) | completed, 618 s **do manifesto**, `run_id 4a8ad78f90d2` |
+| progresso | **0 % em 21 de 21** | `null` onde indeterminado, `100` onde concluída |
+
+#### Uma regressão pega no caminho
+
+O primeiro corte por execução usava o marcador de conclusão como fronteira e tratava tudo o que vinha depois como execução nova. Toda execução escreve linhas de encerramento **depois** de anunciar a conclusão — a gravação do manifesto, por exemplo —, então os três projetos com manifesto passaram a sair como `interrupted`. Sem rodar a sonda contra os 21 projetos reais, isso teria ido embora verde.
+
+A separação entre cauda e execução nova passou a ser o **intervalo**: linhas de encerramento saem em milissegundos, uma execução nova começa depois de um intervalo humano. O corte é `_INTERVALO_NOVA_EXECUCAO_S = 60`.
+
+**É heurística, e está declarada como tal.** Ela separa duas execuções quando a primeira **concluiu**; não separa quando a primeira morreu sem concluir — nesse caso elas ficam coladas e a duração volta a somar. O conserto de verdade continua sendo o item 4.
+
+#### O que este lote não fez
+
+- **Item 4 de D22** — um log e um manifesto por execução, com `run_id` no nome. É `BioComp_UFF/`, e a regra 6 proíbe um lote tocar `Backend/` e o submódulo ao mesmo tempo. Fica como lote seguinte, e é ele que remove a heurística acima.
+- **Progresso por etapas planejadas.** Exigiria o pipeline declarar quantos pipelines pretende executar — mesmo lote do item 4. Até lá, `null` e a contagem de árvores, que é honesta.
+
+**Evidência de execução:**
+```
+pytest Backend/tests                       → 232 passed, 1 xfailed   (eram 216: +16)
+pytest tests/unit/test_execution_state.py  → 16 passed
+make lint                                  → erros 67/68 → linha de base regravada em 67
+make build                                 → ✓ built em 22,78 s
+make test-frontend                         → 8 passed
+GET /projects/status                       → interrupted onde antes era idle
+GET /projects                              → Teste_Neo4j 396 s (era 1 960); duration_source por projeto
+POST /projects/details                     → progress null + trees_built 9; runs_in_log 2 em Teste_Neo4j
+```
+
+**Write-lock:** `Backend/src/app.py`, `Backend/src/services/execution_state.py`, `Backend/tests/unit/test_execution_state.py`, `Frontend/phylotreeminer/src/constants/executionStatus.jsx`, `Frontend/phylotreeminer/src/components/displayData/{projectsGallery,projectsTableView}.jsx`, `Frontend/phylotreeminer/.eslint-baseline.json`, `docs/automation/{07,10}`, `docs/science/02-defeitos-que-alteram-resultado.md`. **Não toca `BioComp_UFF/`.** **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1624,6 +1683,7 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-25 | A medição que declarou **MUSCLE inviável em *Variola*** (19,4 GB, OOM) foi feita contra o **3.8.1551 do sistema**. O env pinado tem **MUSCLE 5.3**, de interface incompatível (`-align/-output` × `-in/-out`): o veredito **não transfere** e o `ResourceModel` do MUSCLE foi calibrado na ferramenta errada | `aligners.py`, `ResourceModel` | DEC-044 | **M7.7** — refazer a sonda no 5.3 antes de reafirmar |
 | 2026-08-25 | `environment.yml` **não pinava versão de nenhuma ferramenta**: duas máquinas com o mesmo commit recebiam RAxML-NG 1.2.2 × 2.0.2 e MUSCLE 3.8 × 5.3. A versão do inferidor é parte do resultado, não do ambiente | `environment.yml`, `requirements.txt` | DEC-044 | ✅ **corrigido** — 7 ferramentas + `pyqt` + 8 deps Python pinadas; `--dry-run` resolve |
 | 2026-08-25 | `garantir_pnpm` aprovava um `pnpm` **que não executa**: `command -v` só responde pela existência do arquivo. Sintoma: `start.sh` imprimia `✓ pnpm` com versão em branco, subia tudo, e o frontend morria 15 s depois | `scripts/lib_node.sh` | DEC-044 | ✅ **corrigido** — a checagem executa `pnpm --version` e exige saída não vazia |
+| 2026-08-26 | O corte do log por execução separa cauda de execução nova por um **intervalo de 60 s**. É heurística: não separa duas execuções em que a primeira morreu **sem concluir** — nesse caso a duração volta a somar as duas. Só some com um arquivo por execução | `Backend/src/services/execution_state.py` (`_fatiar_execucoes`) | DEC-048 | **D22 item 4**, lote de `BioComp_UFF/` |
 | 2026-08-26 | **D22 — estado e duração raspados do log.** `idle` é o ramo `else` e a UI o mostra como *Waiting*: um projeto que rodou 8 h 43 min e morreu no meio é indistinguível de um nunca executado. A duração cobre duas execuções mais o intervalo ocioso — **1 960 s reportados contra 396 s reais** | `Backend/src/app.py` (`get_projects`, `get_projects_status`, `get_projects_details`) | DEC-047 | **M4.O**, com gate executável |
 | 2026-08-26 | O progresso é **0% em 21 de 21 projetos**: os três regex são caminhos mortos. O `tqdm` escreve em stderr e não é capturado; `Progress: N%` **nunca é emitido** pelo pipeline; e os `STEP:` vão para o arquivo de log, não para o `stdout` que o backend lê | `app.py` (`stream_workflow_output`, `get_projects_details`) | DEC-047 | **M4.O** |
 | 2026-08-26 | `stream_workflow_output` rotula **toda** linha de stderr como `ERROR`. Como o `tqdm` escreve em stderr, a barra de progresso de uma execução saudável chega ao usuário como enxurrada de erros | `app.py` | DEC-047 | **M4.O** |

@@ -21,6 +21,7 @@ from src.routers.ncbi_router import router as ncbi_router
 from src.routers.cql_router import router as cql_router
 from src.routers.cql_batch_router import router as cql_batch_router
 from src.services.neo4j_services import neo4j_service
+from src.services.execution_state import resolver_estado
 from src.services.ncbi_acquisition import NCBIAcquisition
 from src.services.genericOWIDAnalyzer import GenericOWIDAnalyzer
 from src.services.cql_batch_service import init_cql_batch_service
@@ -122,7 +123,10 @@ app.include_router(
 class Project(BaseModel):
     name: str = Field(..., description="Nome do projeto.")
     last_modified: datetime.datetime = Field(..., description="Data da última modificação do diretório do projeto.")
-    duration: Optional[int] = Field(None, description="Duração do último processo em segundos.")
+    duration: Optional[int] = Field(None, description="Duração da ÚLTIMA execução, em segundos. `null` quando indeterminada — nunca 0 (D22).")
+    duration_note: Optional[str] = Field(None, description="Por que a duração é `null`. Preenchido sempre que ela for.")
+    duration_source: str = Field("nenhuma", description="De onde veio: `manifesto` (declarado pelo pipeline), `log` (reconstruído) ou `nenhuma`.")
+    run_id: Optional[str] = Field(None, description="Identificador da execução, quando há manifesto.")
 
 class FileSystemItem(BaseModel):
     name: str = Field(..., description="Nome do arquivo ou diretório.")
@@ -134,7 +138,11 @@ class FileSystemItem(BaseModel):
 class ProjectDetails(BaseModel):
     input_file: Optional[str] = None
     current_step: Optional[str] = None
-    progress: Optional[int] = Field(0, ge=0, le=100, description="Progresso atual em porcentagem")
+    progress: Optional[int] = Field(None, ge=0, le=100,
+        description="Percentual, **só quando calculável**. `null` é indeterminado — antes de D22 este campo era 0 em 21 de 21 projetos, o que é indistinguível de 'não começou'.")
+    trees_built: int = Field(0, description="Árvores presentes em `out/Trees/`. Contagem real, é o que substitui a barra falsa.")
+    state: str = Field("never_run", description="Mesmo estado devolvido por `/projects/status`.")
+    runs_in_log: int = Field(0, description="Quantas execuções o arquivo de log concatena. `> 1` significa que o log mistura execuções.")
     
 class WorkflowConfig(BaseModel):
     """Modelo para as configurações do workflow enviadas pelo frontend."""
@@ -205,6 +213,11 @@ def parse_log_line(line: str) -> dict:
         return {"timestamp": match.group(1), "level": match.group(2), "message": match.group(3).strip()}
     return {"timestamp": datetime.datetime.now().isoformat(), "level": "RAW", "message": line.strip()}
 
+#: Uma linha de stderr só é erro se ela se declarar erro. Sem isto, a barra de
+#: progresso do `tqdm` — que sai em stderr — era transmitida como ERROR (D22).
+_NIVEL_ERRO_STDERR = re.compile(r"\b(ERROR|CRITICAL|Traceback|Exception|Error:)\b")
+
+
 async def stream_workflow_output(project_name: str, process: asyncio.subprocess.Process):
     """
     Lê stdout/stderr de um processo e analisa o progresso real
@@ -269,14 +282,27 @@ async def stream_workflow_output(project_name: str, process: asyncio.subprocess.
             stderr_line = await asyncio.wait_for(process.stderr.readline(), timeout=0.1)
             if stderr_line:
                 line_str = stderr_line.decode('utf-8', errors='ignore').strip()
-                await manager.broadcast(project_name, {
-                    "type": "progress_update",
-                    "payload": {
-                        "level": "ERROR", 
-                        "message": line_str, 
-                        "timestamp": datetime.datetime.now().isoformat()
-                    }
-                })
+
+                # D22 — stderr NÃO é sinônimo de erro. O `tqdm` escreve a barra
+                # de progresso ali, e rotular tudo como ERROR fazia uma execução
+                # saudável chegar ao usuário como enxurrada de erros. A barra
+                # vira progresso; o resto vira aviso, não erro.
+                tqdm_match = tqdm_regex.search(line_str)
+                if tqdm_match:
+                    last_percentage = int(tqdm_match.group(1))
+                    await manager.broadcast(project_name, {
+                        "type": "tqdm_update",
+                        "payload": {"percentage": last_percentage, "details": line_str}
+                    })
+                else:
+                    await manager.broadcast(project_name, {
+                        "type": "progress_update",
+                        "payload": {
+                            "level": "ERROR" if _NIVEL_ERRO_STDERR.search(line_str) else "WARNING",
+                            "message": line_str,
+                            "timestamp": datetime.datetime.now().isoformat()
+                        }
+                    })
         except asyncio.TimeoutError:
             pass
 
@@ -451,47 +477,27 @@ async def get_projects():
         A duração é calculada a partir dos arquivos de log, caso existam.
     """
     projects = []
-    now = datetime.datetime.now()
-    today = now.date()
-    timestamp_regex = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})")
-
     for project_name in sorted(os.listdir(PROJECTS_ROOT)):
         full_path = os.path.join(PROJECTS_ROOT, project_name)
         if not os.path.isdir(full_path):
             continue
 
-        duration_seconds = None
-        log_dir = os.path.join(PROJECTS_ROOT, project_name, "out/outputs")
-
-        log_files = glob.glob(os.path.join(log_dir, "*.log"))
-        if log_files:
-            latest_log = max(log_files, key=os.path.getmtime)
-            
-            try:
-                with open(latest_log, 'r', encoding='utf-8', errors='ignore') as f:
-                    lines = [line for line in f if line.strip()] 
-                
-                if lines:
-                    first_match = timestamp_regex.match(lines[0])
-                    if first_match:
-                        first_line_time = datetime.datetime.strptime(first_match.group(1), "%Y-%m-%d %H:%M:%S,%f")
-                        
-                        if project_name in running_workflows:
-                            duration_seconds = int((now - first_line_time).total_seconds())
-                        else:
-                            last_match = timestamp_regex.match(lines[-1])
-                            if last_match:
-                                last_line_time = datetime.datetime.strptime(last_match.group(1), "%Y-%m-%d %H:%M:%S,%f")
-                                duration_seconds = int((last_line_time - first_line_time).total_seconds())
-            except Exception:
-                duration_seconds = None
+        # D22 — a duração vem do manifesto quando ele existe, e do log recortado
+        # POR EXECUÇÃO quando não existe. A conta anterior ia do primeiro ao
+        # último carimbo do arquivo, e como o pipeline abre o log em `append`
+        # com nome por dia, ela somava execuções distintas mais o intervalo
+        # ocioso entre elas: 1 960 s onde a última execução levou 396 s.
+        estado = resolver_estado(full_path, em_execucao=project_name in running_workflows)
 
         projects.append(Project(
             name=project_name,
             last_modified=datetime.datetime.fromtimestamp(os.path.getmtime(full_path)),
-            duration=duration_seconds
+            duration=estado.duracao_s,
+            duration_note=estado.duracao_motivo,
+            duration_source=estado.fonte,
+            run_id=estado.run_id,
         ))
-            
+
     return projects
 
 @app.post("/api/owid/metadata/")
@@ -1221,39 +1227,25 @@ async def get_projects_status():
     Consulta o status atual de todos os projetos.
 
     Returns:
-        dict: Dicionário com `{project_name: status}`, onde status pode ser:
-            - **running**: Workflow em execução
-            - **completed**: Workflow concluído
-            - **failed**: Erro durante execução
-            - **idle**: Nenhum processo em andamento
+        dict: Dicionário com `{project_name: status}`. Enumeração **fechada**
+        (D22 — antes, `idle` era o ramo `else` do parse e a interface o
+        mostrava como "Waiting", tornando um projeto que rodou 8 h e morreu no
+        meio indistinguível de um nunca executado):
+
+            - **running**: processo vivo agora
+            - **completed**: terminou e declarou conclusão
+            - **failed**: terminou com erro registrado
+            - **interrupted**: começou, não concluiu, e não há processo vivo
+            - **never_run**: nenhum vestígio de execução
+            - **unknown**: há vestígio, e ele não permite decidir
     """
     statuses = {}
     for project_name in os.listdir(PROJECTS_ROOT):
         project_path = os.path.join(PROJECTS_ROOT, project_name)
-        if os.path.isdir(project_path):
-            if project_name in running_workflows:
-                statuses[project_name] = "running"
-                continue 
-
-            outputs_dir = os.path.join(project_path, "out", "outputs")
-            if not os.path.exists(outputs_dir):
-                statuses[project_name] = "idle"
-                continue
-
-            log_files = glob.glob(os.path.join(outputs_dir, "*.log"))
-            if log_files:
-                latest_log = max(log_files, key=os.path.getmtime)
-                with open(latest_log, 'r', encoding='utf-8', errors='ignore') as f:
-                    log_content = f.read()
-
-                if ("Completed successfully!" in log_content):
-                    statuses[project_name] = "completed"
-                elif "ERROR" in log_content and "Completed successfully!" not in log_content:
-                    statuses[project_name] = "failed"
-                else:
-                    statuses[project_name] = "idle"
-            else:
-                statuses[project_name] = "idle"
+        if not os.path.isdir(project_path):
+            continue
+        statuses[project_name] = resolver_estado(
+            project_path, em_execucao=project_name in running_workflows).estado
     return statuses
 
 @app.post("/projects/details", response_model=Dict[str, ProjectDetails])
@@ -1272,56 +1264,24 @@ async def get_projects_details(project_names: List[str]):
     details = {}
     for project_name in project_names:
         project_path = os.path.join(PROJECTS_ROOT, project_name)
-        outputs_dir = os.path.join(project_path, "out", "outputs")
+        estado = resolver_estado(project_path,
+                                 em_execucao=project_name in running_workflows)
 
-        input_file = "Not found"
-        current_step = "Not started"
-        current_progress = 0
-
-        if project_name in running_workflows:
-            current_step = "Running..."
-            current_progress = 0 
-
-        if os.path.exists(outputs_dir):
-            log_files = glob.glob(os.path.join(outputs_dir, "*.log"))
-            if log_files:
-                latest_log = max(log_files, key=os.path.getmtime)
-                with open(latest_log, 'r', encoding='utf-8', errors='ignore') as f:
-                    lines = reversed(f.readlines())
-
-                input_file_regex = re.compile(r"Iniciando processamento do arquivo:\s*(.*)")
-                step_regex = re.compile(r"STEP:\s*(.*)")
-                progress_regex = re.compile(r"(\d+)\s*%\s*\|")
-
-                found_input = False
-                found_step = False
-
-                for line in lines:
-                    if not found_step:
-                        match = step_regex.search(line)
-                        if match:
-                            current_step = match.group(1).strip()
-                            found_step = True
-                            
-                    progress_match = progress_regex.search(line)
-                    if progress_match:
-                        current_progress = int(progress_match.group(1))
-
-                    if not found_input:
-                        match = input_file_regex.search(line)
-                        if match:
-                            input_file = match.group(1).strip()
-                            found_input = True
-                    
-                    if found_input and found_step:
-                        break
-        
+        # D22 — `progress` deixa de ser 0 por padrão. Era 0 em 21 de 21
+        # projetos porque os três regex que o alimentavam procuravam texto que
+        # nunca chega ao arquivo lido: o `tqdm` escreve em stderr, `Progress: N%`
+        # não é emitido por ninguém, e os `STEP:` vão para o log, não para o
+        # stdout. Um zero indistinguível de "não começou" é pior que um `null`,
+        # e a contagem de árvores é um número que existe de verdade.
         details[project_name] = ProjectDetails(
-            input_file=input_file, 
-            current_step=current_step,
-            progress=current_progress
+            input_file=estado.arquivo_entrada,
+            current_step=estado.etapa,
+            progress=estado.progresso,
+            trees_built=estado.arvores,
+            state=estado.estado,
+            runs_in_log=estado.execucoes_no_log,
         )
-        
+
     return details
 
 def extract_trees_from_nexus(nexus_content: str) -> List[Tree]:

@@ -15,12 +15,12 @@ import {
 
 import {
   MoreOutlined,
-  LoadingOutlined,
   FileOutlined,
   PlayCircleOutlined,
   DeleteOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { formatarDuracao } from "../../constants/executionStatus";
 
 const { Text } = Typography;
 
@@ -110,50 +110,6 @@ const ProjectsTableView = ({
     });
   };
 
-  const progress_percent = {
-    "Construction of distance matrix.": 14.0,
-    "Tree Construction with parsimony method.": 24.8,
-    "Tree Construction with distance matrix.": 40.0,
-    "Construction of Subtrees.": 80.5,
-    "Frequent subtree mining.": 95.2,
-    "Completed successfully!": 100,
-
-    // "STEP: Construction of distance matrix.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with parsimony method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with IQ-TREE method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with FastTree method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with RAxML-NG method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with MrBayes method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Construction of distance matrix.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with parsimony method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Construction of distance matrix.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with parsimony method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with IQ-TREE method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with FastTree method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with RAxML-NG method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with MrBayes method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Construction of distance matrix.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Tree Construction with parsimony method.": 0,
-    // "STEP: saving the tree image.": 0,
-    // "STEP: Construction of Subtrees.": 0,
-    // "STEP: Frequent subtree mining.": 0,
-    // "STEP: Completed successfully!": 0,
-  };
 
   const columns = [
     {
@@ -197,21 +153,34 @@ const ProjectsTableView = ({
       title: "Progress",
       key: "progress",
       render: (record) => {
-        const currentProgress = progressData[record.name] || 0;
+        // D22 — o percentual era 0 em 21 de 21 projetos, e o ramo final dizia
+        // "Loading" para projetos que não estavam carregando nada. Percentual
+        // desconhecido é `null`, e o que se mostra no lugar é a contagem de
+        // árvores, que é um número que existe de verdade.
+        const pct = progressData[record.name] ?? record.details?.progress ?? null;
+        const arvores = record.details?.trees_built ?? 0;
 
         if (record.status === "running") {
-          return <Progress percent={currentProgress} status="active" />;
-        } else if (record.status === "completed") {
+          return pct === null ? (
+            <Progress percent={100} status="active" showInfo={false} />
+          ) : (
+            <Progress percent={pct} status="active" />
+          );
+        }
+        if (record.status === "completed") {
           return <Progress percent={100} status="success" />;
-        } else if (record.status === "failed") {
+        }
+        if (record.status === "failed") {
           return <Progress percent={100} status="exception" />;
-        } else {
+        }
+        if (record.status === "interrupted") {
           return (
-            <Text type="secondary">
-              Loading <LoadingOutlined />
+            <Text type="warning">
+              {arvores > 0 ? `${arvores} árvore(s) antes de parar` : "parou sem gerar árvore"}
             </Text>
           );
         }
+        return <Text type="secondary">—</Text>;
       },
     },
     {
@@ -226,19 +195,29 @@ const ProjectsTableView = ({
       dataIndex: "duration",
       key: "duration",
       width: 150,
-      sorter: (a, b) => (a.duration || 0) - (b.duration || 0),
-      render: (totalSeconds) => {
+      sorter: (a, b) => (a.duration ?? -1) - (b.duration ?? -1),
+      render: (totalSeconds, record) => {
+        // Duração desconhecida traz o motivo junto: o traço mudo não distinguia
+        // "log sem carimbo de tempo" de "nunca executado" (D22).
         if (totalSeconds === null || totalSeconds === undefined) {
-          return "—";
+          return (
+            <Tooltip title={record.duration_note || "duração indeterminada"}>
+              <Text type="secondary">—</Text>
+            </Tooltip>
+          );
         }
-
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-
-        const format = (num) => String(num).padStart(2, "0");
-
-        return `${format(hours)}:${format(minutes)}:${format(seconds)}`;
+        const rotulo = formatarDuracao(totalSeconds);
+        // `log` significa reconstruída por leitura; `manifesto`, declarada pelo
+        // pipeline. Quem for publicar um tempo precisa saber a diferença.
+        return record.duration_source === "manifesto" ? (
+          <Tooltip title={`Declarada pelo manifesto (run ${record.run_id?.slice(0, 12) || "?"})`}>
+            <Text>{rotulo}</Text>
+          </Tooltip>
+        ) : (
+          <Tooltip title="Reconstruída a partir do log, não declarada pelo pipeline">
+            <Text type="secondary">{rotulo}</Text>
+          </Tooltip>
+        );
       },
     },
     {
