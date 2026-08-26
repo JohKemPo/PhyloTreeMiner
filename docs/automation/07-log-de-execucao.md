@@ -9,8 +9,8 @@ Este é o arquivo que a próxima janela de contexto lê para saber o que já aco
 | Campo | Valor |
 |---|---|
 | Marco corrente | **M2 — Baseline replicado** — **6 de 7 lotes**: M2.2, M2.3, M2.4, M2.5, M2.6 e M2.7 entregues. Falta **M2.1** e a **reexecução** que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
-| Última atualização | 2026-08-26 — **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) corrigido no backend e no frontend** (DEC-048): estado e duração vêm do manifesto, `idle` deixa de existir, a duração de `Teste_Neo4j` cai de 1 960 s para os **396 s** reais, e o progresso deixa de ser 0 por decreto. **7 de 8 itens** — falta um arquivo por execução, que é `BioComp_UFF/`. Antes, no mesmo dia, a caracterização (DEC-047): são raspados do log, `idle` é o `else`, a duração erra por até **5×** e o progresso é **0% em 21 de 21** projetos. Novo lote **M4.O**. Antes, no mesmo dia: `tools_invoked` deixa de sair vazio e a conferência acha **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** — o IQ-TREE com `-nt 4` não é determinístico (DEC-046). Antes: pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
-| Lotes em andamento | nenhum. ⚙️ **M4.O em 7 de 8** — o gate passa nos 4 critérios originais; o 5º (um arquivo por execução) reprova e é lote de `BioComp_UFF/`. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
+| Última atualização | 2026-08-26 — **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
+| Lotes em andamento | nenhum. ✅ **M4.O em 8 de 8** — o gate passa nos 5 critérios. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
 | Write-locks ativos | nenhum |
 | Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Nada pendente |
 
@@ -1561,6 +1561,62 @@ POST /projects/details                     → progress null + trees_built 9; ru
 
 **Write-lock:** `Backend/src/app.py`, `Backend/src/services/execution_state.py`, `Backend/tests/unit/test_execution_state.py`, `Frontend/phylotreeminer/src/constants/executionStatus.jsx`, `Frontend/phylotreeminer/src/components/displayData/{projectsGallery,projectsTableView}.jsx`, `Frontend/phylotreeminer/.eslint-baseline.json`, `docs/automation/{07,10}`, `docs/science/02-defeitos-que-alteram-resultado.md`. **Não toca `BioComp_UFF/`.** **Reversível:** sim.
 
+### DEC-049 · 2026-08-26 · Um arquivo de log por execução — D22 fecha em 8 de 8
+
+**Gatilho:** o item 4 de [D22](../science/02-defeitos-que-alteram-resultado.md#d22), único que [DEC-048](#dec-048--2026-08-26--m4o--estado-e-duração-passam-a-vir-do-manifesto-no-backend-e-no-frontend) não pôde fazer: mexe em `BioComp_UFF/`, e a regra 6 proíbe um lote tocar `Backend/` e o submódulo ao mesmo tempo.
+
+#### O defeito era do log, não do manifesto
+
+Vale corrigir o que DEC-047 registrou. O manifesto **nunca fundiu execuções**: ele é gravado em modo `w`, uma vez por execução, e cada gravação carrega o seu `run_id`. Quem fundia era só o log, e por dois motivos somados: o nome vinha da **data** (`log_setup_{ano}_{mês}_{dia}.log`) e o arquivo era aberto em **append**. Duas execuções no mesmo dia escreviam no mesmo arquivo, e há dois artefatos em disco com **dois `Completed successfully!`** dentro.
+
+Agora o nome carrega o `run_id` — `log_setup_2026-08-26_4c09076ad5b3.log` — e o manifesto registra em `log_file` qual é o seu. Os dois apontam um para o outro: "que log produziu esta árvore" passa a ter resposta exata, em vez de "o mais recente por data de modificação", que escolhia entre execuções sem dizer qual.
+
+#### Sete cópias das mesmas três linhas
+
+`logging.basicConfig(level=..., filename=..., format=...)` estava copiado em **sete** módulos, cada um recalculando o nome do arquivo pela data. É a forma de [D5](../science/02-defeitos-que-alteram-resultado.md#d5) noutro assunto — sete lugares que precisam concordar sobre um nome —, e havia um agravante: **`basicConfig` só tem efeito na primeira chamada**, então qual das sete vencia dependia da ordem de importação.
+
+`workflow/utils/run_logging.py` passa a ser o único lugar que sabe o nome. Duas funções, com papéis separados:
+
+- **`configurar(outputs_dir, run_id)`** — abre o log desta execução e **substitui** o que houver na raiz. Não usa `basicConfig`, justamente porque ele é no-op quando já há handler; a substituição é explícita.
+- **`garantir(outputs_dir)`** — o que os sete módulos chamam agora. Configura **só se ninguém tiver configurado**, de modo que um módulo importado no meio da execução não desvia o log para outro arquivo. Fora do workflow, cada módulo continua tendo para onde escrever.
+
+Dois defeitos menores caíram junto:
+
+- `alignmentSeq.py` fazia `filename=config.get('logfile_path', 1)`. O padrão era o **inteiro 1**, que o `logging` interpreta como descritor de arquivo: sem `logfile_path` na configuração, o log ia para o **stdout**.
+- `setupWorkflow.py` mantém o seu `basicConfig` de módulo. Ele nunca é importado por ninguém — é script de preparação de ambiente, roda fora do pipeline — e foi deixado como está.
+
+#### Verificado no cenário do defeito
+
+Não bastava um teste: o defeito só aparece com **duas** execuções. O conjunto de validação foi rodado duas vezes seguidas **no mesmo diretório de projeto**, que é exatamente o que produzia um arquivo com duas conclusões:
+
+```
+log_setup_2026-08-26_4c09076ad5b3.log   1 × "Completed successfully!"
+log_setup_2026-08-26_8567263a9687.log   1 × "Completed successfully!"
+manifest.json → run_id 8567263a9687, log_file out/outputs/log_setup_2026-08-26_8567263a9687.log
+```
+
+E o leitor do backend, sem alteração nenhuma, passa a ler a execução certa: `completed`, **14 s** (a segunda execução reaproveitou as árvores), `fonte=manifesto`, `runs_no_log=1`.
+
+**A heurística de intervalo de DEC-048 fica**, e deixa de ter função em execução nova: ela existe para os logs **já em disco**, que continuam fundidos e precisam ser lidos.
+
+#### Δ em métrica publicada: **nenhum**
+
+Mudança de registro, não de cálculo. O conjunto de validação reexecutado devolve **14 árvores**, `conferir_correcoes_m1.py` **TUDO VERDE** e o oráculo dendropy **91 pares, 0 divergências**.
+
+**Evidência de execução:**
+```
+python -m unittest (11 módulos)          → Ran 169 tests, OK   (eram 162: +7 test_run_logging)
+make test-backend                        → 232 passed, 1 xfailed
+python workflow.py (Zika-21 advanced)    → 14 árvores, exit 0, real 9m38s
+  log gravado                            → log_setup_2026-08-26_4c09076ad5b3.log
+  manifest.log_file                      → aponta para ele
+segunda execução no MESMO projeto        → segundo arquivo, 1 conclusão em cada
+conferir_correcoes_m1.py                 → TUDO VERDE
+oraculo_rf_dendropy.py                   → 91 pares, 0 divergências
+```
+
+**Write-lock:** `BioComp_UFF/workflow.py`, `BioComp_UFF/workflow/utils/{run_logging,manifest,messages}.py`, `BioComp_UFF/workflow/controller/{treeBuilderController,subtreeBuilderController,subtreeMinerController}.py`, `BioComp_UFF/workflow/{subtree_mining/miner,subtree_construction/builder,alignment/alignmentSeq}.py`, `BioComp_UFF/workflow/tests/test_run_logging.py`, `docs/automation/{07,10}`, `docs/science/02-defeitos-que-alteram-resultado.md`. **Não toca `Backend/` nem `Frontend/`.** **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1683,7 +1739,9 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-25 | A medição que declarou **MUSCLE inviável em *Variola*** (19,4 GB, OOM) foi feita contra o **3.8.1551 do sistema**. O env pinado tem **MUSCLE 5.3**, de interface incompatível (`-align/-output` × `-in/-out`): o veredito **não transfere** e o `ResourceModel` do MUSCLE foi calibrado na ferramenta errada | `aligners.py`, `ResourceModel` | DEC-044 | **M7.7** — refazer a sonda no 5.3 antes de reafirmar |
 | 2026-08-25 | `environment.yml` **não pinava versão de nenhuma ferramenta**: duas máquinas com o mesmo commit recebiam RAxML-NG 1.2.2 × 2.0.2 e MUSCLE 3.8 × 5.3. A versão do inferidor é parte do resultado, não do ambiente | `environment.yml`, `requirements.txt` | DEC-044 | ✅ **corrigido** — 7 ferramentas + `pyqt` + 8 deps Python pinadas; `--dry-run` resolve |
 | 2026-08-25 | `garantir_pnpm` aprovava um `pnpm` **que não executa**: `command -v` só responde pela existência do arquivo. Sintoma: `start.sh` imprimia `✓ pnpm` com versão em branco, subia tudo, e o frontend morria 15 s depois | `scripts/lib_node.sh` | DEC-044 | ✅ **corrigido** — a checagem executa `pnpm --version` e exige saída não vazia |
-| 2026-08-26 | O corte do log por execução separa cauda de execução nova por um **intervalo de 60 s**. É heurística: não separa duas execuções em que a primeira morreu **sem concluir** — nesse caso a duração volta a somar as duas. Só some com um arquivo por execução | `Backend/src/services/execution_state.py` (`_fatiar_execucoes`) | DEC-048 | **D22 item 4**, lote de `BioComp_UFF/` |
+| 2026-08-26 | ~~O corte do log por execução separa cauda de execução nova por um **intervalo de 60 s**, e não cobre duas execuções em que a primeira morreu sem concluir~~ **resolvido na origem em DEC-049**: cada execução tem o seu arquivo. A heurística fica só para os logs antigos | `Backend/src/services/execution_state.py` | DEC-048 → DEC-049 | ✅ **fechado** |
+| 2026-08-26 | `alignmentSeq.py` passava `filename=config.get('logfile_path', 1)` ao `logging`: o padrão era o **inteiro 1**, tratado como descritor de arquivo, então sem `logfile_path` o log ia para o **stdout** | `workflow/alignment/alignmentSeq.py` | DEC-049 | ✅ corrigido |
+| 2026-08-26 | `setupWorkflow.py` mantém um `basicConfig` de módulo, executado na importação. Nunca é importado por ninguém — é script de preparação de ambiente — e por isso não rouba o log de nenhuma execução | `workflow/setupWorkflow.py` | DEC-049 | Baixa — deixado como está |
 | 2026-08-26 | **D22 — estado e duração raspados do log.** `idle` é o ramo `else` e a UI o mostra como *Waiting*: um projeto que rodou 8 h 43 min e morreu no meio é indistinguível de um nunca executado. A duração cobre duas execuções mais o intervalo ocioso — **1 960 s reportados contra 396 s reais** | `Backend/src/app.py` (`get_projects`, `get_projects_status`, `get_projects_details`) | DEC-047 | **M4.O**, com gate executável |
 | 2026-08-26 | O progresso é **0% em 21 de 21 projetos**: os três regex são caminhos mortos. O `tqdm` escreve em stderr e não é capturado; `Progress: N%` **nunca é emitido** pelo pipeline; e os `STEP:` vão para o arquivo de log, não para o `stdout` que o backend lê | `app.py` (`stream_workflow_output`, `get_projects_details`) | DEC-047 | **M4.O** |
 | 2026-08-26 | `stream_workflow_output` rotula **toda** linha de stderr como `ERROR`. Como o `tqdm` escreve em stderr, a barra de progresso de uma execução saudável chega ao usuário como enxurrada de erros | `app.py` | DEC-047 | **M4.O** |

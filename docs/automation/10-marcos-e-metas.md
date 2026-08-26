@@ -230,7 +230,7 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 | Grafo | Credenciais leitura/escrita separadas; `$user_id` parametrizado; restrição de APOC → fecha `S-1` **sem login** ([DEC-004](07-log-de-execucao.md)) | T5 |
 | Desempenho | `asyncio.to_thread` em NCBI (`B-4`) e bioinformática pesada (`B-5`); `psutil interval=None`; reescrita de `stream_workflow_output` com duas tasks + EOF; `treePlot` recebendo `dict` em vez de lista | T2 |
 | Frontend | Índice memoizado (`F-4`); leak de zoom D3 (`F-5`); update incremental do vis-network; tratar `503` na UI | T4 |
-| **Observabilidade** | ⚙️ **M4.O — 7 de 8 entregues** ([DEC-048](07-log-de-execucao.md)): estado e duração vindos do manifesto, não do log ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)). **Falta o item 4** — um arquivo por execução, com `run_id` no nome —, que é `BioComp_UFF/` e por ora está mitigado por heurística. Um manifesto por execução com `run_id` no nome (**pré-requisito**: hoje duas execuções do mesmo dia se fundem no mesmo arquivo); estado como enumeração fechada, com `desconhecido` distinto de `nunca executado`; `duration` indefinido devolve `null` **com motivo**; progresso por etapas concluídas / planejadas; `stream_workflow_output` para de rotular todo stderr como `ERROR`; apagar `progress_percent`, que é código morto | T2 + T4 |
+| **Observabilidade** | ✅ **M4.O — 8 de 8** ([DEC-048](07-log-de-execucao.md) no backend e no frontend, [DEC-049](07-log-de-execucao.md) no pipeline): estado e duração vindos do manifesto, não do log, e **um arquivo de log por execução** ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)). Um manifesto por execução com `run_id` no nome (**pré-requisito**: hoje duas execuções do mesmo dia se fundem no mesmo arquivo); estado como enumeração fechada, com `desconhecido` distinto de `nunca executado`; `duration` indefinido devolve `null` **com motivo**; progresso por etapas concluídas / planejadas; `stream_workflow_output` para de rotular todo stderr como `ERROR`; apagar `progress_percent`, que é código morto | T2 + T4 |
 | Grafo/perf | Índices em `uid`/`q.key` justificados por `PROFILE`; `LIMIT` obrigatório no servidor; ingest em transação por lote (`P-3`) | T5 |
 
 **Gate de M4:** bateria [`security-probe`](../skills/security-probe/SKILL.md) verde; Cypher destrutivo recusado na rota de consulta; ingest legítimo continua funcionando; rota administrativa rejeita requisição sem token; **medição antes/depois anexada a cada item de performance** (≥3 repetições, mediana e dispersão, ambiente reportado); `getEventListeners(svg)` estável entre cliques; **nenhum golden snapshot de M0 mudou**; `make reference-check` verde.
@@ -253,10 +253,12 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 #    era: zero testes
 #    ✅ agora: 16 testes em Backend/tests/unit/test_execution_state.py
 #
-# ⚠️ 5. um arquivo de log e um manifesto por execução (item 4 de D22)
-#    REPROVA: o pipeline segue nomeando o log por dia e abrindo em append.
-#    O leitor mitiga separando cauda de execução nova por intervalo de 60 s,
-#    o que não cobre duas execuções em que a primeira morreu sem concluir.
+# 5. um arquivo de log por execução (item 4 de D22)
+#    era: log nomeado por dia e aberto em append; duas execuções no mesmo
+#         arquivo, com dois "Completed successfully!" dentro
+#    ✅ agora: log_setup_{AAAA-MM-DD}_{run_id}.log, e o manifesto registra
+#       em `log_file` qual é o seu. Verificado com duas execuções seguidas
+#       no mesmo diretório de projeto: dois arquivos, uma conclusão em cada.
 ```
 
 ### M5 — Estrutural (W4)

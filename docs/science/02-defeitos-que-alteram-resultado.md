@@ -748,7 +748,7 @@ md5sum r{1,2,3}.treefile      # três hashes distintos
 
 ## D22 · Alta · Status e duração são deduzidos por leitura de log, e erram em silêncio
 
-> **Estado:** ⚙️ **corrigido no backend e no frontend** em 2026-08-26 ([DEC-048](../automation/07-log-de-execucao.md)), sobre a caracterização de [DEC-047](../automation/07-log-de-execucao.md). Estado e duração passam a vir do `manifest.json`; sem manifesto, o log é lido **recortado por execução**. Os itens 1, 2, 3, 5, 6, 7 e 8 da tabela abaixo estão feitos. **Falta o item 4** — um arquivo por execução, com `run_id` no nome —, que é lote de `BioComp_UFF/` pela regra 6 e por ora está **mitigado por heurística de intervalo**, não resolvido.
+> **Estado:** ✅ **corrigido, 8 de 8**, em 2026-08-26 — backend e frontend em [DEC-048](../automation/07-log-de-execucao.md), pipeline em [DEC-049](../automation/07-log-de-execucao.md). Estado e duração vêm do `manifest.json`, e **cada execução tem o seu arquivo de log**, nomeado com o `run_id`. A heurística de intervalo que DEC-048 introduziu continua no leitor, mas só alcança os **logs antigos**: os novos trazem uma execução cada.
 
 **Onde.** `Backend/src/app.py` — `get_projects()` (duração), `get_projects_status()` (status), `get_projects_details()` (etapa e progresso) e `stream_workflow_output()` (tempo real). Os quatro derivam o estado da execução **relendo o arquivo de log**, quando o `manifest.json` gravado ao lado já traz `run_id`, `started_at_utc` e `finished_at_utc`.
 
@@ -805,17 +805,20 @@ A fonte autoritativa **já existe e é ignorada**. Desde M2.5 o `manifest.json` 
 | 1 | ✅ Estado e duração vindos do `manifest.json`, não do log. `finished_at_utc` ausente com processo vivo = **em execução**; ausente sem processo = **interrompido** | `services/execution_state.py` |
 | 2 | ✅ Estado como **enumeração fechada** de seis valores, com `unknown` distinto de `never_run` e `interrupted` distinto dos dois. `idle` deixou de existir | `execution_state.py` + `constants/executionStatus.jsx` |
 | 3 | ✅ `duration` indefinido devolve **`null` com motivo** (`duration_note`), e `duration_source` diz se veio do manifesto ou do log | `execution_state.py` + a UI |
-| 4 | ⚠️ **Um manifesto e um log por execução**, com `run_id` no nome. **Não feito** — é `BioComp_UFF/`. Mitigado no leitor: o log é recortado nas fronteiras de execução, separando cauda de encerramento de execução nova por um **intervalo de 60 s**. Heurística, não conserto | `manifest.py`, `treeBuilderController` |
+| 4 | ✅ **Um log por execução**, nomeado `log_setup_{AAAA-MM-DD}_{run_id}.log`, e o manifesto registra em `log_file` qual é o seu. O manifesto nunca chegou a fundir execuções — é gravado em modo `w`, uma vez por execução; o defeito era só do log | `workflow/utils/run_logging.py`, `workflow.py`, `manifest.py` |
 | 5 | ✅ Progresso é `null` quando indeterminado, **nunca 0**, e a UI mostra no lugar a **contagem real de árvores** de `out/Trees/` | `execution_state.py` + a UI |
 | 6 | ✅ `stream_workflow_output` reconhece a barra de `tqdm` no stderr como progresso, e o resto como `WARNING` — `ERROR` só quando a linha se declara erro | `app.py` |
 | 7 | ✅ `progress_percent` apagado | `projectsTableView.jsx` |
 | 8 | ✅ 16 testes sobre logs sintéticos: duas execuções anexadas, cauda depois da conclusão, log sem carimbo final, log vazio, erro de execução anterior, manifesto ilegível | `Backend/tests/unit/test_execution_state.py` |
 
-O item 4 continua sendo o conserto de verdade. A mitigação separa os casos que
-deixam fronteira — uma execução que **conclui** e depois é seguida por outra —,
-e **não separa** duas execuções em que a primeira morreu sem concluir: elas
-ficam coladas, e a duração volta a somar. Enquanto duas execuções compartilharem
-arquivo, nenhuma leitura resolve o caso geral.
+O item 4 era o conserto de verdade, e foi feito na origem: **duas execuções não
+disputam mais o mesmo arquivo**. Verificado rodando o conjunto de validação duas
+vezes no mesmo diretório de projeto — antes, um arquivo com dois
+`Completed successfully!` dentro; agora, dois arquivos com um cada.
+
+A heurística de intervalo que [DEC-048](../automation/07-log-de-execucao.md)
+introduziu no leitor **fica**, porque os logs já em disco continuam fundidos e
+precisam ser lidos. Ela deixa de valer para execução nova.
 
 **Evidência.**
 
