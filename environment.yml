@@ -9,6 +9,13 @@
 #
 # Os canais são conda-forge e bioconda, nessa ordem, e `defaults` fica de fora:
 # ele conflita com bioconda na resolução e exige licença para uso organizacional.
+#
+# **As versões são pinadas.** Sem pino, duas máquinas que rodam `make setup` em
+# datas diferentes recebem o que o canal tiver no dia — foi o que ocorreu entre a
+# máquina de desenvolvimento e a de validação (RAxML-NG 1.2.2 × 2.0.2, MUSCLE
+# 3.8 × 5.3, interfaces incompatíveis). Ao subir uma versão, suba aqui, registre
+# no ledger e reexecute o que dependia dela: a versão da ferramenta faz parte do
+# resultado, não do ambiente.
 
 name: phylotreeminer
 
@@ -28,17 +35,17 @@ dependencies:
   # Por isso o código resolve o binário entre os nomes possíveis em vez de
   # fixar um — ver workflow/utils/external_tools.py.
   # ---------------------------------------------------------------- #
-  - mafft
-  - clustalo
-  - muscle
-  - fasttree
-  - iqtree
-  - raxml-ng
-  - mrbayes
+  - mafft=7.526
+  - clustalo=1.2.4
+  - muscle=5.3
+  - fasttree=2.2.0
+  - iqtree=3.1.3
+  - raxml-ng=2.0.2
+  - mrbayes=3.2.7
 
   # Precisa vir do conda: o wheel do PyQt5 não resolve em toda arquitetura,
   # e o ete3 o exige para renderizar.
-  - pyqt
+  - pyqt=5.15.11
 
   - pip:
       - -r requirements-dev.txt

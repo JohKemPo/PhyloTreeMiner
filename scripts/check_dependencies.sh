@@ -8,12 +8,20 @@
 # 2.1.11 e 1.1.0 de /usr/bin e /usr/local/bin. Medir o PATH e chamar aquilo de
 # "as versões do projeto" produziu um registro errado que durou dias.
 #
+# Confere também a **versão** contra o pino do `environment.yml`. Pinar a receita
+# sem verificar o que está instalado não fecha nada: um env criado antes do pino
+# continua com a versão antiga e o script diria ✓. Foi assim que as duas máquinas
+# do projeto ficaram com RAxML-NG 1.2.2 e 2.0.2 sem ninguém notar (DEC-044).
+#
 #   bash scripts/check_dependencies.sh              # só relata
 #   bash scripts/check_dependencies.sh --install    # instala o que falta NO ENV
 #   bash scripts/check_dependencies.sh --quiet      # só o resumo
+#   bash scripts/check_dependencies.sh --strict     # divergência de versão reprova
 #   PTM_BIN=/caminho/do/env/bin bash scripts/check_dependencies.sh
 #
-# Código de saída: 0 se nada essencial falta; 1 caso contrário.
+# Código de saída: 0 se nada essencial falta; 1 caso contrário. Divergência de
+# versão é aviso — vira reprovação com `--strict`, que é o que a máquina de
+# validação e o CI devem usar antes de medir qualquer coisa.
 # ==============================================================================
 
 set -uo pipefail
@@ -24,12 +32,19 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_env.sh"
 ENV_NOME="$(ptm_env_nome)"
 INSTALAR=0
 QUIETO=0
+ESTRITO=0
 for arg in "$@"; do
   case "$arg" in
     --install) INSTALAR=1 ;;
     --quiet)   QUIETO=1 ;;
+    --strict)  ESTRITO=1 ;;
   esac
 done
+
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# `PTM_RECEITA` existe para exercitar a comparação contra uma receita de teste;
+# em uso normal a receita é a do repositório.
+RECEITA="${PTM_RECEITA:-$RAIZ/environment.yml}"
 
 # ------------------------------------------------------------------ #
 # Onde procurar. Ordem: PTM_BIN explícito > env do projeto > PATH (com aviso).
@@ -59,6 +74,16 @@ FALTANDO_ESSENCIAL=()
 FALTANDO_OPCIONAL=()
 PACOTES_CONDA=()
 FORA_DO_ENV=()
+VERSAO_DIVERGENTE=()
+
+# A versão pinada na receita, ou vazio se o pacote não está pinado. A receita é
+# a única fonte: manter uma segunda lista aqui seria D5 noutro assunto.
+versao_pinada() {
+  local pacote="$1"
+  [ -r "$RECEITA" ] || return 0
+  sed -n "s/^[[:space:]]*-[[:space:]]*${pacote}=\([0-9][^[:space:]#]*\).*/\1/p" \
+    "$RECEITA" | head -1
+}
 
 # nome | candidatos de binário | essencial | args de versão | pacote conda
 #
@@ -112,6 +137,15 @@ for entrada in "${FERRAMENTAS[@]}"; do
   if [ -n "$achado" ]; then
     v=$(versao_de "$achado" "$args")
     marca=""
+    esperada="$(versao_pinada "$pacote")"
+    # `!=` com prefixo: a receita pina `muscle=5.3` e o binário imprime
+    # `5.3.linux64`. O que importa é a versão pinada ser a que está instalada,
+    # não a string ser idêntica.
+    if [ -n "$esperada" ] && [ -n "$v" ] && [ "${v#"$esperada"}" = "$v" ]; then
+      marca="$marca ${YELLOW}(receita pina $esperada)${NC}"
+      VERSAO_DIVERGENTE+=("$nome $v≠$esperada")
+      PACOTES_CONDA+=("$pacote=$esperada")
+    fi
     # Binário fora do env é sinal de sombreamento — a causa do registro errado
     # de versão que este projeto carregou.
     if [ -n "$BIN" ] && [[ "$achado" != "$BIN/"* ]]; then
@@ -175,6 +209,19 @@ if [ ${#FORA_DO_ENV[@]} -gt 0 ] && [ "$QUIETO" -eq 0 ]; then
   echo -e "${DIM}  Elas não estão no env do projeto, então a versão que o pipeline usa${NC}"
   echo -e "${DIM}  depende do PATH de quem rodar — o registro deixa de ser reproduzível.${NC}"
   echo -e "${DIM}  Instale-as no env: bash scripts/check_dependencies.sh --install${NC}"
+fi
+
+if [ ${#VERSAO_DIVERGENTE[@]} -gt 0 ] && [ "$QUIETO" -eq 0 ]; then
+  echo -e "\n${YELLOW}⚠ ${#VERSAO_DIVERGENTE[@]} ferramenta(s) em versão diferente da receita:${NC}"
+  for d in "${VERSAO_DIVERGENTE[@]}"; do echo -e "    ${YELLOW}$d${NC}"; done
+  echo -e "${DIM}  A versão da ferramenta faz parte do resultado, não do ambiente: um${NC}"
+  echo -e "${DIM}  inferidor de outra versão pode devolver outra árvore com a mesma${NC}"
+  echo -e "${DIM}  semente. Alinhe o env à receita antes de medir ou de reexecutar.${NC}"
+fi
+
+if [ ${#VERSAO_DIVERGENTE[@]} -gt 0 ] && [ "$ESTRITO" -eq 1 ]; then
+  echo -e "${RED}✗ --strict: versão divergente da receita em ${#VERSAO_DIVERGENTE[@]} ferramenta(s).${NC}"
+  exit 1
 fi
 
 if [ ${#FALTANDO_ESSENCIAL[@]} -gt 0 ]; then

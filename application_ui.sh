@@ -10,6 +10,7 @@ FRONTEND_PID=""
 # Default URLs
 BACKEND_URL="http://localhost:8000"
 FRONTEND_URL=""
+NEO4J_URL="http://localhost:7474"
 
 # Repository root, so the helper scripts are found regardless of where this
 # was invoked from.
@@ -522,6 +523,7 @@ echo -e "   ${ICON_INFO} ${WHITE}URLs:${NC}"
 echo -e "      ${GREEN}Frontend:${NC}  ${CYAN}$FRONTEND_URL${NC}"
 echo -e "      ${GREEN}Backend:${NC}   ${CYAN}$BACKEND_URL${NC}"
 echo -e "      ${GREEN}API Docs:${NC}  ${CYAN}$BACKEND_URL/docs${NC}"
+echo -e "      ${GREEN}Neo4j:${NC}     ${CYAN}$NEO4J_URL${NC} (bolt://localhost:7687)"
 echo -e "${BLUE}───────────────────────────────────────────────────────────────────${NC}\n"
 
 # Function to check if processes are still running

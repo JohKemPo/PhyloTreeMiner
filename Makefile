@@ -3,7 +3,9 @@
 PY ?= python
 FRONT := Frontend/phylotreeminer
 # pnpm: `--dir` é o equivalente ao `--prefix` do npm.
-PNPM ?= pnpm --dir $(FRONT)
+# Vai pelo scripts/pnpm.sh, que garante um Node que o pnpm aceite antes de
+# chamá-lo — um `pnpm` no PATH sob Node velho existe e aborta em toda chamada.
+PNPM ?= bash scripts/pnpm.sh --dir $(FRONT)
 
 .PHONY: help setup test test-backend test-frontend lint build golden oracle security \
         reference-check reference-check-full reference-dataset taxonomy-audit \

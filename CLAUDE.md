@@ -44,15 +44,20 @@ O projeto tem ambiente conda **próprio**; nada é instalado no `base` nem no
 ambiente geral da máquina. O gestor de pacotes do frontend é o **pnpm**.
 
 ```bash
-make setup                           # cria/atualiza o env conda e instala o frontend
-bash scripts/check_dependencies.sh   # confere as 7 ferramentas DENTRO do env
-bash scripts/cleanup_env.sh          # diagnostica o que foi parar no 'base' (não apaga sem --apply)
+make setup                             # cria/atualiza o env conda e instala o frontend
+bash scripts/check_dependencies.sh     # confere as 7 ferramentas DENTRO do env
+bash scripts/check_dependencies.sh --strict   # e reprova se a versão divergir da receita
+bash scripts/cleanup_env.sh            # diagnostica o que foi parar no 'base' (não apaga sem --apply)
 conda activate Phylotreeminer
 ```
 
 Sem o env ativo, o PATH pode resolver binários do sistema em versões
 diferentes das da receita. `check_dependencies.sh` acusa toda ferramenta
 resolvida **fora do env**; não ignore esse aviso antes de medir qualquer coisa.
+
+As versões são **pinadas** no `environment.yml` (DEC-044). Antes de medir ou de
+reexecutar experimento, rode com `--strict`: um env criado antes de um pino
+continua com a versão antiga, e a versão do inferidor faz parte do resultado.
 
 ## Verificação
 
