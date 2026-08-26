@@ -741,3 +741,86 @@ done
 md5sum r{1,2,3}.treefile      # três hashes distintos
 # o mesmo com -nt 1           # um hash só
 ```
+
+---
+
+<a id="d22"></a>
+
+## D22 · Alta · Status e duração são deduzidos por leitura de log, e erram em silêncio
+
+> **Estado:** ⚠️ **aberto**. Caracterizado em 2026-08-26 ([DEC-047](../automation/07-log-de-execucao.md)) sobre os 21 projetos em disco. Nenhum número deste defeito chegou a manuscrito — mas [M7.7](../automation/10-marcos-e-metas.md) é a curva de custo, e é exatamente daí que ela tiraria o tempo.
+
+**Onde.** `Backend/src/app.py` — `get_projects()` (duração), `get_projects_status()` (status), `get_projects_details()` (etapa e progresso) e `stream_workflow_output()` (tempo real). Os quatro derivam o estado da execução **relendo o arquivo de log**, quando o `manifest.json` gravado ao lado já traz `run_id`, `started_at_utc` e `finished_at_utc`.
+
+### O que foi medido
+
+Sonda replicando a lógica dos três endpoints sobre `BioComp_UFF/projects/**` — 21 projetos.
+
+**1. `idle` é o balde de "não consegui decidir".** O status sai de uma busca por substring, e o `else` final devolve `idle` — o mesmo valor de "projeto nunca executado". A UI o renderiza como **"Waiting"**.
+
+| Projeto | Status reportado | O que de fato é |
+|---|---|---|
+| `Zika_Virus_Singapura_Large_480seq_ADVANCED` | **idle** ("Waiting") | rodou **8 h 43 min** e parou em `Construction of Subtrees.` |
+| `test` | **idle** ("Waiting") | tem uma execução **concluída** de 262 s; o log mais recente é de outra, de 39 s |
+
+Um projeto que rodou quase nove horas e morreu no meio é indistinguível, na interface, de um que nunca foi executado.
+
+**2. A duração não é a duração de execução nenhuma.** O nome do log é `log_setup_{ano}_{mês}_{dia}.log` e `logging.basicConfig` abre em modo *append*: **duas execuções no mesmo dia caem no mesmo arquivo**. A duração é `primeiro timestamp → último timestamp`, de modo que ela cobre as duas execuções **mais o intervalo ocioso entre elas**.
+
+| Projeto | Duração reportada | Última execução real | Erro |
+|---|---:|---:|---:|
+| `Teste_Neo4j` | **1 960 s** | 396 s | **5,0×** |
+| `Zika_Virus_Singapura_Large_480seq` | **26 428 s** | 11 942 s | **2,2×** |
+
+Nos dois casos o log contém **dois** `Completed successfully!`. Seis dos 21 projetos têm mais de um `.log`, e `max(log_files, key=os.path.getmtime)` escolhe um deles por data de modificação — que não é a data da execução que produziu os artefatos em disco.
+
+**3. A duração vira `None` sem avisar.** Se a **última linha** do log não casar com o regex de timestamp, `duration` fica `None` e o campo simplesmente não aparece. Ocorre hoje em `test_variola_noITRs`, cujo log termina num *traceback*. É o mesmo padrão da [regra 5](../automation/README.md) do projeto: ausência silenciosa no lugar de "indefinido, e eis por quê".
+
+**4. O progresso é estruturalmente sempre 0 %.** Nos 21 projetos, sem exceção. Não é bug de borda; são três caminhos mortos ao mesmo tempo:
+
+| Caminho | Regex | Por que nunca casa |
+|---|---|---|
+| `/projects/details` | `(\d+)\s*%\s*\|` | procura barra de `tqdm` no `.log`; o `tqdm` escreve em **stderr** e o log recebe só `logging` — **0 ocorrências** de `%\|` no `.log` e no `output_log.txt` |
+| WebSocket, stdout | `Progress:\s*(\d+)%` | **nada no pipeline emite essa string** — 0 ocorrências no código e em todos os logs |
+| WebSocket, stdout | `STEP:\s*(.*)` | os `STEP:` são `logging.info`, e `logging.basicConfig(filename=…)` manda tudo **para o arquivo**; com `log_file: true` o `stdout` do filho ainda é redirecionado para `output_log.txt`. O cano de stdout que o backend lê chega **vazio** |
+
+**5. Toda linha de stderr é rotulada `ERROR`.** `stream_workflow_output` transmite o ramo de stderr com `"level": "ERROR"` fixo. Como o `tqdm` escreve em stderr, **a barra de progresso de uma execução saudável aparece ao usuário como uma enxurrada de erros**.
+
+**6. O dicionário de etapas é código morto e incompleto.** `Frontend/.../projectsTableView.jsx` define `progress_percent` com 6 etapas mapeadas e ~30 linhas comentadas, e **nunca o referencia**. Se fosse ligado, seria incompleto: um log real de `mode: advanced` tem **14 strings de `STEP:` distintas**, e nenhum dos métodos avançados — IQ-TREE, FastTree, RAxML-NG, MrBayes — está entre as 6 mapeadas.
+
+### Por que isto é um defeito de resultado, e não só de interface
+
+- **`completed` é uma busca por substring de `Completed successfully!`.** É precisamente a string que [D18](#d18) mostrou ser impressa pelo `mode: auto` **depois de rodar só distância e parcimônia**. O status "concluído" da aplicação herda a mentira do modo `auto`, e não distingue "concluiu 14 pipelines" de "concluiu 2".
+- **`failed` é a presença de `ERROR` em qualquer lugar do log** — inclusive de uma execução anterior anexada ao mesmo arquivo, e inclusive de um erro do qual o pipeline se recuperou.
+- **A duração alimentaria [M7.7](../automation/10-marcos-e-metas.md)**, a curva de custo por método em função de `n` e de colunas distintas. Uma curva ajustada sobre números com 5× de erro é pior que nenhuma curva, porque parece medida.
+
+**Sem cobertura.** Não há um único teste em `Backend/tests/` para `/projects/status`, `/projects/details` ou o campo `duration` de `/projects`.
+
+### Correção
+
+A fonte autoritativa **já existe e é ignorada**. Desde M2.5 o `manifest.json` grava `run_id`, `started_at_utc`, `finished_at_utc`, ambiente, sementes e — desde [DEC-046](../automation/07-log-de-execucao.md) — a linha de comando de cada ferramenta invocada, com a saída que produziu. Deduzir por log o que está gravado de forma estruturada ao lado é reconstruir, com regex, um fato que já foi declarado.
+
+| # | O quê | Onde |
+|---|---|---|
+| 1 | Estado e duração vindos do `manifest.json`, não do log. `finished_at_utc` ausente com processo vivo = **em execução**; ausente sem processo = **interrompido** | `app.py` |
+| 2 | Estado como **enumeração fechada**, com `desconhecido` distinto de `nunca executado`. `idle` deixa de ser o `else` | `app.py` + a UI |
+| 3 | `duration` indefinido devolve **`null` com motivo**, nunca some | `app.py` |
+| 4 | **Um manifesto por execução**, com `run_id` no nome — hoje duas execuções do mesmo dia se fundem num log e num manifesto | `manifest.py` |
+| 5 | Progresso por **etapas concluídas / etapas planejadas**, do manifesto, em vez de barra de `tqdm` raspada de stderr | `app.py` + a UI |
+| 6 | `stream_workflow_output` deixa de rotular stderr como `ERROR` por padrão | `app.py` |
+| 7 | Apagar `progress_percent`, que é código morto | `projectsTableView.jsx` |
+| 8 | Testes dos três endpoints sobre logs sintéticos: log truncado, duas execuções anexadas, log sem timestamp final, projeto sem log | `Backend/tests/` |
+
+O item 4 é pré-requisito dos demais: enquanto duas execuções compartilharem arquivo, **nenhuma leitura consegue separá-las** — nem a do log, nem a do manifesto.
+
+**Evidência.**
+
+```bash
+python scratchpad/sonda_status.py          # replica os 3 endpoints sobre os 21 projetos
+                                           # → progresso 0% em 21 de 21
+                                           # → Zika_480_ADVANCED: idle, 31 407 s
+                                           # → test: idle, 39 s (há execução completa de 262 s)
+grep -c "Completed successfully!" .../Teste_Neo4j/out/outputs/log_setup_2026_2_9.log   # → 2
+grep -rc "Progress:" BioComp_UFF/workflow/ BioComp_UFF/projects/*/out/outputs/*.log    # → 0
+grep -c "%|" .../out/outputs/log_setup_2026_8_26.log .../out/outputs/output_log.txt    # → 0 e 0
+```

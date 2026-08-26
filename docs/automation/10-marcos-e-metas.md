@@ -230,9 +230,24 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 | Grafo | Credenciais leitura/escrita separadas; `$user_id` parametrizado; restrição de APOC → fecha `S-1` **sem login** ([DEC-004](07-log-de-execucao.md)) | T5 |
 | Desempenho | `asyncio.to_thread` em NCBI (`B-4`) e bioinformática pesada (`B-5`); `psutil interval=None`; reescrita de `stream_workflow_output` com duas tasks + EOF; `treePlot` recebendo `dict` em vez de lista | T2 |
 | Frontend | Índice memoizado (`F-4`); leak de zoom D3 (`F-5`); update incremental do vis-network; tratar `503` na UI | T4 |
+| **Observabilidade** | **M4.O — estado e duração vindos do manifesto, não do log** ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)). Um manifesto por execução com `run_id` no nome (**pré-requisito**: hoje duas execuções do mesmo dia se fundem no mesmo arquivo); estado como enumeração fechada, com `desconhecido` distinto de `nunca executado`; `duration` indefinido devolve `null` **com motivo**; progresso por etapas concluídas / planejadas; `stream_workflow_output` para de rotular todo stderr como `ERROR`; apagar `progress_percent`, que é código morto | T2 + T4 |
 | Grafo/perf | Índices em `uid`/`q.key` justificados por `PROFILE`; `LIMIT` obrigatório no servidor; ingest em transação por lote (`P-3`) | T5 |
 
 **Gate de M4:** bateria [`security-probe`](../skills/security-probe/SKILL.md) verde; Cypher destrutivo recusado na rota de consulta; ingest legítimo continua funcionando; rota administrativa rejeita requisição sem token; **medição antes/depois anexada a cada item de performance** (≥3 repetições, mediana e dispersão, ambiente reportado); `getEventListeners(svg)` estável entre cliques; **nenhum golden snapshot de M0 mudou**; `make reference-check` verde.
+
+**Gate de M4.O — executável, e hoje reprova:**
+
+```bash
+# 1. nenhum projeto com execução real aparece como 'nunca executado'
+#    hoje: Zika_..._480seq_ADVANCED devolve idle com 31 407 s de log
+# 2. a duração reportada é a de UMA execução
+#    hoje: Teste_Neo4j devolve 1 960 s onde a última execução levou 396 s (5,0x)
+# 3. o progresso não é sempre 0
+#    hoje: 0% em 21 de 21 projetos — os três regex de progresso são caminhos mortos
+# 4. os três endpoints têm teste sobre log truncado, duas execuções anexadas,
+#    log sem timestamp final e projeto sem log
+#    hoje: zero testes em Backend/tests/ para /projects/status e /projects/details
+```
 
 ### M5 — Estrutural (W4)
 
@@ -301,8 +316,8 @@ Cada um foi achado por acaso, ao investigar outra coisa. **Nenhum método foi au
 | M7.3 | **Modelo de substituição declarado e coerente**: hoje o IQ-TREE recebe `GTR+G` fixo (sem ModelFinder), o RAxML `GTR+G`, o FastTree usa o padrão e o MrBayes `nst=6 rates=gamma`. São quatro decisões separadas que ninguém comparou | `DM-2`  — |
 | M7.4 | **MrBayes correto**: caminho absoluto, semente, `ngen`/`burnin`/`nruns`/`nchains` por configuração, e **recusar a árvore se o ASDSF não indicar convergência** | [D20](../science/02-defeitos-que-alteram-resultado.md#d20)  — |
 | M7.5 | **Parcimônia viável ou declarada inviável**: o construtor do Biopython é Python puro e custa 25× um método de ML. Ou se troca por uma implementação em C (TNT, PAUP\*), ou se declara que a parcimônia só entra em conjuntos pequenos — **com o limite medido, não estimado** | [E7](../science/04-agenda-de-pesquisa.md), `DM-11`  — |
-| M7.6 | **Falha nunca é silenciosa**: todo método que não produzir árvore precisa aparecer no manifesto como *tentado e falhou*, com o motivo. Hoje o `ignore_mode` mistura "excluído de propósito" com "quebrou e foi excluído depois" | [D18](../science/02-defeitos-que-alteram-resultado.md#d18), `DM-11`  — |
-| M7.7 | **Curva de custo calibrada em ≥2 máquinas**: tempo e pico de RSS por método em função de `n` e de **colunas distintas** (não `L` bruto — 259 496 sítios comprimiram para 3 713 padrões). Com pontos de uma máquina só, expoente e deslocamento ficam confundidos: qualquer curva passa por dois pontos. Só com duas máquinas o `fitted=True` é honesto | responde "o que roda em que escala **e em que máquina**" com número | [R2](../respostasUteis/r2.md) |
+| M7.6 | **Falha nunca é silenciosa**: todo método que não produzir árvore precisa aparecer no manifesto como *tentado e falhou*, com o motivo. Hoje o `ignore_mode` mistura "excluído de propósito" com "quebrou e foi excluído depois". **Casa com M4.O**: é o mesmo manifesto que a API passa a ler em vez de raspar o log ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)) | [D18](../science/02-defeitos-que-alteram-resultado.md#d18), `DM-11`  — |
+| M7.7 | ⚠️ **Bloqueado por [D22](../science/02-defeitos-que-alteram-resultado.md#d22) se a fonte do tempo for a API**: a duração que ela reporta erra por até **5×**. Meça pelo manifesto. **Curva de custo calibrada em ≥2 máquinas**: tempo e pico de RSS por método em função de `n` e de **colunas distintas** (não `L` bruto — 259 496 sítios comprimiram para 3 713 padrões). Com pontos de uma máquina só, expoente e deslocamento ficam confundidos: qualquer curva passa por dois pontos. Só com duas máquinas o `fitted=True` é honesto | responde "o que roda em que escala **e em que máquina**" com número | [R2](../respostasUteis/r2.md) |
 | M7.8 | **Eixo de núcleos no modelo de custo**: hoje o modelo só prevê memória, e [D17](../science/02-defeitos-que-alteram-resultado.md#d17) mostrou que o número de núcleos muda o **resultado**, não só o tempo. Registrar o esquema de paralelização efetivo como parte do fingerprint científico, e prever quando ele diverge | torna o resultado comparável entre máquinas | [D17](../science/02-defeitos-que-alteram-resultado.md#d17) |
 
 **Gate de M7 — executável:**

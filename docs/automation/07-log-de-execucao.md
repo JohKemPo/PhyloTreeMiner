@@ -9,8 +9,8 @@ Este é o arquivo que a próxima janela de contexto lê para saber o que já aco
 | Campo | Valor |
 |---|---|
 | Marco corrente | **M2 — Baseline replicado** — **6 de 7 lotes**: M2.2, M2.3, M2.4, M2.5, M2.6 e M2.7 entregues. Falta **M2.1** e a **reexecução** que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
-| Última atualização | 2026-08-26 — **`tools_invoked` deixa de sair vazio** (DEC-046): o manifesto passa a registrar a linha de comando de **cada chamada**, e a conferência achou **[D21](../science/02-defeitos-que-alteram-resultado.md#d21) — o IQ-TREE com `-nt 4` não é determinístico**, o que corrige parte de DEC-045. Antes: pré-voo §4.0 na máquina de validação (DEC-045); a máquina entra em operação e as versões passam a ser **pinadas** (DEC-044); ambiente conda próprio e pnpm (DEC-043) |
-| Lotes em andamento | nenhum. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
+| Última atualização | 2026-08-26 — **estado e duração da execução caracterizados como [D22](../science/02-defeitos-que-alteram-resultado.md#d22)** (DEC-047): são raspados do log, `idle` é o `else`, a duração erra por até **5×** e o progresso é **0% em 21 de 21** projetos. Novo lote **M4.O**. Antes, no mesmo dia: `tools_invoked` deixa de sair vazio e a conferência acha **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** — o IQ-TREE com `-nt 4` não é determinístico (DEC-046). Antes: pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
+| Lotes em andamento | nenhum. Aberto e caracterizado: **M4.O — estado e duração pelo manifesto** ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)), com gate que hoje reprova nos 4 critérios. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
 | Write-locks ativos | nenhum |
 | Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Nada pendente |
 
@@ -1434,6 +1434,74 @@ raxml-ng --threads 4 --workers 1, 3 rep.   → 1 md5 (controle)
 
 **Write-lock:** `BioComp_UFF/workflow.py`, `BioComp_UFF/workflow/utils/{manifest,tool_runs}.py`, `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow/alignment/alignmentSeq.py`, `BioComp_UFF/workflow/tests/{test_manifest,test_tool_runs}.py`, `docs/automation/{07,10}`, `docs/skills/validar-workflow/SKILL.md`. **Reversível:** sim. **Não toca `Backend/`** — a correção do verde falso em `conferir_correcoes_m1.py` é lote seguinte, pela regra 6.
 
+### DEC-047 · 2026-08-26 · Estado e duração são raspados do log — caracterizado como D22, e o manifesto já tinha a resposta
+
+**Gatilho:** o usuário relatou que o status e a duração da execução são obtidos por leitura de log e erram — o status depende de um dicionário de etapas conhecidas e cai em `waiting` quando o termo não aparece. Pedido: caracterizar e registrar no plano.
+
+**Lote de caracterização, não de correção.** Nada de produção foi alterado. O que se entrega é o "antes" da tabela de diff exigida por [`04-rigor §3`](04-rigor-cientifico.md), medido sobre os **21 projetos em disco**, mais o defeito registrado e o lote colocado no marco.
+
+#### O relato confere, e é maior do que parecia
+
+`Backend/scripts/sonda_status_execucao.py` replica os três endpoints. Seis achados, todos medidos:
+
+**1. `idle` é o `else`.** O status sai de busca por substring e o ramo final devolve `idle` — o mesmo valor de "nunca executado", que a UI mostra como **"Waiting"**. `Zika_Virus_Singapura_Large_480seq_ADVANCED` rodou **8 h 43 min**, parou em `Construction of Subtrees.` e aparece como *Waiting*. `test` aparece como *Waiting* embora tenha uma execução **concluída** de 262 s — perdeu para um log mais recente, de outra execução de 39 s.
+
+**2. A duração não é a de execução nenhuma.** O log chama-se `log_setup_{ano}_{mês}_{dia}.log` e `logging.basicConfig` abre em *append*: duas execuções no mesmo dia caem no mesmo arquivo. A duração vai do primeiro ao último timestamp e cobre as duas **mais o intervalo ocioso**.
+
+| Projeto | Reportado | Última execução | Erro |
+|---|---:|---:|---:|
+| `Teste_Neo4j` | 1 960 s | 396 s | **5,0×** |
+| `Zika_Virus_Singapura_Large_480seq` | 26 428 s | 11 942 s | **2,2×** |
+
+Seis dos 21 projetos têm mais de um `.log`, e o escolhido é o de `mtime` maior — que não é o da execução que produziu os artefatos em disco.
+
+**3. `duration` vira `None` em silêncio** quando a última linha não casa o regex de timestamp. Ocorre hoje em `test_variola_noITRs`, cujo log termina em *traceback*.
+
+**4. O progresso é sempre 0 % — em 21 de 21.** Não é borda; são **três caminhos mortos**. O regex de `tqdm` procura a barra no `.log`, e o `tqdm` escreve em **stderr** (0 ocorrências de `%|` no `.log` e no `output_log.txt`). O regex `Progress: N%` procura uma string que **nada no pipeline emite** (0 ocorrências no código e em todos os logs). E o `STEP:` é lido do *stdout* do processo, mas `logging.basicConfig(filename=…)` manda tudo para o arquivo e, com `log_file: true`, o próprio `stdout` do filho vai para `output_log.txt` — o cano que o backend lê chega vazio.
+
+**5. Toda linha de stderr é rotulada `ERROR`.** Como o `tqdm` escreve em stderr, **a barra de progresso de uma execução saudável chega ao usuário como enxurrada de erros**.
+
+**6. O dicionário de etapas é código morto.** `progress_percent` em `projectsTableView.jsx` tem 6 etapas mapeadas, ~30 linhas comentadas, e **nunca é referenciado**. Se fosse ligado seria incompleto: um log real de `mode: advanced` tem **14 strings de `STEP:` distintas** e nenhum método avançado — IQ-TREE, FastTree, RAxML-NG, MrBayes — está entre as 6.
+
+#### Por que isto é de resultado, e não só de interface
+
+- **`completed` é a substring `Completed successfully!`** — exatamente a que [D18](../science/02-defeitos-que-alteram-resultado.md#d18) mostrou ser impressa pelo `mode: auto` **depois de rodar só distância e parcimônia**. O "concluído" da aplicação herda a mentira do `auto` e não separa 14 pipelines de 2.
+- **`failed` é a presença de `ERROR` em qualquer lugar** — inclusive de execução anterior anexada ao mesmo arquivo, inclusive de erro do qual o pipeline se recuperou.
+- **A duração alimentaria [M7.7](10-marcos-e-metas.md)**, a curva de custo por método. Uma curva ajustada sobre números com 5× de erro é pior que nenhuma: parece medida. M7.7 fica marcado para **medir pelo manifesto**.
+
+**Sem cobertura:** zero testes em `Backend/tests/` para `/projects/status`, `/projects/details` ou o campo `duration`.
+
+#### A fonte autoritativa já existe e está sendo ignorada
+
+Desde M2.5 o `manifest.json` grava `run_id`, `started_at_utc` e `finished_at_utc`; desde [DEC-046](#dec-046--2026-08-26--tools_invoked-deixa-de-sair-vazio--o-manifesto-passa-a-registrar-o-que-rodou), a linha de comando de cada ferramenta com a saída que produziu. Nos três projetos que têm manifesto, a duração dele **bate exatamente** com a do log (618 · 663 · 578 s) — o parser não é impreciso, é frágil: acerta quando o log é bem-comportado e erra sem avisar quando não é.
+
+**Deduzir com regex o que está declarado de forma estruturada ao lado é o defeito.** É a mesma forma de [DEC-046](#dec-046--2026-08-26--tools_invoked-deixa-de-sair-vazio--o-manifesto-passa-a-registrar-o-que-rodou): existe o registro certo, e o consumidor lê outro lugar.
+
+**Um pré-requisito ordena o resto:** enquanto duas execuções compartilharem arquivo — de log e de manifesto —, **nenhuma leitura consegue separá-las**. `run_id` no nome vem primeiro.
+
+#### Onde ficou registrado
+
+| Documento | O quê |
+|---|---|
+| [`science/02-defeitos §D22`](../science/02-defeitos-que-alteram-resultado.md#d22) | o defeito, com as seis medições e os 8 itens de correção |
+| [`10-marcos §M4`](10-marcos-e-metas.md) | lote **M4.O — Observabilidade** (T2 + T4), com gate executável que **hoje reprova nos 4 critérios** |
+| [`10-marcos §M7`](10-marcos-e-metas.md) | M7.6 casa com M4.O (mesmo manifesto); M7.7 marcado para medir pelo manifesto, não pela API |
+| `Backend/scripts/sonda_status_execucao.py` | a sonda versionada — é o "antes", e é o que reprova depois |
+
+**Evidência de execução:**
+```
+python Backend/scripts/sonda_status_execucao.py     → 21 projetos; progresso 0% em 21 de 21
+                                                      Zika_480_ADVANCED: idle, 31 407 s
+                                                      test: idle, 39 s (há execução completa de 262 s)
+                                                      test_variola_noITRs: duração None
+grep -c "Completed successfully!" Teste_Neo4j/…log   → 2   (duas execuções no mesmo arquivo)
+grep -rc "Progress:" workflow/ projects/**/*.log     → 0   (string nunca emitida)
+grep -c "%|" …log …output_log.txt                    → 0 e 0   (tqdm não é capturado)
+grep -c progress_percent projectsTableView.jsx       → 1   (definido, nunca usado)
+```
+
+**Write-lock:** `docs/science/02-defeitos-que-alteram-resultado.md`, `docs/automation/{07,10}`, `Backend/scripts/sonda_status_execucao.py`. **Nenhum arquivo de produção alterado.** **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1556,6 +1624,12 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-25 | A medição que declarou **MUSCLE inviável em *Variola*** (19,4 GB, OOM) foi feita contra o **3.8.1551 do sistema**. O env pinado tem **MUSCLE 5.3**, de interface incompatível (`-align/-output` × `-in/-out`): o veredito **não transfere** e o `ResourceModel` do MUSCLE foi calibrado na ferramenta errada | `aligners.py`, `ResourceModel` | DEC-044 | **M7.7** — refazer a sonda no 5.3 antes de reafirmar |
 | 2026-08-25 | `environment.yml` **não pinava versão de nenhuma ferramenta**: duas máquinas com o mesmo commit recebiam RAxML-NG 1.2.2 × 2.0.2 e MUSCLE 3.8 × 5.3. A versão do inferidor é parte do resultado, não do ambiente | `environment.yml`, `requirements.txt` | DEC-044 | ✅ **corrigido** — 7 ferramentas + `pyqt` + 8 deps Python pinadas; `--dry-run` resolve |
 | 2026-08-25 | `garantir_pnpm` aprovava um `pnpm` **que não executa**: `command -v` só responde pela existência do arquivo. Sintoma: `start.sh` imprimia `✓ pnpm` com versão em branco, subia tudo, e o frontend morria 15 s depois | `scripts/lib_node.sh` | DEC-044 | ✅ **corrigido** — a checagem executa `pnpm --version` e exige saída não vazia |
+| 2026-08-26 | **D22 — estado e duração raspados do log.** `idle` é o ramo `else` e a UI o mostra como *Waiting*: um projeto que rodou 8 h 43 min e morreu no meio é indistinguível de um nunca executado. A duração cobre duas execuções mais o intervalo ocioso — **1 960 s reportados contra 396 s reais** | `Backend/src/app.py` (`get_projects`, `get_projects_status`, `get_projects_details`) | DEC-047 | **M4.O**, com gate executável |
+| 2026-08-26 | O progresso é **0% em 21 de 21 projetos**: os três regex são caminhos mortos. O `tqdm` escreve em stderr e não é capturado; `Progress: N%` **nunca é emitido** pelo pipeline; e os `STEP:` vão para o arquivo de log, não para o `stdout` que o backend lê | `app.py` (`stream_workflow_output`, `get_projects_details`) | DEC-047 | **M4.O** |
+| 2026-08-26 | `stream_workflow_output` rotula **toda** linha de stderr como `ERROR`. Como o `tqdm` escreve em stderr, a barra de progresso de uma execução saudável chega ao usuário como enxurrada de erros | `app.py` | DEC-047 | **M4.O** |
+| 2026-08-26 | O log é `log_setup_{ano}_{mês}_{dia}.log` aberto em *append*: **duas execuções do mesmo dia fundem-se num arquivo**, com dois `Completed successfully!` dentro. Enquanto isso valer, nenhuma leitura separa as execuções — é pré-requisito de todo o resto de M4.O | `treeBuilderController`, `messages.py` | DEC-047 | **M4.O, item 1** |
+| 2026-08-26 | `progress_percent` em `projectsTableView.jsx` é **código morto**: 6 etapas mapeadas, ~30 comentadas, nunca referenciado. Um log real de `mode: advanced` tem **14 `STEP:` distintos**, e nenhum método avançado está entre os 6 | `Frontend/.../projectsTableView.jsx` | DEC-047 | **M4.O, item 7** |
+| 2026-08-26 | **Zero testes** para `/projects/status`, `/projects/details` e o campo `duration` de `/projects` — os três endpoints que a UI usa para dizer o que está acontecendo | `Backend/tests/` | DEC-047 | **M4.O, item 8** |
 | 2026-08-26 | **D21 — o IQ-TREE com `-nt 4` não é determinístico.** Três repetições com a mesma semente, entrada, máquina e versão dão **três topologias** (RF = 2); com `-nt 1`, uma só. O RAxML-NG com `--workers 1` é determinístico no mesmo teste — D17 corrigiu a ferramenta que tinha o controle e deixou passar a que não tem | `builder.iqtree_constructor` | DEC-046 | **Bloqueia §4.1 — decisão do usuário** ([D21](../science/02-defeitos-que-alteram-resultado.md#d21)) |
 | 2026-08-26 | `manifest["params"]` gravava `input_path` e `output_path` **absolutos**, com nome de usuário — enquanto a primeira linha do módulo promete que todo caminho é relativo. `conferir_correcoes_m1.py` dava **verde falso** porque só varre as chaves de `inputs_sha256`/`outputs_sha256`, nunca `params` | `workflow/utils/manifest.py` | DEC-046 | ✅ **corrigido no manifesto**; estender a conferência é lote de `Backend/` (regra 6) |
 | 2026-08-26 | A conferência de D15 em `conferir_correcoes_m1.py` varre **só as chaves de SHA-256**. Passou verde durante todo M2.5 sobre um manifesto que vazava caminho absoluto em `params` | `Backend/scripts/conferir_correcoes_m1.py` | DEC-046 | **Alta** — lote curto de `Backend/`, não tocado por disciplina de escopo |
