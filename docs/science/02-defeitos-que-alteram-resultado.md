@@ -735,7 +735,14 @@ As verossimilhanças finais diferem na terceira casa decimal (−21882,207 · �
 
 **Correção — foi decisão do usuário**, porque muda árvore publicada. Escolhida a **opção 1**:
 
-1. ✅ **`-nt 1`**, comprando reprodutibilidade com tempo. No conjunto de validação o IQ-TREE custa 4-5 s; falta medir o custo em *Variola*, onde o alinhamento tem ~250 kb.
+1. ✅ **`-nt 1`**, comprando reprodutibilidade com tempo. **O preço está medido** (2026-08-27), sobre o alinhamento real do VARV-49 — 49 táxons × 235 955 colunas:
+
+| | tempo | pico de RSS |
+|---|---:|---:|
+| `-nt 4` | 37,1 s | 87,7 MB |
+| `-nt 1` | **52,7 s** | 79,2 MB |
+
+**1,42× de tempo, e o valor absoluto é de segundos.** O alinhamento de *Variola* tem 69,8% de sítios invariantes e comprime para poucos padrões distintos, de modo que o custo do IQ-TREE não escala com o comprimento bruto. A reprodutibilidade custou 16 segundos por árvore no maior conjunto limpo do projeto.
 2. **Manter `-nt N` e declarar o método como não reprodutível**, reportando a árvore como uma amostra de um conjunto de ótimos equivalentes — o que exigiria reportar também a variação entre repetições.
 3. **`-nt N` com repetições e consenso**, o mais caro e o mais defensável.
 

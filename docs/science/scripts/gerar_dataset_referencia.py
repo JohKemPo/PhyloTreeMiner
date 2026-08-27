@@ -48,23 +48,40 @@ CLADO_P2 = [
 
 #: Alinhadores e métodos que o portão **completo** exige. Hoje o artefato tem 4
 #: pipelines efetivos; o M alvo só é alcançável depois da reexecução na máquina
-#: de validação, com a biblioteca completa. Decisão do usuário, 2026-08-25.
+#: de validação, com a biblioteca completa.
+#:
+#: **Revisto em 2026-08-27 (DEC-050).** A versão anterior dizia que o MAFFT era
+#: o único alinhador viável e que, portanto, **o fator alinhador não existia no
+#: VARV-49**. As duas afirmações caíram:
+#:
+#: - o motivo declarado para excluir Clustal e MUSCLE estava **errado no
+#:   mecanismo** — ver `aligners_excluded` abaixo;
+#: - e o fator passou a existir, porque ele deixou de exigir **duas
+#:   ferramentas**: são duas **estratégias do MAFFT**, progressiva contra
+#:   iterativa, sobre o mesmo binário. Onde só o MAFFT roda, o fator continua
+#:   existindo.
 M_ALVO = {
-    "aligners": ["mafft"],
+    "aligners": ["mafft", "mafft_iterative"],
     "inference": ["fasttree", "iqtree", "raxml", "nj_distance", "upgma_distance"],
     "aligners_excluded": {
-        "clustalo": ("Inviável neste conjunto: morto pelo OOM killer em sequências longas. "
-                     "Decisão do usuário em 2026-08-25: fora de M."),
-        "muscle": ("Inviável neste conjunto: **medido em 2026-08-25**, consumiu 19,4 GB e "
-                   "foi morto pelo OOM killer em 52 sequências de até 228 kb."),
+        "clustalo": ("Não termina: **medido em 2026-08-27** sobre 52 sequências de até "
+                     "228 kb, passou de 1 h sem concluir, com pico de RSS de apenas "
+                     "220 MB. É limite de **tempo**, não de memória — a afirmação "
+                     "anterior, de que era morto pelo OOM killer neste porte, foi "
+                     "retratada em DEC-050. O código 137 que a sustentava veio do "
+                     "Zika479, 478 sequências curtas, que é outro regime."),
+        "muscle": ("**Recusa por projeto**: o MUSCLE 5.3 responde `Too long, not "
+                   "appropriate for global alignment` em 0,06 s. A medição anterior "
+                   "(19,4 GB e OOM) era do **3.8.1551** e não transferia para o 5 — "
+                   "mesmo veredito, mecanismo diferente."),
     },
-    "note": ("Para o VARV-49, **MAFFT é o único alinhador viável** — os outros dois foram "
-             "medidos e estouram a memória em genomas de ~230 kb. Logo, o fator alinhador "
-             "não existe neste conjunto, e o invariante do baseline sempre foi sobre os "
-             "métodos de inferência, nunca sobre alinhadores: os 4/4 de Li et al. são "
-             "FastTree, IQ-TREE, NJ e UPGMA, todos sobre o mesmo alinhamento. "
-             "O fator alinhador pertence a um conjunto de sequências curtas — o Zika-21, "
-             "onde os três rodam (medido: 4,9 s / 34,5 s / 64,0 s)."),
+    "note": ("O fator alinhador **existe** no VARV-49: são duas estratégias do MAFFT, "
+             "`--maxiterate 0` contra `--maxiterate 1000`, sobre o mesmo binário e a "
+             "mesma versão. O que muda é o algoritmo, que é o contraste que E4 quer — "
+             "e é o único par que roda tanto aqui quanto no Zika-21. "
+             "O invariante do baseline continua sendo sobre **topologia**: os clados de "
+             "Li et al. têm de sobreviver à troca de método e à troca de estratégia de "
+             "alinhamento."),
 }
 
 
