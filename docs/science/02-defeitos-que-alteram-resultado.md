@@ -18,7 +18,7 @@ Todos os itens caem na **zona sagrada** de [`04-rigor-cientifico.md §1`](../aut
 
 ## D1 · Bloqueante · O braço "clustalo" nunca executou o Clustal Omega
 
-> **Estado:** ⚙️ **substituição silenciosa eliminada** em 2026-08-25 (M2.4 / DEC-037). O padrão passou a ser **abortar com o motivo**; a troca só ocorre se o experimento a autorizar, e nesse caso `resolve_aligner` devolve o nome do alinhador que rodou, para que a saída seja nomeada por ele. **Os artefatos em disco continuam mentindo** — metade dos "pipelines" de *Variola* segue sendo cópia byte a byte de MAFFT com nome de `clustalo` até a reexecução.
+> **Estado:** ✅ **fechado em 2026-08-26** ([DEC-050](../automation/07-log-de-execucao.md)). Parte 1 saiu em M2.4/DEC-037: a substituição silenciosa acabou, o padrão é **abortar com o motivo**, e `resolve_aligner` devolve o nome do alinhador que rodou. Parte 2 era a [decisão 1](../automation/08-ficha-de-fatos.md) do usuário, tomada em 2026-08-26 com medição nova: **o fator alinhador passa a ser duas estratégias do MAFFT**, e os braços deixam de ser fixos no código. **Os artefatos em disco continuam mentindo** até a reexecução — isso não é D1, é a fila de §4.1.
 
 **Onde.** `BioComp_UFF/workflow/controller/treeBuilderController.py:868-892` (`_isExecutableByClustalO`) e `:898-921` (`_get_alignment`).
 
@@ -42,9 +42,19 @@ O chamador grava o resultado em `output_path_align`, que continua sendo `dataset
 **Correção.** Duas partes, independentes:
 
 1. *Integridade de proveniência* (obrigatória, barata): quando a rota muda, o arquivo de saída e o nome da árvore devem refletir o alinhador **usado**, não o pedido. Um `dataset_final_clustalo.aln` produzido pelo MAFFT é um registro falso. Alternativa mínima aceitável: abortar com erro em vez de substituir silenciosamente.
-2. *Viabilizar o Clustal Omega em genoma de poxvírus* (científica): o limite de 20 kb é uma proteção real contra OOM. Caminhos: `--max-guidetree-iterations 1 --max-hmm-iterations 1` (já presente em `alignment/alignmentSeq.py:248`), particionamento do genoma, ou substituir o segundo alinhador por um que escale (MAFFT `--maxiterate 1000` × `--retree 1`, ou `mafft` × `muscle5`). **A escolha é científica e é de [A11](../agents/11-bioinformatica-inferencia.md).**
+2. *Decidir o segundo alinhador* (científica): ✅ **decidido em 2026-08-26**, com as três alternativas remedidas no ambiente pinado. O veredito antigo ("Clustal e MUSCLE estouram a memória") estava **errado no mecanismo**:
 
-**Cuidado.** Corrigir apenas (1) faz o pipeline produzir 4 árvores em vez de 8 para Variola. Isso **muda todos os números publicados** e exige o protocolo completo.
+| Candidato | Medido em 52 seqs × até 228 kb | Serve? |
+|---|---|---|
+| **Clustal Omega 1.2.4** | **não terminou em 1 h**; pico de RSS **220 MB** | ❌ é limite de **tempo**, não de memória — a afirmação de OOM neste porte estava errada |
+| **MUSCLE 5.3** | **recusa em 0,06 s**: `Too long, not appropriate for global alignment` | ❌ recusa **por projeto**; a medição antiga (19,4 GB, OOM) era do 3.8.1551 e não transferia |
+| **MAFFT, duas estratégias** | progressiva × iterativa, mesmo binário | ✅ **escolhido** |
+
+O fator passa a ser `mafft` (FFT-NS-2, `--maxiterate 0`) contra `mafft_iterative` (FFT-NS-i, `--maxiterate 1000`). Mesma ferramenta, mesma versão, mesmo binário: **o que muda é o algoritmo**, que é o contraste que [E4](04-agenda-de-pesquisa.md) quer medir. É o único par que existe **tanto em *Variola* quanto em Zika** — nos outros dois, o braço simplesmente não roda.
+
+E os braços deixam de ser `['clustalo', 'mafft']` **escritos no código**, em dois pontos do controlador: passam a vir de `tree_config.aligners`, com o par decidido como padrão e alinhador desconhecido levantando erro.
+
+**Cuidado, e ele continua de pé.** O pipeline passa a produzir **dois alinhamentos genuinamente diferentes** onde antes produzia duas cópias do mesmo. Isso **muda todos os números publicados** de *Variola* e exige o protocolo completo — a reexecução de [`§4.1`](../automation/11-handoff-maquina-de-validacao.md) é onde ele se materializa.
 
 ---
 
@@ -689,7 +699,7 @@ Os itens 2 a 6 são o marco [M7](../automation/10-marcos-e-metas.md), que trata 
 
 ## D21 · Alta · `-nt N` do IQ-TREE: duas execuções idênticas produzem árvores diferentes
 
-> **Estado:** ⚠️ **aberto**. Medido em 2026-08-26 ([DEC-046](../automation/07-log-de-execucao.md)). O pipeline usa `-nt 4`, e é essa a configuração de todas as árvores de IQ-TREE em disco.
+> **Estado:** ✅ **corrigido em 2026-08-26** ([DEC-050](../automation/07-log-de-execucao.md)). Decisão do usuário entre as três saídas abaixo: **`-nt 1`**, comprando reprodutibilidade com tempo. A busca de ML passa a rodar em uma thread; `iqtree_threads` continua governando o bootstrap, que é embaraçosamente paralelo e não decide topologia. O manifesto registra `threads=1` e `threads_configurados=N`, para que a diferença contra execuções anteriores seja legível. **As árvores de IQ-TREE em disco são todas de `-nt 4`** e não são reprodutíveis — só a reexecução as substitui.
 
 **Descoberto em 2026-08-26**, ao comparar duas execuções do conjunto de validação **na mesma máquina** para conferir que a instrumentação do manifesto não tinha alterado nada. Doze dos catorze pipelines saíram idênticos; **os dois de IQ-TREE, não**.
 
@@ -723,9 +733,9 @@ As verossimilhanças finais diferem na terceira casa decimal (−21882,207 · �
 
 **Interação com D17 e com a atribuição de causa.** Este defeito **corrige uma conclusão anterior**: [DEC-045](../automation/07-log-de-execucao.md) atribuiu à *versão do inferidor* toda a divergência entre a máquina de desenvolvimento e a de validação. Para o RAxML-NG a atribuição continua de pé — ele é determinístico na mesma máquina, logo a diferença entre máquinas é a versão. Para o **IQ-TREE, não**: a divergência era ruído entre execuções, e teria aparecido igual sem trocar de máquina nem de versão.
 
-**Correção — é decisão do usuário, não de um agente**, porque muda árvore publicada:
+**Correção — foi decisão do usuário**, porque muda árvore publicada. Escolhida a **opção 1**:
 
-1. **`-nt 1`**, comprando reprodutibilidade com tempo. No conjunto de validação o IQ-TREE custa 4-5 s; falta medir o custo em *Variola*, onde o alinhamento tem ~250 kb.
+1. ✅ **`-nt 1`**, comprando reprodutibilidade com tempo. No conjunto de validação o IQ-TREE custa 4-5 s; falta medir o custo em *Variola*, onde o alinhamento tem ~250 kb.
 2. **Manter `-nt N` e declarar o método como não reprodutível**, reportando a árvore como uma amostra de um conjunto de ótimos equivalentes — o que exigiria reportar também a variação entre repetições.
 3. **`-nt N` com repetições e consenso**, o mais caro e o mais defensável.
 
@@ -830,4 +840,85 @@ python scratchpad/sonda_status.py          # replica os 3 endpoints sobre os 21 
 grep -c "Completed successfully!" .../Teste_Neo4j/out/outputs/log_setup_2026_2_9.log   # → 2
 grep -rc "Progress:" BioComp_UFF/workflow/ BioComp_UFF/projects/*/out/outputs/*.log    # → 0
 grep -c "%|" .../out/outputs/log_setup_2026_8_26.log .../out/outputs/output_log.txt    # → 0 e 0
+```
+
+---
+
+<a id="d23"></a>
+
+## D23 · Alta · Os conjuntos de *Variola* trazem RefSeq e GenBank do mesmo genoma, e o pipeline descarta um dos dois em silêncio
+
+> **Estado:** ⚠️ **aberto**. Descoberto em 2026-08-26 ([DEC-050](../automation/07-log-de-execucao.md)) ao remedir os alinhadores para a [decisão 1](../automation/08-ficha-de-fatos.md). Quem o denunciou foi o **MUSCLE 5.3**, com um `WARNING: 1 duplicate labels` que nenhuma outra ferramenta emitia.
+
+**Onde.** Duas causas encadeadas, em lugares diferentes:
+
+1. `BioComp_UFF/workflow/workflow_dataAcquisition.py` — a consulta de aquisição baixa, para o mesmo genoma, **o registro original do GenBank e a cópia curada do RefSeq**. São acessos diferentes com sequência idêntica.
+2. `BioComp_UFF/workflow/utils/dataValidation.py:55` (`remove_pipe`) — o pipeline detecta a duplicata e a descarta **por conteúdo de sequência**, guardando a primeira ocorrência.
+
+```python
+def remove_pipe(name, path, outputpath):
+    sequences = list(SeqIO.parse(path, "fasta"))
+    unique_sequences = {}
+    for sequence in sequences:
+        if str(sequence.seq) not in unique_sequences:
+            unique_sequences[str(sequence.seq)] = sequence
+```
+
+**A função não remove pipe nenhum.** O nome diz uma coisa e o corpo faz outra — deduplicação por sequência —, e o chamador a invoca sob a mensagem `"contém duplicatas ou erros, iniciando remoção de pipes"`. Nada registra **quais** registros saíram.
+
+**O que foi medido.** Varredura de todos os `dataset_final.fasta`:
+
+| Conjunto | Registros | Rótulos únicos | **Sequências únicas** |
+|---|---:|---:|---:|
+| `replication-RetMax200-ITRs` (VARV-52) | 52 | 51 | **49** |
+| `…RetMax200-clean` (VARV-121) | 121 | 120 | **118** |
+| `…RetMax200` | 125 | 124 | **121** |
+| `…RetMax200-ITRs` | 55 | 54 | **52** |
+| `…RetMax200-ITRs-clean` | 54 | 53 | **51** |
+| `…RetMax100` | 65 | 64 | **61** |
+| **todos os 8 conjuntos de Zika** | — | — | **sem duplicata** |
+
+É específico da aquisição de *Variola*. Os pares são sempre os mesmos:
+
+```
+NC_008291.1  ==  DQ437594.1     Taterapox virus (RefSeq  ==  GenBank)
+NC_003391.1  ==  AF438165.1     Camelpox virus  (RefSeq  ==  GenBank)
+```
+
+**Três consequências, e a terceira é a pior.**
+
+**1. `n` nunca foi o que o nome diz.** O projeto chamado **VARV-49** recebe **52 registros** e produz alinhamento e árvores com **49 folhas**. A diferença não aparece em log nenhum, em nenhum `summary.json`, e não está declarada em lugar algum. `n` é um número de *Methods*.
+
+**2. Dois dos "acessos sem registro no GenBank" já tinham explicação.** O ledger registrava que `DQ437594`, `NC_003391` e `HQ849551` estavam no FASTA e não tinham entrada no `raw_data_sequences.gb`, e chamava isso de "clado indecidível". Dois dos três são exatamente os gêmeos acima: não são acessos órfãos, são a segunda cópia de um genoma que **está** no `.gb` sob o outro acesso.
+
+**3. O rótulo que representa o grupo externo muda de experimento para experimento.** A deduplicação guarda a **primeira ocorrência**, e a ordem do arquivo difere entre conjuntos:
+
+| Conjunto | Sobrevivente do par Taterapox |
+|---|---|
+| VARV-52 (`replication-RetMax200-ITRs`) | **`DQ437594.1`** |
+| VARV-121 (`…RetMax200-clean`) | **`NC_008291.1`** |
+
+O mesmo táxon aparece sob acessos diferentes em experimentos diferentes, **por acidente de ordenação do arquivo**. Toda comparação entre experimentos que case táxons por rótulo — e a identidade canônica de clado casa — trata os dois como táxons distintos. É a mesma classe de [D13](#d13), com outra origem.
+
+**Interação com D6 e com a auditoria taxonômica.** A contagem de M2.2 ("VARV-52 com 1 táxon fora do clado") é feita sobre um conjunto cuja composição efetiva o pipeline ainda vai alterar. A auditoria e o pipeline precisam olhar para o **mesmo** conjunto de táxons.
+
+**Correção.**
+
+| # | O quê | Onde |
+|---|---|---|
+| 1 | A aquisição não baixa RefSeq e GenBank do mesmo genoma: escolher uma das duas origens e **declará-la** | `workflow_dataAcquisition.py` — é o [M2.1](../automation/10-marcos-e-metas.md) |
+| 2 | `remove_pipe` renomeada para o que faz, e **registrando quais** acessos descartou e em favor de quem — no log e no manifesto | `dataValidation.py`, `manifest.py` |
+| 3 | O `n` efetivo e a lista de descartados entram no manifesto e em *Methods* | `manifest.py` |
+| 4 | O táxon do grupo externo é escolhido por **declaração**, não pela ordem do arquivo | aquisição + `rooting` |
+
+**Cuidado.** Corrigir (1) muda a composição dos conjuntos e portanto **muda toda árvore e todo número derivado**. Exige o protocolo de [`04-rigor §3`](../automation/04-rigor-cientifico.md) e é decisão do usuário, como D1 e D6.
+
+**Evidência.**
+
+```bash
+muscle -align data/replication-RetMax200-ITRs/dataset_final.fasta -output /dev/null
+#   WARNING: 1 duplicate labels
+grep -c "^>" data/replication-RetMax200-ITRs/dataset_final.fasta        # 52
+grep -c "^>" projects/Variola_Yu_li_2007/out/Align/dataset_final_mafft.aln   # 49
+python -c "...conta sequências únicas por md5..."                       # 49
 ```

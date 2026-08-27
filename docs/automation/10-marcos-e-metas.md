@@ -151,7 +151,7 @@ Mais: cada lote com sua **tabela de diff** (métrica · antes · depois · Δ ·
 
 | # | Lote | O que resolve | Trilha |
 |---|---|---|---|
-| M2.1 | Descomentar e parametrizar o experimento Variola no script de aquisição; e-mail do Entrez por env, nunca hardcoded | reprodutibilidade | T1 |
+| M2.1 | ✅ `workflow/experimentos/variola_li_2007.py` ([DEC-050](07-log-de-execucao.md)): as **48 accessions** saem de um bloco comentado e vão para arquivo versionado, os parâmetros do estudo ficam num lugar só, o e-mail do Entrez vem de `NCBI_EMAIL` e **não há caminho que monte o workflow sem ele**. A checagem de [D23](../science/02-defeitos-que-alteram-resultado.md#d23) nomeia os pares RefSeq/GenBank em vez de deixá-los passar | reprodutibilidade | T1 |
 | M2.2 | ✅ **Filtro taxonômico declarado** na consulta **e** verificação pós-download offline, que distingue *fora do clado* de *sem linhagem* ([DEC-035](07-log-de-execucao.md)). Medido: VARV-49 limpo (49/49); VARV-52, VARV-121 e VARV-6 com 1, 4 e 1 táxons fora | [D6](../science/02-defeitos-que-alteram-resultado.md#d6) — crocodilepox, Yoka | T1 |
 | M2.3 | ✅ **Enraizamento explícito e comum** pelo grupo externo declarado, em todos os métodos ([DEC-034](07-log-de-execucao.md)) — a ferramenta existe e está testada; aplicá-la ao dataset de referência é M2.6 | [D3](../science/02-defeitos-que-alteram-resultado.md#d3) — legitima a análise por clados enraizados | T1 |
 | M2.4 | ✅ Proveniência honesta: o padrão é **abortar** com o motivo; a substituição só ocorre se autorizada, e `resolve_aligner` devolve o nome do alinhador que rodou ([DEC-037](07-log-de-execucao.md)). Reexecutar para que os artefatos deixem de mentir é da máquina de validação | [D1](../science/02-defeitos-que-alteram-resultado.md#d1) parte 1 | T1 |
@@ -182,11 +182,15 @@ make reference-check
 
 ✅ **Divergência de versão resolvida.** A de FastTree 2.2.0 × 2.1.11 era sombreamento de PATH e foi **retratada** em [DEC-043](07-log-de-execucao.md). A real — RAxML-NG 1.2.2 × 2.0.2 entre as duas máquinas — foi decidida em [DEC-044](07-log-de-execucao.md): **2.0.2 é a versão do experimento**, e as versões passaram a ser pinadas no `environment.yml`. A semente, que a ferramenta gerava, é fixada pelo pipeline desde M2.5.
 
-🔓 **Destravado em 2026-08-24** ([DEC-024](07-log-de-execucao.md)): decisões 2, 3, 4, 5 e 6 tomadas. Os três conjuntos ficam e o UPGMA fica, com `sup` reportado com e sem. A decisão 1 (segundo alinhador) segue aberta e **não bloqueia M2** — ela governa E4 e a correção plena de D1, posteriores a M3.
+🔓 **Destravado em 2026-08-24** ([DEC-024](07-log-de-execucao.md)): decisões 2, 3, 4, 5 e 6 tomadas. ✅ **A decisão 1 foi tomada em 2026-08-26** ([DEC-050](07-log-de-execucao.md)): o segundo alinhador é a **segunda estratégia do MAFFT**, e com ela [D1](../science/02-defeitos-que-alteram-resultado.md#d1) fecha. As três alternativas foram remedidas no ambiente pinado — Clustal Omega não termina em 1 h (limite de **tempo**, não de memória, ao contrário do que o registro afirmava) e MUSCLE 5.3 **recusa por projeto**.
 
 ➕ **M2.5 ganha um requisito** vindo de [D17](../science/02-defeitos-que-alteram-resultado.md#d17): fixar `--threads N --workers 1` no RAxML-NG e registrar o esquema efetivo. Medido: com a mesma semente, mudar só a paralelização produz **RF = 8** entre as árvores. Fixar semente é necessário e não é suficiente.
 
 ➕ **A exclusão do RAxML pode ser revertida** em VARV-49, VARV-52 e VARV-121 — o método conclui nesses dados em ~4 min quando a paralelização é fixada. Devolve `M` de 4 para 5 e resolve DM-11.
+
+➕ **M2.5 ganha um segundo requisito**, de [D21](../science/02-defeitos-que-alteram-resultado.md#d21): o IQ-TREE roda com **`-nt 1`**. Medido: com `-nt N`, três repetições da mesma semente devolvem três topologias, e a ferramenta não tem equivalente ao `--workers 1` do RAxML-NG. Decidido pelo usuário em 2026-08-26.
+
+⚠️ **O que ainda separa M2 do código 0.** Os sete lotes estão entregues, e o portão continua em **código 2** — invariante 3/3, falta `mafft_raxml`. O que falta não é código: é a **reexecução** de [`§4.1`](11-handoff-maquina-de-validacao.md), agora destravada por D21 e por D1. Ela materializa, de uma vez: o RAxML de volta (`M` 4 → 5), o fator alinhador genuíno, o IQ-TREE reprodutível e o `n` efetivo declarado por [D23](../science/02-defeitos-que-alteram-resultado.md#d23).
 
 ---
 

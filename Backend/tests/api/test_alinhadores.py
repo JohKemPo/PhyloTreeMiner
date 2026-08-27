@@ -13,11 +13,15 @@ import pytest
 
 
 class TestBiblioteca:
-    async def test_lista_os_tres_alinhadores(self, client):
+    async def test_lista_a_biblioteca_de_alinhadores(self, client):
+        """`mafft_iterative` entrou em 2026-08-26 (D1 parte 2): o fator
+        alinhador passa a ser duas estratégias do MAFFT, porque é o único que
+        roda tanto em *Variola* quanto em Zika. O seletor da UI lê esta lista,
+        então ela é contrato."""
         r = await client.get("/api/aligners")
         assert r.status_code == 200
         chaves = {a["key"] for a in r.json()["aligners"]}
-        assert chaves == {"mafft", "clustalo", "muscle"}
+        assert chaves == {"mafft", "mafft_iterative", "clustalo", "muscle"}
 
     async def test_cada_limite_vem_com_motivo(self, client):
         """Limite sem explicação vira superstição — este projeto já carregou um

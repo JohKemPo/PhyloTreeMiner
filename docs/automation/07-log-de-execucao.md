@@ -8,9 +8,9 @@ Este é o arquivo que a próxima janela de contexto lê para saber o que já aco
 
 | Campo | Valor |
 |---|---|
-| Marco corrente | **M2 — Baseline replicado** — **6 de 7 lotes**: M2.2, M2.3, M2.4, M2.5, M2.6 e M2.7 entregues. Falta **M2.1** e a **reexecução** que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
-| Última atualização | 2026-08-26 — **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
-| Lotes em andamento | nenhum. ✅ **M4.O em 8 de 8** — o gate passa nos 5 critérios. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
+| Marco corrente | **M2 — Baseline replicado** — **7 de 7 lotes** entregues, M2.1 a M2.7. Falta só a **reexecução**, que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
+| Última atualização | 2026-08-27 — **[D1](../science/02-defeitos-que-alteram-resultado.md#d1) fecha e M2 chega a 7 de 7** (DEC-050): o fator alinhador passa a ser duas estratégias do MAFFT, e os dois braços produzem alinhamentos **de md5 diferente** onde antes eram cópias byte a byte. As três decisões pendentes foram tomadas. Antes: **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
+| Lotes em andamento | nenhum. ✅ **M2 em 7 de 7** e **D1 fechado**; o portão segue em **código 2** e o que falta é a **reexecução** de §4.1, agora destravada. ✅ **M4.O em 8 de 8** — o gate passa nos 5 critérios. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
 | Write-locks ativos | nenhum |
 | Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Nada pendente |
 
@@ -1617,6 +1617,74 @@ oraculo_rf_dendropy.py                   → 91 pares, 0 divergências
 
 **Write-lock:** `BioComp_UFF/workflow.py`, `BioComp_UFF/workflow/utils/{run_logging,manifest,messages}.py`, `BioComp_UFF/workflow/controller/{treeBuilderController,subtreeBuilderController,subtreeMinerController}.py`, `BioComp_UFF/workflow/{subtree_mining/miner,subtree_construction/builder,alignment/alignmentSeq}.py`, `BioComp_UFF/workflow/tests/test_run_logging.py`, `docs/automation/{07,10}`, `docs/science/02-defeitos-que-alteram-resultado.md`. **Não toca `Backend/` nem `Frontend/`.** **Reversível:** sim.
 
+### DEC-050 · 2026-08-27 · D1 fecha, M2 chega a 7 de 7 — e o fator alinhador passa a existir
+
+**Gatilho:** pedido do usuário para fechar [D1](../science/02-defeitos-que-alteram-resultado.md#d1) e o marco corrente. Fechar os dois exigia três decisões que só o usuário podia tomar; as três foram tomadas em 2026-08-27, com medição nova em duas delas.
+
+#### Decisão 1 — o segundo alinhador, com o veredito antigo corrigido
+
+A parte 2 de D1 era a [decisão 1](08-ficha-de-fatos.md), pendente desde 2026-08-19. As três alternativas foram **remedidas** no ambiente pinado ([DEC-044](#dec-044--2026-08-25--a-máquina-de-validação-entra-em-operação--e-as-versões-deixam-de-ser-sorteadas)), sobre 52 sequências de até 228 kb — e o registro anterior estava **errado no mecanismo**, não só no número:
+
+| Candidato | Medido | Registro anterior |
+|---|---|---|
+| **Clustal Omega 1.2.4** | **não terminou em 1 h**; pico de RSS **220 MB** | "morto pelo OOM killer com sequências longas" — **falso neste porte**. É limite de **tempo**. O código 137 observado foi em Zika479, 478 sequências curtas: outro regime |
+| **MUSCLE 5.3** | **recusa em 0,06 s**: `Too long, not appropriate for global alignment` | "19,4 GB e OOM" — era o **3.8.1551**, e não transferia (a consequência 2 de DEC-044, agora medida) |
+| **MAFFT, duas estratégias** | roda em ambos os conjuntos | ✅ **escolhido** |
+
+**O fator alinhador passa a ser `mafft` × `mafft_iterative`** — progressivo (`--maxiterate 0`) contra iterativo (`--maxiterate 1000`). Mesma ferramenta, mesma versão, mesmo binário: **o que muda é o algoritmo**, que é o contraste que [E4](../science/04-agenda-de-pesquisa.md) quer. É o único par que existe **tanto em *Variola* quanto em Zika** — nos outros dois o braço simplesmente não roda, que era a forma de D1.
+
+#### Decisão 2 — D21: `-nt 1` no IQ-TREE
+
+Entre fixar uma thread, declarar o método não reprodutível, ou repetições com consenso: **comprar reprodutibilidade com tempo**. A busca de ML roda em `-nt 1`; `iqtree_threads` continua governando o **bootstrap**, que é embaraçosamente paralelo e não decide topologia. O manifesto grava `threads=1` **e** `threads_configurados=N`, para que a diferença contra execuções anteriores seja legível em vez de silenciosa.
+
+#### Decisão 3 — D23: declarar agora, corrigir depois
+
+Corrigir a aquisição muda a composição dos conjuntos e portanto **toda árvore publicada**. A escolha foi declarar o `n` efetivo e a lista de descartados, e deixar a correção para um lote posterior. `remove_pipe` — que **não removia pipe nenhum**, e sim deduplicava por conteúdo — virou `deduplicar_por_sequencia` e passa a registrar **quais** acessos descartou e em favor de quem, no log e em `tools_invoked`.
+
+#### M2.1 — o experimento sai do comentário
+
+As 48 accessions de Li *et al.* (2007) viviam **comentadas** no rodapé de `workflow_dataAcquisition.py`, com o e-mail em `"seu_email@dominio.com"`. Um bloco comentado não é reprodutível: não roda, não é testado, e ninguém sabe se ainda corresponde ao que gerou os artefatos.
+
+`workflow/experimentos/variola_li_2007.py` torna-o executável. As accessions foram **extraídas do bloco por script, sem redigitação**, e vão para arquivo versionado — elas *são* a definição do experimento. O e-mail vem de `NCBI_EMAIL`, e o teste que garante isso é **comportamental**, não textual: sem a variável, **não existe caminho** que monte o workflow. (A primeira versão procurava `@` no fonte e reprovava na própria documentação — um teste que mede o texto em vez do comportamento.)
+
+#### Dois defeitos de forma, achados por executar
+
+Trocar o par de alinhadores expôs que a lista estava **fixa em três lugares**:
+
+1. `for alg in ['clustalo', 'mafft']` — em **dois** laços do controlador;
+2. `_initialize_multi_trees_structure`, com as mesmas duas chaves escritas à mão.
+
+A primeira execução com o par novo saiu com **8 árvores em vez de 14**, e o segundo braço rendeu **uma**: a estrutura não tinha a chave `mafft_iterative` e as árvores daquele braço se perdiam. Os três lugares passam a derivar de `self.aligners`, que valida contra a biblioteca e **levanta erro** em alinhador desconhecido — um braço que não existe produziria árvore com nome de um método que nunca rodou, que é a forma de D1 outra vez.
+
+Também: `_VERSAO` era indexado pela **chave** do alinhador, não pelo binário. Dois alinhadores compartilhando executável quebravam a leitura de versão.
+
+#### Δ em métrica publicada: **sim, e é o ponto**
+
+Este é o lote que faz o fator alinhador **existir**. Verificado no conjunto de validação:
+
+```
+dataset_final_mafft.aln            md5 aa754c13cad8af1102ce1a9d4075c0f2
+dataset_final_mafft_iterative.aln  md5 0e7ceaf8fe8fc16ff753eca2c3f4f278
+```
+
+Dois alinhamentos **genuinamente diferentes**, onde o delineamento antigo produzia cópias byte a byte. Toda árvore, todo suporte de clado e todo padrão maximal de *Variola* mudam quando a reexecução acontecer — e é exatamente o que a decisão 5 ("corrigir e re-rodar") autorizou.
+
+**Estado de M2: 7 de 7 lotes.** O portão continua em **código 2** — invariante 3/3, falta `mafft_raxml` — e o que falta **não é código**: é a reexecução de [`§4.1`](11-handoff-maquina-de-validacao.md), que estava bloqueada por D1 e D21 e agora está livre.
+
+**Evidência de execução:**
+```
+muscle -align <VARV-52>            → Fatal error: Too long, not appropriate for global alignment (0,06 s, 14 MB)
+clustalo -i <VARV-52> --threads 8  → timeout em 1 h; Maximum RSS 225 164 kB
+python workflow.py (Zika-21, mafft × mafft_iterative)
+                                   → 14 árvores, 7 por braço, alinhamentos de md5 distinto
+python -m unittest (12 módulos)    → Ran 171 tests, OK   (eram 162)
+make test-backend                  → 232 passed, 1 xfailed
+conferir_correcoes_m1.py           → TUDO VERDE
+oraculo_rf_dendropy.py             → 91 pares, 0 divergências
+```
+
+**Write-lock:** `BioComp_UFF/workflow/alignment/{aligners,alignmentSeq}.py`, `BioComp_UFF/workflow/controller/treeBuilderController.py`, `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow/utils/dataValidation.py`, `BioComp_UFF/workflow/experimentos/`, `BioComp_UFF/workflow/tests/{test_aligners,test_tool_runs,test_experimento_variola}.py`, `Backend/tests/api/test_alinhadores.py`, `docs/automation/{07,10}`, `docs/science/02-defeitos-que-alteram-resultado.md`. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1748,6 +1816,10 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-26 | O log é `log_setup_{ano}_{mês}_{dia}.log` aberto em *append*: **duas execuções do mesmo dia fundem-se num arquivo**, com dois `Completed successfully!` dentro. Enquanto isso valer, nenhuma leitura separa as execuções — é pré-requisito de todo o resto de M4.O | `treeBuilderController`, `messages.py` | DEC-047 | **M4.O, item 1** |
 | 2026-08-26 | `progress_percent` em `projectsTableView.jsx` é **código morto**: 6 etapas mapeadas, ~30 comentadas, nunca referenciado. Um log real de `mode: advanced` tem **14 `STEP:` distintos**, e nenhum método avançado está entre os 6 | `Frontend/.../projectsTableView.jsx` | DEC-047 | **M4.O, item 7** |
 | 2026-08-26 | **Zero testes** para `/projects/status`, `/projects/details` e o campo `duration` de `/projects` — os três endpoints que a UI usa para dizer o que está acontecendo | `Backend/tests/` | DEC-047 | **M4.O, item 8** |
+| 2026-08-27 | Os braços do fator alinhador estavam **fixos em três lugares** — dois laços do controlador e a estrutura de árvores. Com o par novo, a execução saiu com **8 árvores em vez de 14** e o segundo braço rendeu uma só, porque a estrutura não tinha a chave | `treeBuilderController` | DEC-050 | ✅ **corrigido** — os três derivam de `self.aligners` |
+| 2026-08-27 | `_VERSAO` da biblioteca de alinhadores era indexado pela **chave**, não pelo binário: dois alinhadores compartilhando executável quebravam a leitura de versão | `workflow/alignment/aligners.py` | DEC-050 | ✅ **corrigido** |
+| 2026-08-27 | ~~Clustal Omega é morto pelo OOM killer em sequências longas~~ **RETRATADO**: medido em 52 seqs × 228 kb, ele **não termina em 1 h** com pico de **220 MB**. É limite de **tempo**. O código 137 observado foi em Zika479 (478 seqs curtas), que é outro regime | `aligners.py`, `expected.json` | DEC-041 → DEC-050 | ✅ nota corrigida na biblioteca |
+| 2026-08-27 | Um teste de M2.1 procurava `@` no **texto** do módulo para provar que não há e-mail embutido, e reprovava na própria documentação. Substituído por teste **comportamental**: sem `NCBI_EMAIL`, nenhum caminho monta o workflow | `workflow/tests/test_experimento_variola.py` | DEC-050 | ✅ um teste que mede o texto não mede o comportamento |
 | 2026-08-26 | **D21 — o IQ-TREE com `-nt 4` não é determinístico.** Três repetições com a mesma semente, entrada, máquina e versão dão **três topologias** (RF = 2); com `-nt 1`, uma só. O RAxML-NG com `--workers 1` é determinístico no mesmo teste — D17 corrigiu a ferramenta que tinha o controle e deixou passar a que não tem | `builder.iqtree_constructor` | DEC-046 | **Bloqueia §4.1 — decisão do usuário** ([D21](../science/02-defeitos-que-alteram-resultado.md#d21)) |
 | 2026-08-26 | `manifest["params"]` gravava `input_path` e `output_path` **absolutos**, com nome de usuário — enquanto a primeira linha do módulo promete que todo caminho é relativo. `conferir_correcoes_m1.py` dava **verde falso** porque só varre as chaves de `inputs_sha256`/`outputs_sha256`, nunca `params` | `workflow/utils/manifest.py` | DEC-046 | ✅ **corrigido no manifesto**; estender a conferência é lote de `Backend/` (regra 6) |
 | 2026-08-26 | A conferência de D15 em `conferir_correcoes_m1.py` varre **só as chaves de SHA-256**. Passou verde durante todo M2.5 sobre um manifesto que vazava caminho absoluto em `params` | `Backend/scripts/conferir_correcoes_m1.py` | DEC-046 | **Alta** — lote curto de `Backend/`, não tocado por disciplina de escopo |
