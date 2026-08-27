@@ -9,7 +9,7 @@ Este é o arquivo que a próxima janela de contexto lê para saber o que já aco
 | Campo | Valor |
 |---|---|
 | Marco corrente | **M2 — Baseline replicado** — **7 de 7 lotes** entregues, M2.1 a M2.7. Falta só a **reexecução**, que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
-| Última atualização | 2026-08-27 — **[D1](../science/02-defeitos-que-alteram-resultado.md#d1) fecha e M2 chega a 7 de 7** (DEC-050): o fator alinhador passa a ser duas estratégias do MAFFT, e os dois braços produzem alinhamentos **de md5 diferente** onde antes eram cópias byte a byte. As três decisões pendentes foram tomadas. Antes: **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
+| Última atualização | 2026-08-27 — **visores de log e tabela, e o painel de comparação** (DEC-051), com **[D24](../science/02-defeitos-que-alteram-resultado.md#d24)** achado no caminho: o backend afirmava discordância entre métricas quando uma delas não fora medida. Antes, no mesmo dia: **[D1](../science/02-defeitos-que-alteram-resultado.md#d1) fecha e M2 chega a 7 de 7** (DEC-050): o fator alinhador passa a ser duas estratégias do MAFFT, e os dois braços produzem alinhamentos **de md5 diferente** onde antes eram cópias byte a byte. As três decisões pendentes foram tomadas. Antes: **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
 | Lotes em andamento | nenhum. ✅ **M2 em 7 de 7** e **D1 fechado**; o portão segue em **código 2** e o que falta é a **reexecução** de §4.1, agora destravada. ✅ **M4.O em 8 de 8** — o gate passa nos 5 critérios. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
 | Write-locks ativos | nenhum |
 | Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Nada pendente |
@@ -1685,6 +1685,54 @@ oraculo_rf_dendropy.py             → 91 pares, 0 divergências
 
 **Write-lock:** `BioComp_UFF/workflow/alignment/{aligners,alignmentSeq}.py`, `BioComp_UFF/workflow/controller/treeBuilderController.py`, `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow/utils/dataValidation.py`, `BioComp_UFF/workflow/experimentos/`, `BioComp_UFF/workflow/tests/{test_aligners,test_tool_runs,test_experimento_variola}.py`, `Backend/tests/api/test_alinhadores.py`, `docs/automation/{07,10}`, `docs/science/02-defeitos-que-alteram-resultado.md`. **Reversível:** sim.
 
+### DEC-051 · 2026-08-27 · Visores de log e de tabela, e o painel de comparação — com [D24](../science/02-defeitos-que-alteram-resultado.md#d24) no meio
+
+**Gatilho:** pedido do usuário — melhorias de interface na exibição de log/txt/csv e no painel de comparação de árvores, back e front.
+
+Era para ser trabalho de interface. Ao abrir o painel de comparação, virou [D24](../science/02-defeitos-que-alteram-resultado.md#d24).
+
+#### O que o pedido de UI revelou
+
+`calculate_quartet_distance` devolvia **`-1`** para árvore não binária, com um `TODO`. E `-1` é um número: descia para o payload e era **dividido pelo máximo teórico** em `check_consistency`. Resultado, capturado nos golden snapshots de M0:
+
+```
+compare_fasttree_nj_varv6:  rf=4  quartet=-1
+  consistency = "Inconsistent results: RF and Quartet metrics show significant discrepancy"
+```
+
+A conta é `|4/6 − (−1/15)| = 0,73 > 0,5`. **O backend afirmava discordância entre duas métricas quando uma delas não fora medida.**
+
+Duas coisas explicam por que durou: o campo `consistency` **nunca foi renderizado** por componente nenhum — viajava no contrato da API sem passar pelos olhos de ninguém —, e no snapshot de controle (árvore comparada consigo) a conta caía por coincidência em *"consistent"*, que é a resposta certa. **O sentinela acertava exatamente no caso que alguém conferiria.**
+
+Junto vieram três defeitos menores no mesmo caminho: `check_consistency` **dividia sem guarda** e levantava `ZeroDivisionError` com `n ≤ 3`; `make_tree_binary` resolvia politomia **por sorteio** e estava no caminho; e o máximo teórico era recalculado em quatro lugares, um deles na interface.
+
+**Golden snapshots regravados** depois do parecer, como manda a regra do projeto — e o diff é exatamente a troca do sentinela por `null` mais os campos novos.
+
+#### Os três visores
+
+| | Antes | Agora |
+|---|---|---|
+| **`.log` / `.txt`** | um `<pre>` com o arquivo inteiro | número de linha, nível lido do próprio registro (`ERROR`/`WARNING`/`STEP`) como filtro clicável, busca com navegação entre ocorrências, corte por página **declarado em voz alta**, copiar o filtrado e baixar o inteiro |
+| **`.csv` / `.tsv`** | `split` por regex de vírgula-ou-tab | parser RFC 4180 em módulo próprio, ordenação **numérica** onde a coluna é numérica, busca, contagem de linhas e colunas, e aviso quando a linha tem campos a mais ou a menos |
+| **comparação de árvores** | `--` mudo para a quartet; máximo recalculado na tela | valor **sobre o máximo**, barra do normalizado vindo do backend, o **motivo** de a métrica não se aplicar, e `consistency` finalmente exibido |
+
+**O parser de CSV não era estética.** Ele quebrava em toda vírgula, inclusive dentro de campo entre aspas — e os dados deste projeto têm exatamente isso: o `strain` do GenBank traz `"Bangladesh 1974, nur islam"`, e cada itemset do `all_results_fpmax.csv` é uma **lista de clados separada por vírgula**. Uma linha assim virava colunas a mais, e o excedente era descartado por `values[i] || ''`. Quem abrisse o CSV do FPMax na aplicação lia uma tabela deslocada.
+
+`consistency` passa a ser exibido pela razão que o próprio defeito ensinou: **um veredito que ninguém vê é um veredito que ninguém confere.**
+
+**Evidência de execução:**
+```
+pytest Backend/tests                → 232 passed, 1 xfailed
+  golden compare (regravados)       → quartet_distance: -1 → null
+                                       consistency: "Inconsistent results…" → "…indisponível…"
+                                       + rf_max, rf_normalized, quartet_max, quartet_normalized, quartet_note
+make test-frontend                  → 18 passed (eram 8; +10 do parser de CSV)
+make lint                           → erros 66/67, avisos 27/27 — débito REDUZIDO, linha de base regravada
+make build                          → ✓ built em 22,18 s
+```
+
+**Write-lock:** `Backend/src/app.py`, `Backend/tests/golden/snapshots/compare_*.json`, `Frontend/phylotreeminer/src/components/common/{LogViewer.jsx,TableView.jsx,csv.js}`, `Frontend/phylotreeminer/src/components/analysis/TreeComparisonViewer.jsx`, `Frontend/phylotreeminer/src/components/displayData/projectExplorer.jsx`, `Frontend/phylotreeminer/src/__tests__/csv.test.js`, `docs/science/02-defeitos-que-alteram-resultado.md`, `docs/automation/07`. **Não toca `BioComp_UFF/`.** **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1816,6 +1864,11 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-26 | O log é `log_setup_{ano}_{mês}_{dia}.log` aberto em *append*: **duas execuções do mesmo dia fundem-se num arquivo**, com dois `Completed successfully!` dentro. Enquanto isso valer, nenhuma leitura separa as execuções — é pré-requisito de todo o resto de M4.O | `treeBuilderController`, `messages.py` | DEC-047 | **M4.O, item 1** |
 | 2026-08-26 | `progress_percent` em `projectsTableView.jsx` é **código morto**: 6 etapas mapeadas, ~30 comentadas, nunca referenciado. Um log real de `mode: advanced` tem **14 `STEP:` distintos**, e nenhum método avançado está entre os 6 | `Frontend/.../projectsTableView.jsx` | DEC-047 | **M4.O, item 7** |
 | 2026-08-26 | **Zero testes** para `/projects/status`, `/projects/details` e o campo `duration` de `/projects` — os três endpoints que a UI usa para dizer o que está acontecendo | `Backend/tests/` | DEC-047 | **M4.O, item 8** |
+| 2026-08-27 | **D24** — `calculate_quartet_distance` devolvia `-1` para árvore não binária, e o `-1` era **dividido pelo máximo teórico** em `check_consistency`: o backend anunciava *"Inconsistent results"* entre duas métricas quando uma delas não fora medida | `Backend/src/app.py` | DEC-051 | ✅ **corrigido** — `None` com motivo ([D24](../science/02-defeitos-que-alteram-resultado.md#d24)) |
+| 2026-08-27 | `comparison_notes.consistency` está no payload desde sempre e **nunca foi renderizado**. Foi o que permitiu que o veredito falso durasse: ninguém o via, logo ninguém o conferia | `TreeComparisonViewer.jsx` | DEC-051 | ✅ passa a ser exibido |
+| 2026-08-27 | `check_consistency` dividia por zero com `n ≤ 3` — a comparação de qualquer par pequeno derrubava a rota com 500 | `Backend/src/app.py` | DEC-051 | ✅ **corrigido** |
+| 2026-08-27 | O visor de CSV dividia a linha por regex de vírgula-ou-tab e quebrava **dentro de campo entre aspas**. O `strain` do GenBank e os itemsets do FPMax têm exatamente isso: a tabela era exibida deslocada, e o excedente descartado em silêncio | `common/TableView.jsx` | DEC-051 | ✅ **corrigido** — parser RFC 4180 com 10 testes |
+| 2026-08-27 | `make_tree_binary` resolve politomia **por sorteio** (`random.shuffle`) e estava no caminho da distância quartet. Duas chamadas dariam dois resultados | `Backend/src/app.py` | DEC-051 | Fora de uso; o caminho segue no arquivo — considerar remover |
 | 2026-08-27 | Os braços do fator alinhador estavam **fixos em três lugares** — dois laços do controlador e a estrutura de árvores. Com o par novo, a execução saiu com **8 árvores em vez de 14** e o segundo braço rendeu uma só, porque a estrutura não tinha a chave | `treeBuilderController` | DEC-050 | ✅ **corrigido** — os três derivam de `self.aligners` |
 | 2026-08-27 | `_VERSAO` da biblioteca de alinhadores era indexado pela **chave**, não pelo binário: dois alinhadores compartilhando executável quebravam a leitura de versão | `workflow/alignment/aligners.py` | DEC-050 | ✅ **corrigido** |
 | 2026-08-27 | ~~Clustal Omega é morto pelo OOM killer em sequências longas~~ **RETRATADO**: medido em 52 seqs × 228 kb, ele **não termina em 1 h** com pico de **220 MB**. É limite de **tempo**. O código 137 observado foi em Zika479 (478 seqs curtas), que é outro regime | `aligners.py`, `expected.json` | DEC-041 → DEC-050 | ✅ nota corrigida na biblioteca |

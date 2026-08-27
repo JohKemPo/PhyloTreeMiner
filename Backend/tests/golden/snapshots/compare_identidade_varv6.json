@@ -1,14 +1,19 @@
 {
   "common_clades": 3,
   "comparison_notes": {
-    "consistency": "Results are consistent",
-    "quartet_interpretation": "Non-binary trees detected",
+    "consistency": "Comparação entre métricas indisponível: a distância quartet não se aplica a este par",
+    "quartet_interpretation": "Distância quartet indefinida para este par",
     "rf_interpretation": "Trees are very similar",
     "similarity_interpretation": "Trees are nearly identical"
   },
   "conflicting_clades": 0,
-  "quartet_distance": -1,
+  "quartet_distance": null,
+  "quartet_max": 15,
+  "quartet_normalized": null,
+  "quartet_note": "a distância quartet exige árvores binárias, e a árvore 1 e 2 tem politomia. Resolver a politomia por sorteio daria um número diferente a cada chamada, então a métrica é declarada indefinida",
   "rf_distance": 0,
+  "rf_max": 6,
+  "rf_normalized": 0.0,
   "similarity_score": 100.0,
   "taxon_count": 6,
   "tree1_stats": {

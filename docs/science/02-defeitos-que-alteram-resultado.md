@@ -922,3 +922,65 @@ grep -c "^>" data/replication-RetMax200-ITRs/dataset_final.fasta        # 52
 grep -c "^>" projects/Variola_Yu_li_2007/out/Align/dataset_final_mafft.aln   # 49
 python -c "...conta sequências únicas por md5..."                       # 49
 ```
+
+---
+
+<a id="d24"></a>
+
+## D24 · Alta · O painel de comparação anunciava discordância entre métricas onde não havia medição nenhuma
+
+> **Estado:** ✅ **corrigido em 2026-08-27** ([DEC-051](../automation/07-log-de-execucao.md)). Os golden snapshots de M0 que capturavam o comportamento antigo foram regravados **depois** deste parecer.
+
+**Onde.** `Backend/src/app.py` — `calculate_quartet_distance`, `check_consistency`, `interpret_quartet_distance`, e o `POST /api/tree/compare` que os une.
+
+```python
+if not get_tree_statistics(tree1)['is_binary'] or not get_tree_statistics(tree2)['is_binary']:
+    tree1_binary = make_tree_binary(tree1)
+    tree2_binary = make_tree_binary(tree2)
+    #TODO: Tratar caso de arvores nao-binarias
+    return -1
+```
+
+**`-1` é um número.** Ele descia para o payload, era dividido pelo máximo teórico em dois lugares, e chegava à interface como se fosse uma distância. É a [regra 5](../automation/README.md) do projeto — *"não aplicável" nunca é `0` nem `-1`* — violada no caminho mais visível que a aplicação tem.
+
+**O que isso produzia, medido nos golden snapshots de M0:**
+
+| Snapshot | RF | quartet | `comparison_notes.consistency` |
+|---|---:|---:|---|
+| `compare_identidade_varv6` — **a mesma árvore comparada consigo** | 0 | **−1** | *"Results are consistent"* |
+| `compare_fasttree_nj_varv6` | 4 | **−1** | *"**Inconsistent results:** RF and Quartet metrics show significant discrepancy"* |
+
+A segunda linha é o dano. `check_consistency` calculava `|4/6 − (−1/15)| = 0,73 > 0,5` e **afirmava uma discordância metodológica entre duas métricas — quando uma delas não tinha sido medida**. Não é imprecisão: é uma afirmação científica falsa, derivada inteiramente da divisão de um sentinela.
+
+**Onde essa afirmação aparecia — e por que ninguém a viu.** `consistency` está no payload de `POST /api/tree/compare` desde sempre e **nunca foi renderizado por componente nenhum**: o `TreeComparisonViewer` consome `rf_interpretation`, `quartet_interpretation` e `similarity_interpretation`, e ignora este. Na tela, a quartet aparecia como `--` com *"Non-binary trees detected"* — que é quase honesto. O veredito falso viajava no **contrato da API**, disponível a qualquer consumidor, sem passar pelos olhos de ninguém.
+
+A primeira linha mostra por que o defeito sobreviveu à conferência: `|0/6 − (−1/15)| = 0,067 < 0,5` caiu em *"consistent"*, que é a resposta que se espera ao comparar uma árvore consigo mesma. **O sentinela acertava por coincidência exatamente no caso que alguém checaria.**
+
+**Três defeitos menores no mesmo caminho.**
+
+1. `check_consistency` **dividia sem guarda**: com `n ≤ 3` os dois máximos são zero e a função levantava `ZeroDivisionError` — a comparação de qualquer par com 3 táxons ou menos derrubava a rota com 500.
+2. `make_tree_binary` resolve politomia **por sorteio** (`random.shuffle`). Era chamado, o resultado descartado, e o `-1` devolvido — mas o caminho estava lá, e usá-lo daria uma distância diferente a cada chamada.
+3. O máximo teórico da RF e do quartet era recalculado em **três lugares** com fórmulas escritas à mão, e a interface recalculava um quarto. Quatro cópias da mesma grandeza é [D5](#d5) noutro assunto.
+
+**Número afetado.** Todo veredito de `POST /api/tree/compare`: `quartet_distance`, `comparison_notes.consistency` e `comparison_notes.quartet_interpretation`. Como a comparação de árvores é o painel que o usuário abre para decidir se dois métodos concordam, é um número que **vai para a leitura científica** — ainda que não tenha ido para tabela de artigo.
+
+**Correção.**
+
+| # | O quê |
+|---|---|
+| 1 | `calculate_quartet_distance` devolve `(None, motivo)` — nunca um sentinela. Politomia é declarada indefinida, com a razão: resolvê-la por sorteio daria número diferente a cada chamada |
+| 2 | `check_consistency` recusa comparar quando a quartet não existe, e guarda as duas divisões por zero |
+| 3 | O payload passa a trazer `rf_max`, `rf_normalized`, `quartet_max`, `quartet_normalized` e `quartet_note` — **calculados num lugar só**, `rf_maximo()` e `quartet_maximo()` |
+| 4 | A interface deixa de recalcular o máximo e passa a exibir o **motivo** quando a métrica não se aplica, em vez de um `--` mudo |
+| 5 | `consistency` passa a ser **exibido**. Um veredito que ninguém vê é um veredito que ninguém confere — foi o que permitiu que este durasse |
+
+**Evidência.**
+
+```bash
+pytest Backend/tests/golden/test_golden_compare.py
+#  antes: consistency = "Inconsistent results: RF and Quartet metrics show significant discrepancy"
+#         quartet_interpretation = "Non-binary trees detected", quartet_distance = -1
+#  agora: consistency = "Comparação entre métricas indisponível: a distância quartet
+#                        não se aplica a este par"
+#         quartet_distance = null, quartet_note = "…a árvore 1 e 2 tem politomia…"
+```

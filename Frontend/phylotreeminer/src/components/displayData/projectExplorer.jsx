@@ -30,6 +30,7 @@ import {
 import MSAViewer from "../../components/analysis/MSAViewer";
 import PhylogeneticTreeViewer from "../../components/analysis/PhylogeneticTreeViewer";
 import TableView from "../../components/common/TableView";
+import LogViewer from "../../components/common/LogViewer";
 import TreeComparisonViewer from "../analysis/TreeComparisonViewer";
 import TreePatternAnalysis from "../analysis/TreePatternAnalysis";
 import CQLExecutor from "../CQLExecutor";
@@ -553,7 +554,9 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
           </div>
         );
       case "table":
-        return <TableView content={modalContent} />;
+        return <TableView content={modalContent} fileName={modalItem?.name} />;
+      case "text":
+        return <LogViewer content={modalContent} fileName={modalItem?.name} />;
       case "json_paginated": {
         return (
           <PaginatedJsonViewer

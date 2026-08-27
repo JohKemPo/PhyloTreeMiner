@@ -1415,26 +1415,46 @@ def make_tree_binary(tree: Tree) -> Tree:
     
     return new_tree
 
-def calculate_quartet_distance(tree1: Tree, tree2: Tree) -> int:
+def calculate_quartet_distance(tree1: Tree, tree2: Tree) -> Tuple[Optional[int], Optional[str]]:
     """
-    Calcula a distância Quartet corretamente para árvores não binárias
+    Distância quartet, ou `None` **com o motivo** quando ela é indefinida.
+
+    Devolvia `-1` para árvore não binária, com um `TODO` — e `-1` é um número:
+    ele descia para o payload, era dividido pelo máximo em
+    `interpret_quartet_distance` e em `check_consistency`, e chegava à interface
+    como se fosse uma distância. É a regra 5 do projeto: **"não aplicável" nunca
+    é `0` nem `-1`**.
+
+    Politomia não é ruído a resolver por sorteio. `make_tree_binary` existia
+    logo acima e resolvia politomias **aleatoriamente** — duas chamadas dariam
+    dois resultados. A resposta honesta é que a métrica não se aplica, e por quê.
+
+    Return
+    ------
+    tuple of (int or None, str or None)
+        Valor e motivo. O motivo só é preenchido quando o valor é `None`.
     """
     n_taxa = len(tree1.taxon_namespace)
-    
-    if not get_tree_statistics(tree1)['is_binary'] or not get_tree_statistics(tree2)['is_binary']:
-        tree1_binary = make_tree_binary(tree1)
-        tree2_binary = make_tree_binary(tree2)
-        
-        #TODO: Tratar caso de arvores nao-binarias
-        return -1
-    
+
+    if n_taxa < 4:
+        return None, f"indefinida com menos de 4 táxons (há {n_taxa})"
+
+    nao_binarias = [nome for nome, arvore in (("1", tree1), ("2", tree2))
+                    if not get_tree_statistics(arvore)['is_binary']]
+    if nao_binarias:
+        return None, ("a distância quartet exige árvores binárias, e a árvore "
+                      f"{' e '.join(nao_binarias)} tem politomia. Resolver a "
+                      "politomia por sorteio daria um número diferente a cada "
+                      "chamada, então a métrica é declarada indefinida")
+
     if n_taxa <= 25:
         try:
-            return treecompare.quartet_distance(tree1, tree2)
-        except:
-            return exact_quartet_distance(tree1, tree2)
-    else:
-        return approximate_quartet_distance(tree1, tree2, sample_size=min(1000, n_taxa * 10))
+            return treecompare.quartet_distance(tree1, tree2), None
+        except Exception:
+            return exact_quartet_distance(tree1, tree2), None
+
+    return approximate_quartet_distance(
+        tree1, tree2, sample_size=min(1000, n_taxa * 10)), None
 
 def exact_quartet_distance(tree1: Tree, tree2: Tree) -> int:
     """
@@ -1613,17 +1633,40 @@ def calculate_similarity(tree1: Tree, tree2: Tree, common_clades: int) -> float:
     return (common_clades / min_bipartitions) * 100
 
 
+def rf_maximo(num_taxa: int) -> int:
+    """Máximo teórico da RF não enraizada: `2(n-3)`, e 0 quando não há o que comparar."""
+    return 2 * (num_taxa - 3) if num_taxa > 3 else 0
+
+
+def quartet_maximo(num_taxa: int) -> int:
+    """Número de quartetos, `C(n,4)`. Zero abaixo de 4 táxons."""
+    if num_taxa < 4:
+        return 0
+    return num_taxa * (num_taxa - 1) * (num_taxa - 2) * (num_taxa - 3) // 24
+
+
 def check_consistency(rf_distance, quartet_distance, num_taxa):
-    max_rf = 2 * (num_taxa - 3)
-    max_quartet = num_taxa * (num_taxa-1) * (num_taxa-2) * (num_taxa-3) // 24
-    
+    """
+    Compara as duas métricas normalizadas — quando as duas existem.
+
+    Dividia sem guarda nenhuma: com `num_taxa <= 3` os dois máximos são zero e a
+    função levantava `ZeroDivisionError`; com a quartet indefinida, dividia
+    `-1` e devolvia um veredito calculado sobre um sentinela.
+    """
+    max_rf = rf_maximo(num_taxa)
+    max_quartet = quartet_maximo(num_taxa)
+
+    if quartet_distance is None:
+        return "Comparação entre métricas indisponível: a distância quartet não se aplica a este par"
+    if max_rf == 0 or max_quartet == 0:
+        return f"Comparação entre métricas indefinida com {num_taxa} táxons"
+
     normalized_rf = rf_distance / max_rf
     normalized_quartet = quartet_distance / max_quartet
-    
+
     if abs(normalized_rf - normalized_quartet) > 0.5:
         return "Inconsistent results: RF and Quartet metrics show significant discrepancy"
-    else:
-        return "Results are consistent"
+    return "Results are consistent"
 
 @app.post("/api/tree/compare")
 async def compare_trees(tree_data: dict):
@@ -1667,7 +1710,7 @@ async def compare_trees(tree_data: dict):
                         f"Only in tree2: {somente2}."))
 
         rf_distance = calculate_rf_distance(tree1, tree2)
-        quartet_distance = calculate_quartet_distance(tree1, tree2)
+        quartet_distance, quartet_motivo = calculate_quartet_distance(tree1, tree2)
         common_clades, common_clade_descriptions = find_common_clades(tree1, tree2)
         conflicting_clades, conflicting_descriptions = find_conflicting_clades(tree1, tree2)
         
@@ -1676,17 +1719,31 @@ async def compare_trees(tree_data: dict):
         
         similarity_score = calculate_similarity(tree1, tree2, common_clades)
         
+        n_taxa = len(tree1.taxon_namespace)
+        max_rf = rf_maximo(n_taxa)
+        max_quartet = quartet_maximo(n_taxa)
+
         return {
             'rf_distance': rf_distance,
+            # O máximo e o normalizado saem daqui prontos. A interface os
+            # recalculava por conta própria, e duas fórmulas para a mesma
+            # grandeza divergem na primeira mudança — é D5 noutro assunto.
+            'rf_max': max_rf,
+            'rf_normalized': round(rf_distance / max_rf, 4) if max_rf else None,
+            # `null` quando indefinida, **com o motivo ao lado** (regra 5).
             'quartet_distance': quartet_distance,
+            'quartet_max': max_quartet or None,
+            'quartet_normalized': (round(quartet_distance / max_quartet, 4)
+                                   if quartet_distance is not None and max_quartet else None),
+            'quartet_note': quartet_motivo,
             'common_clades': common_clades,
             'conflicting_clades': conflicting_clades,
             'similarity_score': round(similarity_score, 2),
             'tree1_stats': tree1_stats,
             'tree2_stats': tree2_stats,
-            'taxon_count': len(tree1.taxon_namespace),
+            'taxon_count': n_taxa,
             'comparison_notes': {
-                'consistency': check_consistency(rf_distance,quartet_distance,len(tree1.taxon_namespace)),
+                'consistency': check_consistency(rf_distance, quartet_distance, n_taxa),
                 'rf_interpretation': interpret_rf_distance(rf_distance, tree1_stats['leaf_nodes']),
                 'quartet_interpretation': interpret_quartet_distance(quartet_distance, tree1_stats['leaf_nodes']),
                 'similarity_interpretation': interpret_similarity(similarity_score)
@@ -1703,7 +1760,7 @@ async def compare_trees(tree_data: dict):
 
 def interpret_rf_distance(rf_distance: int, num_taxa: int) -> str:
     """Interpret the RF distance"""
-    max_rf = 2 * (num_taxa - 3) if num_taxa > 3 else 0
+    max_rf = rf_maximo(num_taxa)
     if max_rf == 0:
         return "Identical trees or too small for RF comparison"
     
@@ -1718,16 +1775,16 @@ def interpret_rf_distance(rf_distance: int, num_taxa: int) -> str:
         return "Trees are very different"
 
 
-def interpret_quartet_distance(qd: int, num_taxa: int) -> str:
-    """Interpret the Quartet distance"""
-    max_qd = num_taxa * (num_taxa-1) * (num_taxa-2) * (num_taxa-3) // 24 if num_taxa >= 4 else 0
+def interpret_quartet_distance(qd: Optional[int], num_taxa: int) -> str:
+    """Interpret the Quartet distance. `qd` é `None` quando indefinida."""
+    if qd is None:
+        return "Distância quartet indefinida para este par"
+    max_qd = quartet_maximo(num_taxa)
     if max_qd == 0:
         return "Not applicable (fewer than 4 taxa)"
-    
+
     normalized_qd = qd / max_qd
-    if normalized_qd < 0 :
-        return "Non-binary trees detected"
-    elif normalized_qd < 0.1:
+    if normalized_qd < 0.1:
         return "Low quartet discordance"
     elif normalized_qd < 0.3:
         return "Moderate quartet discordance"

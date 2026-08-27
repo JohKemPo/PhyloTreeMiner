@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, Row, Col, Typography, Statistic, Alert, Spin, Space, Divider, Progress, Collapse } from 'antd';
+import { Card, Row, Col, Typography, Statistic, Alert, Spin, Space, Divider, Progress, Collapse, Tooltip } from 'antd';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import PhylogeneticTreeViewer from './PhylogeneticTreeViewer';
 
 const { Title, Text } = Typography;
@@ -54,42 +55,119 @@ const TreeComparisonViewer = ({ tree1, tree2, tree1Name, tree2Name, comparisonDa
         </Space>
       </Card>
 
-      <Title level={4}>Distance Metrics</Title>
+      <Title level={4}>Métricas de distância</Title>
+      {/* D24 — `consistency` existia no payload desde sempre e nunca era
+          exibido. Um veredito que ninguém vê é um veredito que ninguém confere,
+          e foi o que permitiu que ele passasse anos dividindo um sentinela. */}
+      {comparisonData.comparison_notes?.consistency && (
+        <Alert
+          type={
+            comparisonData.comparison_notes.consistency.startsWith('Inconsistent')
+              ? 'warning'
+              : comparisonData.quartet_distance == null
+                ? 'info'
+                : 'success'
+          }
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Concordância entre as duas métricas"
+          description={comparisonData.comparison_notes.consistency}
+        />
+      )}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col span={8}>
+        <Col xs={24} md={8}>
           <Card>
             <Statistic
-              title="Robinson-Foulds Distance"
+              title={
+                <Space size={4}>
+                  Robinson-Foulds
+                  <Tooltip title="Número de bipartições presentes numa árvore e não na outra. O máximo não enraizado é 2(n−3).">
+                    <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                  </Tooltip>
+                </Space>
+              }
               value={comparisonData.rf_distance}
+              suffix={
+                comparisonData.rf_max
+                  ? <Text type="secondary" style={{ fontSize: 14 }}>{` / ${comparisonData.rf_max}`}</Text>
+                  : null
+              }
               valueStyle={{ color: comparisonData.rf_distance > 0 ? '#cf1322' : '#3f8600' }}
             />
+            {/* O normalizado vem do backend. A interface o recalculava, e duas
+                fórmulas para a mesma grandeza divergem na primeira mudança. */}
+            {comparisonData.rf_normalized != null && (
+              <Progress
+                percent={Math.round(comparisonData.rf_normalized * 100)}
+                size="small"
+                showInfo={false}
+                strokeColor={comparisonData.rf_normalized > 0.3 ? '#cf1322' : '#3f8600'}
+                style={{ marginBottom: 4 }}
+              />
+            )}
             <Text type="secondary">
-              {comparisonData.comparison_notes?.rf_interpretation || 'Measures topological differences between trees'}
+              {comparisonData.comparison_notes?.rf_interpretation || 'Diferença topológica entre as árvores'}
             </Text>
           </Card>
         </Col>
-        
-        <Col span={8}>
+
+        <Col xs={24} md={8}>
           <Card>
             <Statistic
-              title="Quartet Distance"
-              value={comparisonData.quartet_distance === -1 ? '--' : comparisonData.quartet_distance}
-              valueStyle={{ color: comparisonData.quartet_distance > 0 ? '#cf1322' : '#3f8600' }}
+              title={
+                <Space size={4}>
+                  Quartet
+                  <Tooltip title="Quartetos de táxons com topologia diferente entre as duas árvores. Exige árvores binárias.">
+                    <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                  </Tooltip>
+                </Space>
+              }
+              /* D24 — o backend devolvia -1 para árvore não binária, e o -1 era
+                 dividido pelo máximo em dois lugares. Agora é `null` com motivo:
+                 indefinido é um estado, não um número. */
+              value={comparisonData.quartet_distance == null ? 'indefinida' : comparisonData.quartet_distance}
+              suffix={
+                comparisonData.quartet_distance != null && comparisonData.quartet_max
+                  ? <Text type="secondary" style={{ fontSize: 14 }}>{` / ${comparisonData.quartet_max}`}</Text>
+                  : null
+              }
+              valueStyle={
+                comparisonData.quartet_distance == null
+                  ? { color: '#8c8c8c', fontSize: 20 }
+                  : { color: comparisonData.quartet_distance > 0 ? '#cf1322' : '#3f8600' }
+              }
             />
-            <Text type="secondary">
-              {comparisonData.comparison_notes?.quartet_interpretation || 'Based on discordant quartets'}
-            </Text>
+            {comparisonData.quartet_note ? (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginTop: 8 }}
+                message="Por que não se aplica"
+                description={<Text style={{ fontSize: 12 }}>{comparisonData.quartet_note}</Text>}
+              />
+            ) : (
+              <Text type="secondary">
+                {comparisonData.comparison_notes?.quartet_interpretation || 'Baseada em quartetos discordantes'}
+              </Text>
+            )}
           </Card>
         </Col>
-        
-        <Col span={8}>
+
+        <Col xs={24} md={8}>
           <Card>
             <Statistic
-              title="Common Clades"
+              title="Clados em comum"
               value={comparisonData.common_clades}
+              suffix={
+                comparisonData.common_clades + comparisonData.conflicting_clades > 0
+                  ? <Text type="secondary" style={{ fontSize: 14 }}>
+                      {` / ${comparisonData.common_clades + comparisonData.conflicting_clades}`}
+                    </Text>
+                  : null
+              }
               valueStyle={{ color: '#3f8600' }}
             />
-            <Text type="secondary">Clades shared between trees</Text>
+            <Text type="secondary">Clados compartilhados pelas duas árvores</Text>
           </Card>
         </Col>
       </Row>
