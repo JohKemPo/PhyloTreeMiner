@@ -6,6 +6,18 @@ Este documento **operacionaliza** [`11-handoff-maquina-de-validacao.md §4.1`](1
 
 ⚠️ **Isto é um guia, não uma ordem de execução.** Rodar os conjuntos grandes (VARV-121, ZIKV-480) leva horas e ocupa a máquina inteira — [regra do `CLAUDE.md`](../../CLAUDE.md): **combine antes de rodar pipeline pesado**. Este documento existe para quando a decisão de rodar já foi tomada.
 
+### Estado desta rodada — atualizado em 2026-09-01
+
+| Conjunto | Seção | Estado | Achado |
+|---|---|---|---|
+| Zika-21 (pré-voo) | §3.0 | ✅ concluído | — |
+| VARV-6 | §3.1 | ✅ concluído | — |
+| VARV-49 | §3.2 | ✅ concluído | [D25](../science/02-defeitos-que-alteram-resultado.md#d25)/[DEC-057](07-log-de-execucao.md#dec-057--2026-09-01--d25--mafft_iterative-colidia-com-mafft-em-stabilitypy-e-m13-crashava-nas-três-reexecuções) encontrado e corrigido aqui: `stability.py` não reconhecia `mafft_iterative` como alinhador e travava M1.3 (`ValueError`) nas três reexecuções acima. Oráculo dendropy confirmou 0 divergências nas três depois do fix |
+| VARV-121 | §3.3 | 🔄 em execução (desde 2026-09-01 17:07) | — |
+| ZIKV-480 | §3.4 | ⏳ não iniciado — planejado para depois que VARV-121 concluir | `parsimony` corrigido para dentro de `ignore_mode` (ver §3.4) |
+
+Se você está lendo isto numa sessão nova: os três primeiros já provaram M1.3 verde nesta máquina; se `conferir_correcoes_m1.py` voltar a travar em M1.3 com um `ValueError` de rótulo duplicado, o código já deveria ter o fix de D25 — confira `BioComp_UFF/workflow/stability/stability.py` antes de reabrir o achado.
+
 ## 0. Por que a reexecução importa
 
 M1 corrigiu o **pipeline**; os artefatos em `BioComp_UFF/projects/**` continuam com os números de antes das correções (D1, D3, D4, D5, D12, D13, D16 — ver [`11-handoff §1`](11-handoff-maquina-de-validacao.md#1-o-que-já-está-pronto-e-não-precisa-de-máquina-grande)). Nenhum número que a aplicação mostra hoje sobre esses projetos mudou. Só a reexecução materializa o número certo — é a decisão 5 do usuário ([DEC-018](07-log-de-execucao.md)): "corrigir e re-rodar".
@@ -16,14 +28,14 @@ M1 corrigiu o **pipeline**; os artefatos em `BioComp_UFF/projects/**` continuam 
 cd /home/geomesh/Documentos/GIT/PhyloTreeMiner
 conda activate Phylotreeminer
 bash scripts/check_dependencies.sh --strict      # 7 ✓, exit 0 — nenhuma ferramenta "fora do env"
-make test-backend                                # 241 passed, 1 xfailed (ver DEC-052)
+make test-backend                                # 250 passed, 1 xfailed (medido em 2026-09-01)
 cd BioComp_UFF && python -m unittest \
   workflow.tests.test_stability workflow.tests.test_subtree_mining \
   workflow.tests.test_tree_identity workflow.tests.test_rf_bipartition \
   workflow.tests.test_manifest workflow.tests.test_rooting \
   workflow.tests.test_taxonomy workflow.tests.test_aligners \
-  workflow.tests.test_external_tools                # Ran 150 tests, OK
-cd .. && make reference-check                    # invariante 3/3; código 2 esperado (falta reexecutar)
+  workflow.tests.test_external_tools                # Ran 164 tests, OK (D25/DEC-057 já corrigido; eram 150 antes)
+cd .. && make reference-check                    # invariante 3/3; código 2 esperado (falta mafft_raxml — confirmado ainda válido em 2026-09-01)
 ```
 
 Se algum falhar, **pare** — o estado da máquina diverge do esperado e nenhum resultado pesado terá valor (mesma regra do [`11-handoff §3`](11-handoff-maquina-de-validacao.md#3-o-que-rodar-primeiro--portão-de-sanidade)).
@@ -319,7 +331,7 @@ cat > /tmp/zikv480_reexec.json <<'JSON'
   "output_log": "/home/geomesh/Documentos/GIT/PhyloTreeMiner/BioComp_UFF/projects/Zika_ZIKV480_reexec_20260901/out",
   "tree_config": {
     "mode": "advanced",
-    "ignore_mode": ["mrbayes"],
+    "ignore_mode": ["mrbayes", "parsimony"],
     "aligners": ["mafft", "mafft_iterative"],
     "align_method": "mafft",
     "num_threads": 16,
@@ -351,7 +363,7 @@ JSON
 python workflow.py -p /tmp/zikv480_reexec.json
 ```
 
-`raxml_threads: 4`, pela mesma razão de §3.0 — alinhamento curto, poucos padrões. **`parsimony` fora de `ignore_mode`** neste conjunto seria um erro: 478 táxons no `ParsimonyTreeConstructor` puro-Python é o cenário que [`11-handoff §4.3`](11-handoff-maquina-de-validacao.md#43-teste-de-estresse--o-que-ainda-não-se-sabe) lista como "rodar em VARV-6 e ZIKV-6 **antes** de qualquer conjunto grande" — não tente aqui sem medir antes num conjunto pequeno.
+`raxml_threads: 4`, pela mesma razão de §3.0 — alinhamento curto, poucos padrões. `ignore_mode` inclui `"parsimony"` aqui (corrigido em 2026-09-01 — a versão anterior deste guia deixava `parsimony` **fora** de `ignore_mode`, uma inconsistência com o próprio texto desta seção, que já alertava contra isso sem que a config seguisse o alerta): 478 táxons no `ParsimonyTreeConstructor` puro-Python é exatamente o cenário que [`11-handoff §4.3`](11-handoff-maquina-de-validacao.md#43-teste-de-estresse--o-que-ainda-não-se-sabe) lista como "rodar em VARV-6 e ZIKV-6 **antes** de qualquer conjunto grande" — o que não foi feito, e a medição de 2026-08-25 já registrou parcimônia como **25× mais lenta** que qualquer método de ML ([M7.5](10-marcos-e-metas.md#8-m7--heurísticas-de-inferência-corretas-parametrizáveis-e-escaláveis), `DM-11`). Rodar em 478 táxons sem essa medição de viabilidade primeiro arriscava dominar o tempo total do experimento sem necessidade — a mesma razão que já excluiu `parsimony` de VARV-49 e VARV-121 (§3.2, §3.3). **Esperado:** 10 árvores (2 alinhadores × {nj, upgma, fasttree, iqtree, raxml}), não 12.
 
 ⚠️ Clustal Omega **não** está em `aligners` (nunca esteve, desde DEC-050) — mas se algum dia for testado à parte neste conjunto, lembre que **é aqui** que ele historicamente foi morto pelo OOM killer (código 137, [D1](../science/02-defeitos-que-alteram-resultado.md#d1)), não em *Variola* — regime diferente (muitos táxons curtos, não poucos táxons longos).
 
