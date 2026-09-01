@@ -34,6 +34,9 @@ const ProjectsTableView = ({
   onProjectSelect,
   progressData = {},
   onRefresh,
+  columnFilters = {},
+  columnSorter = {},
+  onColumnStateChange,
 }) => {
   const [rerunLoading, setRerunLoading] = useState({});
   const [deleteLoading, setDeleteLoading] = useState({});
@@ -151,6 +154,7 @@ const ProjectsTableView = ({
       key: "name",
       width: 400,
       sorter: (a, b) => a.name.localeCompare(b.name),
+      sortOrder: columnSorter.columnKey === "name" ? columnSorter.order : null,
       render: (text, record) => (
         <a onClick={() => onProjectSelect(record.name)}>{text}</a>
       ),
@@ -169,6 +173,7 @@ const ProjectsTableView = ({
       ],
       onFilter: (value, record) =>
         value === "all" ? true : record.status === value,
+      filteredValue: columnFilters.status || null,
       render: (status) => {
         const statusInfo = statusMap[status] || {
           color: "default",
@@ -221,6 +226,7 @@ const ProjectsTableView = ({
       dataIndex: "last_modified",
       key: "last_modified",
       sorter: (a, b) => new Date(a.last_modified) - new Date(b.last_modified),
+      sortOrder: columnSorter.columnKey === "last_modified" ? columnSorter.order : null,
       render: (date) => new Date(date).toLocaleString("pt-BR"),
     },
     {
@@ -229,6 +235,7 @@ const ProjectsTableView = ({
       key: "duration",
       width: 150,
       sorter: (a, b) => (a.duration ?? -1) - (b.duration ?? -1),
+      sortOrder: columnSorter.columnKey === "duration" ? columnSorter.order : null,
       render: (totalSeconds, record) => {
         // Duração desconhecida traz o motivo junto: o traço mudo não distinguia
         // "log sem carimbo de tempo" de "nunca executado" (D22).
@@ -365,6 +372,12 @@ const ProjectsTableView = ({
       dataSource={projects}
       rowKey="name"
       pagination={{ pageSize: 10 }}
+      onChange={(_pagination, filters, sorter) => {
+        // Controlado pelo pai (ProjectGallery): sobrevive ao polling de 30s
+        // e à troca entre "Table view"/"Cards view", que remontam este
+        // componente e, sem isso, zeravam o filtro/ordenação escolhidos.
+        onColumnStateChange?.(filters, sorter);
+      }}
     />
   );
 };

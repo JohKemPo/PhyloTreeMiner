@@ -36,6 +36,11 @@ const ProjectGallery = ({ onProjectSelect }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [viewMode, setViewMode] = useState("table");
+  // Filtro/ordenação de coluna do Table, controlados aqui em vez de deixados
+  // no estado interno do antd — sobrevive tanto ao polling de 30s quanto à
+  // troca entre "Table view"/"Cards view", que desmontam ProjectsTableView.
+  const [tableFilters, setTableFilters] = useState({});
+  const [tableSorter, setTableSorter] = useState({});
 
   const navigate = useNavigate();
 
@@ -172,8 +177,10 @@ const ProjectGallery = ({ onProjectSelect }) => {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      // console.log("Atualizando status dos jobs...");
-      fetchJobsData();
+      // isBackgroundRefresh=true: sem isso, isLoading vira true a cada 30s e
+      // a tabela é substituída por um spinner — desmonta o Table do antd, que
+      // perde o estado interno de filtro/ordenação de coluna a cada ciclo.
+      fetchJobsData(true);
     }, 30000);
 
     return () => clearInterval(intervalId);
@@ -280,6 +287,12 @@ const ProjectGallery = ({ onProjectSelect }) => {
             onProjectSelect={onProjectSelect}
             progressData={progressData}
             onRefresh={fetchJobsData}
+            columnFilters={tableFilters}
+            columnSorter={tableSorter}
+            onColumnStateChange={(filters, sorter) => {
+              setTableFilters(filters);
+              setTableSorter(sorter);
+            }}
           />
         ))}
     </div>
