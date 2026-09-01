@@ -6,7 +6,7 @@ import PhylogeneticTreeViewer from './PhylogeneticTreeViewer';
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
 
-const TreeComparisonViewer = ({ tree1, tree2, tree1Name, tree2Name, comparisonData, metadata }) => {
+const TreeComparisonViewer = ({ tree1, tree2, tree1Name, tree2Name, comparisonData, projectName }) => {
   if (!comparisonData) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
@@ -24,7 +24,7 @@ const TreeComparisonViewer = ({ tree1, tree2, tree1Name, tree2Name, comparisonDa
         <Col span={12}>
           <Card title={`Tree 1: ${tree1Name}`} size="small">
             <div style={{ height: '400px' }}>
-              <PhylogeneticTreeViewer data={tree1} metadata={metadata} />
+              <PhylogeneticTreeViewer data={tree1} projectName={projectName} />
             </div>
           </Card>
         </Col>
@@ -32,7 +32,7 @@ const TreeComparisonViewer = ({ tree1, tree2, tree1Name, tree2Name, comparisonDa
         <Col span={12}>
           <Card title={`Tree 2: ${tree2Name}`} size="small">
             <div style={{ height: '400px' }}>
-              <PhylogeneticTreeViewer data={tree2} metadata={metadata} />
+              <PhylogeneticTreeViewer data={tree2} projectName={projectName} />
             </div>
           </Card>
         </Col>

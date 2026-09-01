@@ -62,7 +62,6 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
   const [selectedItems, setSelectedItems] = useState([]);
   const [comparisonMode, setComparisonMode] = useState(false);
 
-  const [metadata, setMetadata] = useState(null);
   const [dadosOWID, setDadosOWID] = useState(null);
   const [isComparisonAllowed, setIsComparisonAllowed] = useState(false);
   const [isComparisonLoading, setIsComparisonLoading] = useState(false);
@@ -90,14 +89,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       }
     };
     fetchProjects();
-    fetchMetadata(initialProjectName);
   }, [initialProjectName]);
-
-  // useEffect(() => {
-  //   if (metadata && Object.keys(metadata).length > 0) {
-  //     fetchOWIDMetadata(metadata);
-  //   }
-  // }, [metadata]);
 
   const fetchDirectoryContent = useCallback(async (path) => {
     if (directoryContentRef.current.path === path) return;
@@ -119,27 +111,6 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
-
-  const fetchMetadata = useCallback(async (projectName) => {
-    if (!projectName) return;
-
-    setIsLoading(true);
-    setError(null);
-    // try {
-    //   const response = await fetch(
-    //     `${API_BASE_URL}/api/tree/metadata/${projectName}`,
-    //   );
-    //   if (!response.ok) throw new Error("Failed to fetch metadata.");
-
-    //   const data = await response.json();
-    //   setMetadata(data);
-    // } catch (err) {
-    //   setError(err.message);
-    //   setMetadata({});
-    // } finally {
-    //   setIsLoading(false);
-    // }
   }, []);
 
   const fetchOWIDMetadata = useCallback(async (metadata) => {
@@ -503,7 +474,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
               tree1Name={modalContent?.tree1Name}
               tree2Name={modalContent?.tree2Name}
               comparisonData={modalContent?.comparisonData}
-              metadata={metadata}
+              projectName={selectedProject}
               isLoading={isComparisonLoading}
             />
           </div>
@@ -552,7 +523,10 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
                 style={{ marginBottom: 16 }}
               />
             )}
-            <PhylogeneticTreeViewer data={modalContent} metadata={metadata} />
+            <PhylogeneticTreeViewer
+              data={modalContent}
+              projectName={selectedProject}
+            />
           </div>
         );
       case "fasta":

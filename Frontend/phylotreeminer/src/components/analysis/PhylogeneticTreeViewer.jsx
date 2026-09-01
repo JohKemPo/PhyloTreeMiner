@@ -6,10 +6,12 @@ import {
   Space,
   Alert,
   Select,
+  Input,
   Descriptions,
   Spin,
-  Empty,
   Typography,
+  Tag,
+  Tooltip,
 } from "antd";
 import {
   DownloadOutlined,
@@ -18,10 +20,36 @@ import {
   FilterOutlined,
   GlobalOutlined,
   FieldTimeOutlined,
+  InfoCircleOutlined,
+  ExportOutlined,
 } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
 
-const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
+import { API_BASE_URL, fetchNcbiInfo } from "../../services/dataServices";
+import InsightsPanelAntd from "./InsightsPanelAntd";
+
+/**
+ * Campos leves do dataset local disponíveis para cor/filtro/detalhe — o
+ * mesmo shape que `/api/tree/{projeto}/search-nodes` já devolve (host,
+ * country, region, lineage, year, isolate). Não é a lista dinâmica de
+ * "todo campo aninhado do metadata.json": esse era o formato antigo, e
+ * exigia carregar o arquivo inteiro no navegador para colorir a árvore.
+ */
+const LOCAL_METADATA_FIELDS = [
+  { field: "host", label: "Host" },
+  { field: "country", label: "Country" },
+  { field: "region", label: "Region" },
+  { field: "lineage", label: "Lineage" },
+  { field: "year", label: "Collection Date" },
+];
+
+/** Mesma normalização do backend (`accession_base`): sem a versão do acesso. */
+const acessoBase = (rotulo) => (rotulo ? rotulo.split(".")[0] : rotulo);
+
+const PhylogeneticTreeViewer = ({
+  data,
+  onNodeClick,
+  projectName = null,
+}) => {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const [treeData, setTreeData] = useState(null);
@@ -30,8 +58,6 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
   const [colorBy, setColorBy] = useState(null);
   const [collapsedNodes, setCollapsedNodes] = useState(new Set());
   const [selectedNode, setSelectedNode] = useState(null);
-  const [availableMetadataFields, setAvailableMetadataFields] = useState([]);
-  const [nodeDetails, setNodeDetails] = useState(null);
   const [optionsCollapsed, setOptionsCollapsed] = useState(true);
   const [layoutType, setLayoutType] = useState("linear");
   const [filters, setFilters] = useState({});
@@ -40,74 +66,51 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
   const [showTimeline, setShowTimeline] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [hoveredNode, setHoveredNode] = useState(null);
-  const [treeTooLarge, setTreeTooLarge] = useState(false);
-  const navigate = useNavigate();
   const [isRendering, setIsRendering] = useState(false);
 
+  // Filograma vs. cladograma: só se sabe depois de tentar renderizar com o
+  // comprimento de ramo real — ver `renderTree`.
+  const [temComprimentoRamo, setTemComprimentoRamo] = useState(true);
+
+  // Índice leve de metadado do projeto — `accessionId -> {host,country,...}`.
+  // Substitui o `metadata.json` inteiro que a versão anterior recebia como
+  // prop: aqui é uma linha por acesso, não a árvore de features/qualifiers.
+  const [localIndex, setLocalIndex] = useState(new Map());
+
+  // Detalhe do nó selecionado: o que já temos localmente, mais o que o NCBI
+  // responde ao vivo — as duas metades da "linkagem" pedida.
+  const [selectedNodeInfo, setSelectedNodeInfo] = useState(null);
+  const [ncbiInfo, setNcbiInfo] = useState(null);
+  const [ncbiLoading, setNcbiLoading] = useState(false);
+
   useEffect(() => {
-    if (data && metadata) {
-      const dataSize =
-        typeof data === "string" ? data.length : JSON.stringify(data).length;
-      if (dataSize > 2500) {
-        setTreeTooLarge(true);
-        return;
-      }
-    }
-    setTreeTooLarge(false);
-  }, [data, metadata]);
-
-  const flattenMetadata = (obj, prefix = "") => {
-    let result = [];
-
-    if (Array.isArray(obj)) {
-      obj.forEach((item, idx) => {
-        result = result.concat(flattenMetadata(item, `${prefix}[${idx}]`));
-      });
-    } else if (typeof obj === "object" && obj !== null) {
-      Object.entries(obj).forEach(([key, value]) => {
-        const path = prefix ? `${prefix}.${key}` : key;
-        if (typeof value === "object" && value !== null) {
-          result = result.concat(flattenMetadata(value, path));
-        } else {
-          result.push({ label: path, value });
-        }
-      });
-    } else {
-      result.push({ label: prefix, value: obj });
-    }
-
-    return result;
-  };
-
-  const processMetadata = useCallback(() => {
-    if (!metadata || !Array.isArray(metadata) || metadata.length === 0) {
-      setAvailableMetadataFields([]);
-      setColorBy(null);
+    if (!projectName) {
+      setLocalIndex(new Map());
       return;
     }
-
-    try {
-      const allTerminals = findAllDataTerminals(metadata);
-
-      const allFields = new Set();
-      allTerminals.forEach((t) => {
-        if (t.metadata) {
-          const fields = extractMetadataFields(t.metadata);
-          fields.forEach((f) => allFields.add(f));
-        }
+    let cancelado = false;
+    fetch(`${API_BASE_URL}/api/tree/${projectName}/search-nodes`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((linhas) => {
+        if (cancelado) return;
+        const mapa = new Map();
+        (linhas || []).forEach((linha) => {
+          if (linha.accessionId) mapa.set(linha.accessionId, linha);
+        });
+        setLocalIndex(mapa);
+      })
+      .catch(() => {
+        if (!cancelado) setLocalIndex(new Map());
       });
+    return () => {
+      cancelado = true;
+    };
+  }, [projectName]);
 
-      const fieldsArray = Array.from(allFields);
-      setAvailableMetadataFields(fieldsArray);
-      if (fieldsArray.length > 0) {
-        setColorBy(fieldsArray[0]);
-      }
-    } catch (error) {
-      console.error("Error processing metadata:", error);
-      setAvailableMetadataFields([]);
-      setColorBy(null);
-    }
-  }, [metadata]);
+  const getLocalMetadata = useCallback(
+    (nodeName) => localIndex.get(acessoBase(nodeName)) || null,
+    [localIndex],
+  );
 
   useEffect(() => {
     if (!data) return;
@@ -116,87 +119,10 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
       setTreeData(parsedTree);
       setFilteredTreeData(parsedTree);
       setError(null);
-      processMetadata();
     } catch (err) {
       setError("Erro ao analisar os dados da árvore: " + err.message);
     }
-  }, [data, metadata, processMetadata]);
-
-  function findAllDataTerminals(obj) {
-    let results = [];
-
-    if (typeof obj !== "object" || obj === null) return results;
-
-    if ("data_terminals" in obj && Array.isArray(obj.data_terminals)) {
-      results.push(...obj.data_terminals);
-    }
-
-    if (Array.isArray(obj)) {
-      for (const item of obj) {
-        results = results.concat(findAllDataTerminals(item));
-      }
-    } else {
-      for (const value of Object.values(obj)) {
-        results = results.concat(findAllDataTerminals(value));
-      }
-    }
-
-    return results;
-  }
-
-  const extractMetadataFields = (obj, prefix = "") => {
-    let fields = [];
-
-    if (Array.isArray(obj)) {
-      obj.forEach((item, idx) => {
-        fields = fields.concat(
-          extractMetadataFields(item, `${prefix}[${idx}]`)
-        );
-      });
-    } else if (typeof obj === "object" && obj !== null) {
-      Object.entries(obj).forEach(([key, value]) => {
-        const path = prefix ? `${prefix}.${key}` : key;
-        if (typeof value === "object" && value !== null) {
-          fields = fields.concat(extractMetadataFields(value, path));
-        } else {
-          fields.push(path);
-        }
-      });
-    } else {
-      fields.push(prefix);
-    }
-
-    return fields;
-  };
-
-  const getMetadataValue = (nodeName, fieldPath) => {
-    if (!metadata || !Array.isArray(metadata) || !nodeName) return null;
-
-    try {
-      const allTerminals = findAllDataTerminals(metadata);
-
-      for (const terminal of allTerminals) {
-        if (terminal.newick === nodeName && terminal.metadata) {
-          const pathParts = fieldPath.replace(/\[(\d+)\]/g, ".$1").split(".");
-          let value = terminal.metadata;
-
-          for (const part of pathParts) {
-            if (value && value[part] !== undefined) {
-              value = value[part];
-            } else {
-              return null;
-            }
-          }
-
-          return Array.isArray(value) ? value.join(", ") : value;
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error("Error getting metadata value:", error);
-      return null;
-    }
-  };
+  }, [data]);
 
   const universalTreeParser = (fileContent) => {
     const content = fileContent.trim();
@@ -318,10 +244,7 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
     }
 
     const baseRadius = isLargeTree ? 3 : 6;
-    const fontSize = isLargeTree ? "10px" : "12px";
     const strokeWidth = isLargeTree ? 1 : 1.5;
-
-    const autoLayoutType = isLargeTree ? "radial" : layoutType;
 
     const g = svg.append("g");
 
@@ -339,36 +262,62 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
 
     const root = d3.hierarchy(filteredTreeData);
 
-    root.each((node) => {
-      node.y = node.depth;
-    });
-
+    // `layout(root)` decide a ordem lateral dos nós (`d.x`); o eixo principal
+    // (`d.y`) que ele calcula é por profundidade — um cladograma. Substituído
+    // logo abaixo pela distância acumulada de ramo, quando ela existe.
     layout(root);
 
-    if (layoutType === "radial") {
-      const maxY = d3.max(root.descendants(), (d) => d.y);
-      if (maxY > 0) {
-        root.each((d) => {
-          d.y = (d.y / maxY) * radius;
-        });
-      }
-    }
+    root.each((d) => {
+      d.lenAcumulado =
+        (d.parent ? d.parent.lenAcumulado : 0) + (d.data.length || 0);
+    });
+    const maxLen = d3.max(root.descendants(), (d) => d.lenAcumulado) || 0;
+    const comCompimento = maxLen > 0;
+    const escala = layoutType === "radial" ? radius : width;
 
+    if (comCompimento) {
+      // Filograma: a posição no eixo principal é a distância evolutiva real
+      // desde a raiz, não a contagem de arestas. Era isto que faltava — o
+      // `d3.tree()`/`d3.cluster()` originais só sabem desenhar cladograma.
+      root.each((d) => {
+        d.y = (d.lenAcumulado / maxLen) * escala;
+      });
+    } else if (layoutType === "radial") {
+      // Newick sem comprimento de ramo declarado: não há o que respeitar.
+      // Mantém cladograma por profundidade, só reescalado para o raio —
+      // era o único caso que o código anterior tratava.
+      const maxDepth = d3.max(root.descendants(), (d) => d.depth) || 1;
+      root.each((d) => {
+        d.y = (d.depth / maxDepth) * escala;
+      });
+    }
+    setTemComprimentoRamo(comCompimento);
+
+    // Ramos em ângulo reto, não curva suave — como Bio.Phylo.draw(): o
+    // comprimento do ramo é uma distância, uma bezier entre pai e filho
+    // sugere uma transição gradual que não existe na biologia.
     let linkGenerator;
 
     if (layoutType === "radial") {
-      linkGenerator = d3
-        .linkRadial()
-        .angle((d) => d.x)
-        .radius((d) => d.y);
+      linkGenerator = (d) => {
+        const { source, target } = d;
+        const [sx, sy] = d3.pointRadial(source.x, source.y);
+        const [ax, ay] = d3.pointRadial(target.x, source.y);
+        const [tx, ty] = d3.pointRadial(target.x, target.y);
+        const largeArc = Math.abs(target.x - source.x) > Math.PI ? 1 : 0;
+        const sweep = target.x > source.x ? 1 : 0;
+        // arco de raio constante (mesma distância do pai) até o ângulo do
+        // filho, depois uma reta radial até ele — sem curva, só ângulo reto.
+        return `M${sx},${sy}A${source.y},${source.y} 0 ${largeArc} ${sweep} ${ax},${ay}L${tx},${ty}`;
+      };
     } else {
-      linkGenerator = d3
-        .linkHorizontal()
-        .x((d) => d.y)
-        .y((d) => d.x);
+      linkGenerator = (d) => {
+        const { source, target } = d;
+        return `M${source.y},${source.x}V${target.x}H${target.y}`;
+      };
     }
 
-    const link = g
+    g
       .selectAll(".link")
       .data(root.links())
       .enter()
@@ -376,22 +325,21 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
       .attr("class", "link")
       .attr("d", linkGenerator)
       .attr("fill", "none")
-      .attr("stroke", "#555")
-      .attr("stroke-width", 1.5)
+      .attr("stroke-width", strokeWidth)
       .style("stroke", (d) => {
-        if (colorBy && metadata) {
+        if (colorBy && localIndex.size > 0) {
           const targetName = d.target.data.name;
           if (targetName) {
-            const metadataValue = getMetadataValue(targetName, colorBy);
-            if (metadataValue) {
-              return getColorForValue(metadataValue);
+            const info = getLocalMetadata(targetName);
+            if (info && info[colorBy]) {
+              return getColorForValue(info[colorBy]);
             }
           }
         }
         return "#555";
       })
       .append("title")
-      .text((d) => `Length: ${d.target.data.length || 0}`);
+      .text((d) => `Comprimento do ramo: ${d.target.data.length ?? "—"}`);
 
     const node = g
       .selectAll(".node")
@@ -408,17 +356,8 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
       })
       .style("cursor", "pointer")
       .on("click", (event, d) => {
-        if (metadata) {
-          handleNodeClick(event, d);
-        } else {
-          event.stopPropagation();
-          onNodeClick({
-            name: d.data.name,
-            depth: d.depth,
-            children: d.children ? d.children.length : 0,
-            data: d.data,
-          });
-        }
+        event.stopPropagation();
+        handleNodeClick(d);
       })
       .on("mouseover", (event, d) => {
         setHoveredNode(d);
@@ -454,10 +393,10 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
         if (hoveredNode && isNodeInPath(d, hoveredNode)) return "#1890ff";
         if (d.children && !collapsedNodes.has(d.data.name)) return "#1890ff";
 
-        if (colorBy && metadata && !d.children) {
-          const metadataValue = getMetadataValue(d.data.name, colorBy);
-          if (metadataValue) {
-            return getColorForValue(metadataValue);
+        if (colorBy && localIndex.size > 0 && !d.children) {
+          const info = getLocalMetadata(d.data.name);
+          if (info && info[colorBy]) {
+            return getColorForValue(info[colorBy]);
           }
         }
         return "#52c41a";
@@ -500,9 +439,6 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
       })
       .style("font-size", "12px")
       .style("display", (d) => {
-        // if (isLargeTree && nodeCount > 100) {
-        //   return  d === hoveredNode ? "block" : "none";
-        // }
         if (d.parent && collapsedNodes.has(d.parent.data.name)) return "none";
         if (d.children && d.data.name && d.data.name.startsWith("Inner"))
           return "none";
@@ -519,8 +455,8 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
 
     svg.call(zoomBehavior);
 
-    if (colorBy && metadata) {
-      renderLegend(g, width, height);
+    if (colorBy && localIndex.size > 0) {
+      renderLegend(g, width);
     }
     setIsRendering(false);
   };
@@ -535,18 +471,15 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
     return () => {
       setIsRendering(false);
     };
-  }, [filteredTreeData, colorBy, collapsedNodes, selectedNode, metadata]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredTreeData, colorBy, collapsedNodes, selectedNode, layoutType, localIndex]);
 
   const highlightPath = (node, active) => {
     const paths = getPathToRoot(node);
 
-    d3.selectAll(".link")
-      .style("stroke", (d) => {
-        return active && paths.includes(d.target) ? "#1890ff" : "#555";
-      })
-      .style("stroke-width", (d) => {
-        return active && paths.includes(d.target) ? 2.5 : 1.5;
-      });
+    d3.selectAll(".link").style("stroke-width", (d) => {
+      return active && paths.includes(d.target) ? 2.5 : 1.5;
+    });
 
     d3.selectAll(".node circle")
       .attr("r", (d) => {
@@ -560,10 +493,10 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
         if (active && paths.includes(d)) return "#1890ff";
         if (d.children && !collapsedNodes.has(d.data.name)) return "#1890ff";
 
-        if (colorBy && metadata && !d.children) {
-          const metadataValue = getMetadataValue(d.data.name, colorBy);
-          if (metadataValue) {
-            return getColorForValue(metadataValue);
+        if (colorBy && localIndex.size > 0 && !d.children) {
+          const info = getLocalMetadata(d.data.name);
+          if (info && info[colorBy]) {
+            return getColorForValue(info[colorBy]);
           }
         }
         return "#52c41a";
@@ -586,21 +519,13 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
     return isNodeInPath(node, targetNode.parent);
   };
 
-  const renderLegend = (g, width, height) => {
-    if (!colorBy || !metadata) return;
+  const renderLegend = (g, width) => {
+    if (!colorBy || localIndex.size === 0) return;
 
     const uniqueValues = new Set();
-    if (treeData) {
-      const findLeafNodes = (node) => {
-        if (!node.children || node.children.length === 0) {
-          const value = getMetadataValue(node.name, colorBy);
-          if (value) uniqueValues.add(value);
-        } else {
-          node.children.forEach(findLeafNodes);
-        }
-      };
-      findLeafNodes(treeData);
-    }
+    localIndex.forEach((info) => {
+      if (info[colorBy]) uniqueValues.add(info[colorBy]);
+    });
 
     const legendValues = Array.from(uniqueValues).slice(0, 100);
 
@@ -635,7 +560,7 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
           .append("text")
           .attr("x", 20)
           .attr("y", 12)
-          .text(d.length > 30 ? d.substring(0, 30) + "..." : d)
+          .text(String(d).length > 30 ? String(d).substring(0, 30) + "..." : d)
           .style("font-size", "10px");
       });
   };
@@ -644,11 +569,13 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
     if (!treeData) return;
 
     const filterNode = (node) => {
-      if (!metadata || !node.name) return true;
+      if (localIndex.size === 0 || !node.name) return true;
+
+      const info = getLocalMetadata(node.name);
 
       for (const [field, values] of Object.entries(filters)) {
         if (values.length > 0) {
-          const nodeValue = getMetadataValue(node.name, field);
+          const nodeValue = info ? info[field] : null;
           if (!values.includes(nodeValue)) {
             return false;
           }
@@ -656,23 +583,13 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
       }
 
       if (searchTerm) {
-        let matchesSearch = false;
+        const alvo = searchTerm.toLowerCase();
+        let matchesSearch = node.name.toLowerCase().includes(alvo);
 
-        if (node.name.toLowerCase().includes(searchTerm.toLowerCase())) {
-          matchesSearch = true;
-        }
-
-        if (metadata && availableMetadataFields.length > 0) {
-          for (const field of availableMetadataFields) {
-            const value = getMetadataValue(node.name, field);
-            if (
-              value &&
-              value.toString().toLowerCase().includes(searchTerm.toLowerCase())
-            ) {
-              matchesSearch = true;
-              break;
-            }
-          }
+        if (!matchesSearch && info) {
+          matchesSearch = LOCAL_METADATA_FIELDS.some(({ field }) =>
+            String(info[field] ?? "").toLowerCase().includes(alvo),
+          );
         }
 
         if (!matchesSearch) return false;
@@ -699,7 +616,7 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
 
     const filtered = filterTree(treeData);
     setFilteredTreeData(filtered);
-  }, [treeData, filters, searchTerm, metadata, availableMetadataFields]);
+  }, [treeData, filters, searchTerm, localIndex, getLocalMetadata]);
 
   useEffect(() => {
     applyFilters();
@@ -707,17 +624,9 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
 
   const getUniqueValuesForField = (field) => {
     const values = new Set();
-    if (treeData && metadata) {
-      const findValues = (node) => {
-        if (!node.children || node.children.length === 0) {
-          const value = getMetadataValue(node.name, field);
-          if (value) values.add(value);
-        } else {
-          node.children.forEach(findValues);
-        }
-      };
-      findValues(treeData);
-    }
+    localIndex.forEach((info) => {
+      if (info[field]) values.add(info[field]);
+    });
     return Array.from(values);
   };
 
@@ -732,7 +641,6 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
           position: "absolute",
           top: 10,
           right: 10,
-          // zIndex: 1,
           width: "300px",
         }}
         extra={
@@ -744,13 +652,24 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
           />
         }
       >
-        {availableMetadataFields.slice(0, 4).map((field) => (
+        <div style={{ marginBottom: "10px" }}>
+          <strong>Search:</strong>
+          <Input.Search
+            allowClear
+            placeholder="Nome do terminal ou metadado"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ marginTop: 4 }}
+          />
+        </div>
+
+        {LOCAL_METADATA_FIELDS.map(({ field, label }) => (
           <div key={field} style={{ marginBottom: "10px" }}>
-            <strong>{field.split(".").pop()}:</strong>
+            <strong>{label}:</strong>
             <Select
               mode="multiple"
               style={{ width: "100%" }}
-              placeholder={`Filter by ${field}`}
+              placeholder={`Filter by ${label}`}
               value={filters[field] || []}
               onChange={(values) =>
                 setFilters((prev) => ({
@@ -767,7 +686,10 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
         ))}
 
         <Button
-          onClick={() => setFilters({})}
+          onClick={() => {
+            setFilters({});
+            setSearchTerm("");
+          }}
           style={{ width: "100%", marginTop: "10px" }}
         >
           Reset Filters
@@ -807,12 +729,15 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
     return color;
   };
 
-  const handleNodeClick = (event, d) => {
-    event.stopPropagation();
+  /** Um terminal de verdade tem nome de acesso; nó interno tem "InnerN". */
+  const isAccessionLeaf = (d) =>
+    !d.children && d.data.name && !d.data.name.startsWith("Inner");
 
+  const handleNodeClick = (d) => {
     if (selectedNode === d.data.name) {
       setSelectedNode(null);
-      setNodeDetails(null);
+      setSelectedNodeInfo(null);
+      setNcbiInfo(null);
       return;
     }
 
@@ -828,42 +753,41 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
 
     setSelectedNode(d.data.name);
 
-    let nodeMetadata = null;
-    if (metadata && availableMetadataFields.length > 0) {
-      nodeMetadata = {};
-      availableMetadataFields.forEach((field) => {
-        const value = getMetadataValue(d.data.name, field);
-        if (value) {
-          nodeMetadata[field] = value;
-        }
-      });
+    const local = getLocalMetadata(d.data.name);
+    const ehTerminal = isAccessionLeaf(d);
+    setSelectedNodeInfo({ name: d.data.name, local, isLeaf: ehTerminal });
+    setNcbiInfo(null);
+
+    // NCBI só faz sentido para um terminal com número de acesso de verdade —
+    // "InnerN" é um nó interno sintético do próprio pipeline.
+    if (projectName && ehTerminal) {
+      setNcbiLoading(true);
+      fetchNcbiInfo(acessoBase(d.data.name))
+        .then((info) => setNcbiInfo(info))
+        .catch(() => setNcbiInfo(null))
+        .finally(() => setNcbiLoading(false));
     }
 
-    setNodeDetails({
-      name: d.data.name,
-      metadata: nodeMetadata,
-    });
-
-    if (onNodeClick && d.data.name) {
+    if (onNodeClick) {
       onNodeClick({
         name: d.data.name,
         depth: d.depth,
         children: d.children ? d.children.length : 0,
         data: d.data,
-        metadata: nodeMetadata,
+        metadata: local,
       });
     }
   };
 
   const handleCloseDetails = () => {
-    setNodeDetails(null);
     setSelectedNode(null);
+    setSelectedNodeInfo(null);
+    setNcbiInfo(null);
   };
 
   const handleSvgClick = (event) => {
     if (event.target === svgRef.current) {
-      setSelectedNode(null);
-      setNodeDetails(null);
+      handleCloseDetails();
     }
   };
 
@@ -883,34 +807,6 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
 
   if (error) {
     return <Alert message="Erro" description={error} type="error" showIcon />;
-  }
-
-  if (treeTooLarge && metadata) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100%",
-          padding: "20px",
-        }}
-      >
-        <Empty
-          description={
-            <span>
-              The tree is too large for iterative visualization. We apologize
-              for the inconvenience. <br />
-              We are developing support for large trees.
-            </span>
-          }
-        >
-          <Button type="primary" onClick={() => navigate("/analysis")}>
-            Try the analysis tool
-          </Button>
-        </Empty>
-      </div>
-    );
   }
 
   return (
@@ -974,7 +870,7 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
                 style={{ width: "100%", marginTop: 8 }}
                 options={[
                   { value: "linear", label: "Linear" },
-                  { value: "radial", label: "Radial", disabled: true },
+                  { value: "radial", label: "Radial" },
                 ]}
               />
             </div>
@@ -1006,27 +902,21 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
               </Button>
             </Space>
 
-            {availableMetadataFields.length > 0 && (
+            {localIndex.size > 0 && (
               <>
                 <div style={{ marginTop: 16 }}>
                   <strong>Color By:</strong>
                 </div>
                 <Select
+                  allowClear
                   showSearch
                   value={colorBy}
                   onChange={setColorBy}
-                  style={{ width: "400px", marginTop: 8 }}
-                  options={availableMetadataFields.map((field) => {
-                    const parts = field.split(".");
-                    const lastKey = parts[parts.length - 1];
-                    const digit = lastKey.split("[")[1]?.split("]")[0]
-                      ? lastKey.split("[")[1]?.split("]")[0]
-                      : "";
-                    return {
-                      value: field,
-                      label: lastKey.split("[")[0] + " " + digit,
-                    };
-                  })}
+                  style={{ width: "100%", marginTop: 8 }}
+                  options={LOCAL_METADATA_FIELDS.map(({ field, label }) => ({
+                    value: field,
+                    label,
+                  }))}
                 />
               </>
             )}
@@ -1052,14 +942,30 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
             </div>
           </Card>
         ) : (
-          <Button
-            type="dashed"
-            icon={<SettingOutlined />}
-            onClick={() => setOptionsCollapsed(false)}
-            size="small"
-          >
-            Settings
-          </Button>
+          <Space>
+            <Button
+              type="dashed"
+              icon={<SettingOutlined />}
+              onClick={() => setOptionsCollapsed(false)}
+              size="small"
+            >
+              Settings
+            </Button>
+            <Tooltip
+              title={
+                temComprimentoRamo
+                  ? "Posição dos nós proporcional à distância evolutiva acumulada (comprimento de ramo do arquivo)."
+                  : "Este arquivo não declara comprimento de ramo — exibindo apenas a topologia (cladograma)."
+              }
+            >
+              <Tag
+                icon={<InfoCircleOutlined />}
+                color={temComprimentoRamo ? "blue" : "default"}
+              >
+                {temComprimentoRamo ? "Filograma" : "Cladograma"}
+              </Tag>
+            </Tooltip>
+          </Space>
         )}
       </div>
 
@@ -1072,10 +978,10 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
 
       {renderFiltersPanel()}
 
-      {nodeDetails && metadata && (
+      {selectedNodeInfo && (
         <div
           style={{
-            width: 700,
+            width: 380,
             padding: 20,
             background: "#f9f9f9",
             borderLeft: "1px solid #ddd",
@@ -1090,17 +996,50 @@ const PhylogeneticTreeViewer = ({ data, onNodeClick, metadata = null }) => {
             style={{ position: "absolute", top: 10, right: 10, zIndex: 2 }}
           />
 
-          <h3 style={{ marginBottom: 8 }}>Node Details: {nodeDetails.name}</h3>
-          {nodeDetails.metadata ? (
-            <Descriptions bordered size="small" column={1}>
-              {flattenMetadata(nodeDetails.metadata).map(({ label, value }) => (
-                <Descriptions.Item key={label} label={label}>
-                  {Array.isArray(value) ? value.join(", ") : String(value)}
+          <h3 style={{ marginBottom: 8 }}>Node: {selectedNodeInfo.name}</h3>
+
+          {selectedNodeInfo.local ? (
+            <Descriptions
+              title="Dataset"
+              bordered
+              size="small"
+              column={1}
+              style={{ marginBottom: 16 }}
+            >
+              {LOCAL_METADATA_FIELDS.map(({ field, label }) => (
+                <Descriptions.Item key={field} label={label}>
+                  {selectedNodeInfo.local[field] ?? "—"}
                 </Descriptions.Item>
               ))}
             </Descriptions>
           ) : (
-            <p>No metadata available for this node</p>
+            projectName && (
+              <Alert
+                type="info"
+                showIcon
+                message="Sem metadado local para este nó"
+                description="Não há registro correspondente em search-nodes — comum para nós internos (InnerN) ou acessos ausentes do metadata."
+                style={{ marginBottom: 16 }}
+              />
+            )
+          )}
+
+          {projectName && selectedNodeInfo.isLeaf ? (
+            <InsightsPanelAntd
+              selectedNode={{ name: selectedNodeInfo.name }}
+              insights={ncbiInfo}
+              isLoading={ncbiLoading}
+            />
+          ) : (
+            projectName && (
+              <Alert
+                type="default"
+                showIcon
+                icon={<ExportOutlined />}
+                message="Nó interno"
+                description={`"${selectedNodeInfo.name}" é um clado sintético do pipeline, não um acesso do GenBank — não há o que buscar no NCBI.`}
+              />
+            )
           )}
         </div>
       )}
