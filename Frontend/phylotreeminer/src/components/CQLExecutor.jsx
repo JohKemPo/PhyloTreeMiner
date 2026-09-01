@@ -41,6 +41,9 @@ const CQLExecutor = ({
   fileName: initialName,
   projectName = null,
   onClose,
+  truncated = false,
+  totalBytes = null,
+  previewBytes = null,
 }) => {
   const [editedCommands, setEditedCommands] = useState({});
   const [fileContent, setFileContent] = useState("");
@@ -938,41 +941,65 @@ const CQLExecutor = ({
               <p>Supports files of any size with sequential execution</p>
             </Dragger>
           ) : (
-            <Alert
-              message={
-                <Space direction="vertical" style={{ width: "100%" }}>
-                  <Text strong>{fileName}</Text>
-                  <Text type="secondary" style={{ fontSize: "12px" }}>
-                    {cqlBlocks.length} commands detected
-                  </Text>
-                </Space>
-              }
-              type="info"
-              showIcon
-              style={{ marginTop: "8px" }}
-              action={
-                <Space>
-                  <Button
-                    size="small"
-                    icon={<CloseOutlined />}
-                    onClick={clearSelection}
-                    disabled={isExecuting}
-                  >
-                    Clear
-                  </Button>
-                  <Button
-                    size="small"
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    onClick={executeCQL}
-                    loading={isExecuting}
-                    disabled={cqlBlocks.length === 0}
-                  >
-                    Execute
-                  </Button>
-                </Space>
-              }
-            />
+            <>
+              {truncated && (
+                <Alert
+                  message="Arquivo maior que o limite de pré-visualização"
+                  description={
+                    totalBytes
+                      ? `Mostrando apenas os primeiros ${(previewBytes / 1e6).toFixed(1)} MB de ${(totalBytes / 1e6).toFixed(1)} MB. Os comandos abaixo são um prefixo válido do arquivo, não o conteúdo inteiro — a execução em lote foi desabilitada para não gravar um subconjunto parcial no banco.`
+                      : "Este arquivo excede o limite de pré-visualização; os comandos abaixo são apenas um prefixo do conteúdo total."
+                  }
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: "8px" }}
+                />
+              )}
+              <Alert
+                message={
+                  <Space direction="vertical" style={{ width: "100%" }}>
+                    <Text strong>{fileName}</Text>
+                    <Text type="secondary" style={{ fontSize: "12px" }}>
+                      {cqlBlocks.length} commands detected
+                      {truncated ? " (prefixo truncado)" : ""}
+                    </Text>
+                  </Space>
+                }
+                type={truncated ? "warning" : "info"}
+                showIcon
+                style={{ marginTop: "8px" }}
+                action={
+                  <Space>
+                    <Button
+                      size="small"
+                      icon={<CloseOutlined />}
+                      onClick={clearSelection}
+                      disabled={isExecuting}
+                    >
+                      Clear
+                    </Button>
+                    <Tooltip
+                      title={
+                        truncated
+                          ? "Desabilitado: o arquivo foi truncado na pré-visualização. Execute o arquivo completo pelo pipeline/servidor."
+                          : ""
+                      }
+                    >
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<PlayCircleOutlined />}
+                        onClick={executeCQL}
+                        loading={isExecuting}
+                        disabled={cqlBlocks.length === 0 || truncated}
+                      >
+                        Execute
+                      </Button>
+                    </Tooltip>
+                  </Space>
+                }
+              />
+            </>
           )}
         </div>
 

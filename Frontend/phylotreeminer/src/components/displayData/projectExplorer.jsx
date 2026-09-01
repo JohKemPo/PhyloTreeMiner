@@ -54,6 +54,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
   const [modalContent, setModalContent] = useState(null);
   const [modalContentType, setModalContentType] = useState(null);
   const [isModalLoading, setIsModalLoading] = useState(false);
+  const [modalTruncationInfo, setModalTruncationInfo] = useState(null);
 
   const [loadingItemPath, setLoadingItemPath] = useState(null);
   const [loadingItems, setLoadingItems] = useState(new Set());
@@ -274,6 +275,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
     setIsModalLoading(true);
     setModalContent(null);
     setModalContentType(null);
+    setModalTruncationInfo(null);
 
     try {
       const response = await fetch(
@@ -291,6 +293,13 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
 
         try {
           const data = JSON.parse(textContent);
+
+          if (data && data.truncated) {
+            setModalTruncationInfo({
+              totalBytes: data.total_bytes,
+              previewBytes: data.preview_bytes,
+            });
+          }
 
           if (data && data.content !== undefined) {
             setModalContent(data.content);
@@ -581,6 +590,9 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
               fileName={modalItem?.name}
               projectName={selectedProject}
               onClose={handleCloseModal}
+              truncated={!!modalTruncationInfo}
+              totalBytes={modalTruncationInfo?.totalBytes}
+              previewBytes={modalTruncationInfo?.previewBytes}
             />
           </div>
         );

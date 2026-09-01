@@ -1206,7 +1206,14 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
         tamanho = os.path.getsize(full_path)
         if tamanho == 0:
             raise HTTPException(status_code=400, detail="O arquivo selecionado está vazio (0 bytes) no servidor.")
-        if tamanho > MAX_JSON_INLINE_BYTES:
+
+        # .cql não é um documento estruturado como o JSON: um prefixo com blocos
+        # Cypher completos ainda é útil para pré-visualização, então em vez de
+        # recusar servimos os primeiros MAX_JSON_INLINE_BYTES e sinalizamos o corte.
+        eh_cql = full_path.endswith(".cql")
+        truncado = False
+
+        if tamanho > MAX_JSON_INLINE_BYTES and not eh_cql:
             # `f.read()` abaixo carrega o arquivo inteiro; com um metadata.json de
             # 3,2 GB isso derruba o processo. Quem é grande é servido paginado.
             raise HTTPException(
@@ -1219,7 +1226,16 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
             return FileResponse(full_path)
 
         with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
+            if eh_cql and tamanho > MAX_JSON_INLINE_BYTES:
+                content = f.read(MAX_JSON_INLINE_BYTES)
+                truncado = True
+                # Corta no último ';' fora de string para não entregar um bloco
+                # Cypher pela metade — cada bloco cortado seria um comando inválido.
+                ultimo_fim_de_bloco = content.rfind(";")
+                if ultimo_fim_de_bloco != -1:
+                    content = content[:ultimo_fim_de_bloco + 1]
+            else:
+                content = f.read()
 
         if any(full_path.endswith(ext) for ext in [".newick", ".nwk", ".tree", ".nexus"]):
             file_type = "newick"
@@ -1245,7 +1261,12 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
                 pass 
         
         if file_type != "unsupported":
-             return {"content": content, "type": file_type}
+            resultado = {"content": content, "type": file_type}
+            if truncado:
+                resultado["truncated"] = True
+                resultado["total_bytes"] = tamanho
+                resultado["preview_bytes"] = len(content.encode("utf-8", errors="ignore"))
+            return resultado
 
     except HTTPException:
         raise
