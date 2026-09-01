@@ -19,6 +19,7 @@ import {
   PartitionOutlined,
   SlidersOutlined,
   DashboardOutlined,
+  AuditOutlined,
 } from "@ant-design/icons";
 import { Link, useLocation, Outlet } from "react-router-dom";
 
@@ -55,6 +56,11 @@ function App() {
       key: "/analysis",
       icon: <SlidersOutlined />,
       label: <Link to="/analysis">Analysis</Link>,
+    },
+    {
+      key: "/provenance",
+      icon: <AuditOutlined />,
+      label: <Link to="/provenance">Provenance</Link>,
     },
     { type: "divider" },
     {

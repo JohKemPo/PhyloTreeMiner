@@ -9,6 +9,7 @@ import SystemPerformanceMonitor from "./components/displayData/systemPerformance
 import TestPage from "./pages/testPage.jsx";
 import HomePage from "./pages/homePage.jsx";
 import AnalysisPage from "./pages/AnalysisPage.jsx";
+import ProvenancePage from "./pages/ProvenancePage.jsx";
 import DocumentationHome from "./pages/DocumentationHome.jsx";
 import SystemHealth from "./components/displayData/SystemHealth.jsx";
 import { UserProvider } from "./contexts/UserContext.jsx";
@@ -51,6 +52,10 @@ const router = createBrowserRouter([
       {
         path: "analysis",
         element: <AnalysisPage />,
+      },
+      {
+        path: "provenance",
+        element: <ProvenancePage />,
       },
       {
         path: "doc",
