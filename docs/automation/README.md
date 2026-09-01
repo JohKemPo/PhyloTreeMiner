@@ -33,6 +33,7 @@ Este diretório descreve **como a refatoração e a evolução da ferramenta sã
 | [10-marcos-e-metas.md](10-marcos-e-metas.md) | **Marcos M0→M6** com gate executável; o baseline de Li *et al.* (2007) como teste de regressão científica; limitações honestas; quadro das decisões que destravam o plano |
 | [11-handoff-maquina-de-validacao.md](11-handoff-maquina-de-validacao.md) | **Ponte entre a máquina de desenvolvimento e a de validação.** Ambiente e divergências de versão, portão de sanidade, o que espera máquina grande (reexecução, RAxML de volta, teste de estresse) e os limites de recurso já conhecidos |
 | [12-portabilidade-e-migracao.md](12-portabilidade-e-migracao.md) | **O mapa da independência de hardware.** Os quatro eixos de dependência (memória, núcleos, autoconfiguração, versão), o que já é portável, o que não é, e o procedimento ao ligar numa máquina nova |
+| [13-guia-reexecucao-m2.md](13-guia-reexecucao-m2.md) | **Comando + config prontos para reexecutar VARV-6/49/121, ZIKV-480 e o pré-voo Zika-21** com os parâmetros pós-DEC-050 (`mafft` × `mafft_iterative`, `-nt 1`, `--workers 1`), threads calibradas pela máquina de validação, e a armadilha já medida de reexecutar no mesmo diretório |
 
 Relacionados: [`../agents/`](../agents/README.md) (contrato de cada subagente) e [`../skills/`](../skills/README.md) (procedimentos executáveis).
 
