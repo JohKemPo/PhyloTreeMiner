@@ -1836,6 +1836,83 @@ cd Backend && python -m pytest tests -q                                 → 243 
 
 **Write-lock:** `Backend/src/services/execution_state.py`, `Backend/tests/unit/test_execution_state.py`, `docs/automation/07`. Não toca `BioComp_UFF/` nem `Frontend/`. **Reversível:** sim.
 
+### DEC-054 · 2026-09-01 · Exclusão de projeto no menu de ações, e a tela de Provenance
+
+**Gatilho:** pedido do usuário — o item "Delete Project" do dropdown de ações existia desabilitado desde antes, sem rota no backend (clicar mostrava "Funcionalidade em desenvolvimento"); e a proveniência/reprodutibilidade de uma execução (o `manifest.json` gravado desde M2.5/DEC-027) só dava para ver como JSON bruto no explorador de arquivos.
+
+#### Exclusão de projeto
+
+`DELETE /projects/{nome}` (`Backend/src/app.py`) valida o nome, resolve o caminho com `resolve_within` — a mesma proteção contra path traversal dos demais endpoints —, e recusa excluir um projeto em execução usando `resolver_estado`, que já enxerga execuções lançadas por fora da API (DEC-053). Remove com `shutil.rmtree`; não há lixeira nem backup. No frontend, o `Modal.confirm` lista o que será apagado (`out/`: árvores, alinhamentos, metadados, manifesto) antes de confirmar.
+
+#### Tela de Provenance
+
+Nova tela (`ProvenanceView.jsx` + `ProvenancePage.jsx`) que lê o `manifest.json` e apresenta de forma analítica o que antes só dava pra ver como JSON: identidade da execução, estado dos dois repositórios (branch, commit, alerta quando algum está sujo), ambiente, sementes e parâmetros de determinismo, tabela de ferramentas disponíveis × invocadas com o comando de cada execução, integridade SHA-256 de entradas/saídas com busca, e os parâmetros do workflow — reaproveitando o `JsonViewer` que já existia no explorador. Um projeto sem manifesto (nunca executado, ou anterior a M2.5) declara isso explicitamente. Acessível pelo menu lateral (`/provenance`, com seletor de projeto e `?project=nome`) e pelo mesmo menu de ações que ganhou o "Delete".
+
+`API_BASE_URL` passou a ser exportado de `services/dataServices.jsx` em vez de redeclarado — as telas novas o importam de lá para não alimentar mais o defeito conhecido de URL fixa (F-2/Arq-C, travado em no máximo 13 arquivos pelo teste de config).
+
+#### Δ em métrica publicada: nenhum
+
+Gestão de projeto e leitura de proveniência — não toca distância, clado, metadado extraído ou padrão FPMax.
+
+**Evidência de execução:**
+```
+Backend/tests/api/test_project_delete.py     → 7 passed (sucesso, nome inválido, inexistente, em execução)
+cd Backend && python -m pytest tests -q      → 250 passed, 1 xfailed (era 243; +7)
+Frontend: build ok; vitest 18 passed; lint-ratchet: débito reduzido (era 66/27, ficou 64/27)
+Teste manual: criado projeto descartável, excluído via API real, diretório confirmado ausente em disco
+```
+
+**Write-lock:** `Backend/src/app.py`, `Backend/tests/api/test_project_delete.py` (novo), `Frontend/phylotreeminer/src/{App.jsx,main.jsx,components/displayData/{projectsGallery,projectsTableView}.jsx,components/displayData/ProvenanceView.jsx (novo),pages/ProvenancePage.jsx (novo),services/dataServices.jsx}`. **Reversível:** sim.
+
+### DEC-055 · 2026-09-01 · Provenance — parâmetros do workflow como resumo, manifesto bruto com o mesmo modo
+
+**Gatilho:** pedido do usuário — "Parâmetros do workflow" mostrava `params` como JSON bruto; pediu o mesmo formato do "Review Final Settings" do configurador (`pipelineConfigurator.jsx`), disponível por um switch contra a view atual.
+
+`renderValorParametro` (novo) reproduz o `renderConfigValue` do configurador — rótulo capitalizado por palavra, booleano como Sim/Não, lista uma linha por item, objeto aninhado em `Descriptions` — mas de forma **recursiva**: a versão original não recursava em objeto dentro de objeto, e `params.tree_config`/`subtree_config` tem mais de um nível, que o formulário ao vivo nunca teve. O botão "Bruto" continua disponível. O painel "Manifesto bruto" ganhou o mesmo switch e passa a abrir por padrão no resumo (pedido explícito do usuário).
+
+Objeto aninhado com mais de 15 entradas (`outputs_sha256` de uma execução grande passa de 200) ganha altura máxima de 420px com rolagem própria — sem isso a tabela de um manifesto real (274 saídas) travou a página inteira ao testar no navegador.
+
+#### Δ em métrica publicada: nenhum
+
+Formatação de leitura de proveniência.
+
+**Evidência de execução:** build ok; testado ao vivo contra `Zika_21seq_reexec_20260901` (params aninhados de `tree_config`/`subtree_config`, e os 274 `outputs_sha256` com rolagem confirmada via DOM: `scrollHeight` 10755 / `clientHeight` 418).
+
+**Write-lock:** `Frontend/phylotreeminer/src/components/displayData/ProvenanceView.jsx`. **Reversível:** sim.
+
+### DEC-056 · 2026-09-01 · Visualizador de árvore filogeneticamente correto, com metadado e NCBI religados
+
+**Gatilho:** pedido do usuário — a view de árvores/subárvores não era topologicamente correta (sem respeitar comprimento de ramo), e a ligação com metadado tinha sido removida (passava o `metadata.json` inteiro como prop) sem substituto.
+
+#### O defeito: cladograma disfarçado de filograma
+
+`PhylogeneticTreeViewer.jsx` fazia `root.each((node) => { node.y = node.depth; })` antes de rodar `d3.tree()`/`d3.cluster()` — descartava exatamente o `node.length` que `parseNewick` já extraía do Newick, e todo ramo saía do mesmo tamanho na tela independente da distância evolutiva real. Corrigido: a posição no eixo principal passa a ser a **distância acumulada de ramo desde a raiz** (`d.lenAcumulado`, calculado em ordem BFS via `root.each`, garantindo pai antes de filho). Quando o arquivo não declara comprimento nenhum, cai para cladograma por profundidade — e uma tag ("Filograma"/"Cladograma") declara qual dos dois está sendo mostrado, em vez de fingir uma distância que não existe (regra 5 do projeto, estendida de número para estado visual).
+
+Pedido complementar do usuário: os links deviam parecer com `Bio.Phylo.draw()` — sem curva suave. `d3.linkHorizontal()`/`linkRadial()` (bezier) foram trocados por geradores de caminho próprios em ângulo reto: cotovelo vertical+horizontal no layout linear, arco de raio constante (via `d3.pointRadial`, a mesma função que `linkRadial` usa por baixo — garante consistência com a posição dos nós) + reta radial no radial. O layout radial, que estava `disabled`, foi habilitado.
+
+#### Metadado sem o `metadata.json` inteiro
+
+A ligação de metadado usava um prop `metadata` (array) nunca populado desde que `fetchMetadata` em `projectExplorer.jsx` teve o corpo comentado — carregar o arquivo inteiro no navegador para colorir/filtrar a árvore é o que motivou a remoção. Em vez de um endpoint novo, o componente passa a receber `projectName` e consumir `GET /api/tree/{projeto}/search-nodes` — rota que **já existia**, consumida por `PhylogeneticInsights.jsx`, e devolve uma linha leve por acesso (host, país, região, linhagem, data), não a árvore de features/qualifiers do metadado completo.
+
+Clicar num terminal mostra esse metadado local **e** busca ao vivo no NCBI via `fetchNcbiInfo` + `InsightsPanelAntd` — o mesmo mecanismo já usado em `AnalysisPage.jsx`, reaproveitado em vez de reconstruído. Nós internos (`InnerN`) são reconhecidos como não sendo acessos do GenBank e não disparam a busca. A busca por nome/metadado, que já existia como estado (`searchTerm`/`setSearchTerm`) mas não tinha campo de UI, ganhou o `Input.Search` que faltava — era código morto acusado pelo lint.
+
+`TreeComparisonViewer.jsx` e `projectExplorer.jsx` passam `projectName` em vez do `metadata` array morto.
+
+#### Δ em métrica publicada: nenhum
+
+Camada de apresentação — não recalcula distância, clado, suporte nem padrão FPMax; o Newick e o `metadata.json` em disco não mudam.
+
+**Evidência de execução:**
+```
+Frontend: build ok; vitest 18 passed; lint-ratchet 57/66 erros, 23/27 avisos (melhorou; era 64/27)
+Teste manual (tree_dataset_final_mafft_iqtree.nexus, Zika_21seq_reexec_20260901):
+  - comprimento de ramo variando por folha, tag "Filograma" — confirmado visualmente
+  - links em ângulo reto nos dois layouts (linear e radial) — confirmado por DOM (path 'd' com V/H no linear, A/L no radial)
+  - clique em KF383085.1 → Host/País/Linhagem locais (Senegal, Zika virus, 1969) + espécie/taxonomia/GenBank do NCBI ao vivo
+```
+
+**Write-lock:** `Frontend/phylotreeminer/src/components/analysis/{PhylogeneticTreeViewer,TreeComparisonViewer}.jsx`, `Frontend/phylotreeminer/src/components/displayData/projectExplorer.jsx`. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
