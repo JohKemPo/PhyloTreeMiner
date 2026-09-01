@@ -9,12 +9,20 @@ services:
       - "127.0.0.1:7687:7687"
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?defina NEO4J_PASSWORD no .env}
+      # Variável só para o healthcheck (abaixo). NÃO pode se chamar NEO4J_*: a
+      # imagem oficial converte todo NEO4J_* não reconhecido em config do
+      # servidor (NEO4J_PASSWORD virou a chave inválida "password" e derrubou
+      # o boot — "Unrecognized setting"). Com esse nome o container nunca tinha
+      # a senha disponível para o cypher-shell do healthcheck, que autenticava
+      # com senha vazia, falhava sempre e derrubava o usuário 'neo4j' em rate
+      # limit de autenticação — inclusive para o backend, com a senha certa.
+      HEALTHCHECK_NEO4J_PASSWORD: ${NEO4J_PASSWORD:?defina NEO4J_PASSWORD no .env}
       NEO4J_server_memory_heap_initial__size: 1G
       NEO4J_server_memory_heap_max__size: 4G
       NEO4J_server_memory_pagecache_size: 2G
     mem_limit: 7g
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p $$NEO4J_PASSWORD 'RETURN 1' || exit 1"]
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p $$HEALTHCHECK_NEO4J_PASSWORD 'RETURN 1' || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
