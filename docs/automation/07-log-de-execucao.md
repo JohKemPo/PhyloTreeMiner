@@ -9,10 +9,10 @@ Este é o arquivo que a próxima janela de contexto lê para saber o que já aco
 | Campo | Valor |
 |---|---|
 | Marco corrente | **M2 — Baseline replicado** — **7 de 7 lotes** entregues, M2.1 a M2.7. Falta só a **reexecução**, que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
-| Última atualização | 2026-08-27 — **visores de log e tabela, e o painel de comparação** (DEC-051), com **[D24](../science/02-defeitos-que-alteram-resultado.md#d24)** achado no caminho: o backend afirmava discordância entre métricas quando uma delas não fora medida. Antes, no mesmo dia: **[D1](../science/02-defeitos-que-alteram-resultado.md#d1) fecha e M2 chega a 7 de 7** (DEC-050): o fator alinhador passa a ser duas estratégias do MAFFT, e os dois braços produzem alinhamentos **de md5 diferente** onde antes eram cópias byte a byte. As três decisões pendentes foram tomadas. Antes: **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
-| Lotes em andamento | nenhum. ✅ **M2 em 7 de 7** e **D1 fechado**; o portão segue em **código 2** e o que falta é a **reexecução** de §4.1, agora destravada. ✅ **M4.O em 8 de 8** — o gate passa nos 5 critérios. ✅ **`tools_invoked` populado** (DEC-046). ⛔ **§4.1 bloqueada por [D21](../science/02-defeitos-que-alteram-resultado.md#d21)**: duas execuções idênticas dão itemsets, clados e bipartições diferentes pelo braço do IQ-TREE — a escolha entre `-nt 1`, declarar não reprodutível, ou repetições com consenso **é do usuário**. **M2 em 6 de 7**; o portão científico devolve **código 2** — invariante 3/3, falta `mafft_raxml`. ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
+| Última atualização | 2026-09-01 — **C-5e fechado**: `parse_cql_blocks` cortava em todo `;`, mesmo dentro de string (DEC-052). Pente-fino nos `.cql` dos projetos Zika achou dois defeitos distintos: o tokenizer (código vivo, zona sagrada) e aspas simples não escapadas em 4 artefatos legados (`Zika_Virus_Singapura_{Small_6seq,Medium_11seq,Advanced_21seq,Large_21seq}`), gerados por uma versão anterior ao `neo4jProcessing.py` atual. **Achado fora de escopo:** credencial Neo4j Aura em texto puro em `BioComp_UFF/workflow/utils/neo4jUploader.py` desde jun/2025 — reportado ao usuário, não mexido (rotação é decisão do usuário). Antes: **visores de log e tabela, e o painel de comparação** (DEC-051), com **[D24](../science/02-defeitos-que-alteram-resultado.md#d24)** achado no caminho: o backend afirmava discordância entre métricas quando uma delas não fora medida. Antes, no mesmo dia: **[D1](../science/02-defeitos-que-alteram-resultado.md#d1) fecha e M2 chega a 7 de 7** (DEC-050): o fator alinhador passa a ser duas estratégias do MAFFT, e os dois braços produzem alinhamentos **de md5 diferente** onde antes eram cópias byte a byte. As três decisões pendentes foram tomadas. Antes: **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
+| Lotes em andamento | nenhum. ✅ **M2 em 7 de 7** e **D1 fechado**; o portão segue em **código 2** e o que falta é a **reexecução** de §4.1, agora destravada — [D21](../science/02-defeitos-que-alteram-resultado.md#d21) (o que a bloqueava) fechou junto com D1 em DEC-050, com a decisão do usuário por `-nt 1`. ✅ **M4.O em 8 de 8** — o gate passa nos 5 critérios. ✅ **`tools_invoked` populado** (DEC-046). ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
 | Write-locks ativos | nenhum |
-| Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Nada pendente |
+| Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Novo, de DEC-052: **credencial Neo4j Aura em texto puro** em `BioComp_UFF/workflow/utils/neo4jUploader.py` (URI + senha, desde jun/2025) — decidir se rotaciona a credencial na instância e se convém reescrever o histórico do submódulo |
 
 ## Decisões (ADR-lite)
 
@@ -1733,6 +1733,77 @@ make build                          → ✓ built em 22,18 s
 
 **Write-lock:** `Backend/src/app.py`, `Backend/tests/golden/snapshots/compare_*.json`, `Frontend/phylotreeminer/src/components/common/{LogViewer.jsx,TableView.jsx,csv.js}`, `Frontend/phylotreeminer/src/components/analysis/TreeComparisonViewer.jsx`, `Frontend/phylotreeminer/src/components/displayData/projectExplorer.jsx`, `Frontend/phylotreeminer/src/__tests__/csv.test.js`, `docs/science/02-defeitos-que-alteram-resultado.md`, `docs/automation/07`. **Não toca `BioComp_UFF/`.** **Reversível:** sim.
 
+### DEC-052 · 2026-09-01 · Pente-fino nos `.cql` dos projetos Zika — C-5e fechado, 4 artefatos legados reparados
+
+**Gatilho:** pedido do usuário — conferir os `.cql` dos projetos Zika em busca de erros de geração/parsing que sobraram da última rodada de correções do `CQLExecutor.jsx`.
+
+#### Caracterização
+
+Achados dois defeitos de classes diferentes, nos 10 projetos Zika com `.cql` em disco (`Zika_21seq_{d1,runid,manifesto,validacao,validacao_mv}`, `Zika_Virus_Singapura_{Small_6seq,Medium_11seq,Advanced_21seq,Large_21seq,Large_480seq}`, `zika_virus`):
+
+**1) `parse_cql_blocks` (`Backend/src/services/cql_batch_service.py:164`) — já catalogado como `C-5e`.** Cortava o arquivo em todo `;`, sem olhar se estava dentro de aspas. Descrições do GenBank trazem `;` literal com frequência — ex. `"African green monkey kidney cells 1 time; serogroup: Spondweni"`, presente em 30 registros de `Medium_11seq`, 58 de `Advanced_21seq`, 38 de `Large_21seq`. Cada ocorrência produzia um bloco fantasma extra (a segunda metade da string virava um "comando" sem `MATCH`/`MERGE`, destinado a falhar ou a ser enviado como Cypher inválido ao Neo4j). Este parser está listado na zona sagrada por [`04-rigor-cientifico.md §1`](04-rigor-cientifico.md) (tabela de casos-limite, `C-5e`), então o protocolo de mudança se aplica — ver formalização e oráculo abaixo.
+
+**2) Artefatos legados com aspa simples não escapada dentro do blob de metadata — não é `C-5e`, é dado, não código.** 4 dos 10 projetos (`Zika_Virus_Singapura_{Small_6seq,Medium_11seq,Advanced_21seq,Large_21seq}`) foram gerados por uma versão do gerador **anterior à que existe hoje no repositório** — serializa cada metadado como um blob JSON inteiro dentro de uma string Cypher de aspas simples (`MERGE (m:Metadata {value: '{...}'})`), sem escapar as aspas simples do próprio texto biológico (ex. `"Cote d'Ivoire"`, presente em cepas históricas de Zika/Spondweni de 1996-1999). O gerador atual (`BioComp_UFF/workflow/utils/neo4jProcessing.py::create_subtree`) já é seguro — usa `json.dumps` por campo, aspas duplas, sem esse risco — mas **não existe no repositório o código que gerou os 4 artefatos antigos**: são pré-existentes a este generator, no padrão descrito em [`CLAUDE.md` "armadilhas conhecidas"](../../CLAUDE.md). Uma aspa não escapada fecha a string Cypher antes da hora; a segunda aspa da PRÓXIMA ocorrência do mesmo padrão devolve o estado por acidente, fundindo duas instruções `MERGE (m:Metadata ...)` numa só. Medido em `Medium_11seq`, bloco #10:
+
+```
+MATCH (child:Subtree {name: 'tree_dataset_final_clustalo_upgma_parsimony_Inner10'})
+MERGE (m:Metadata {value: '{"newick": "KF383037.1", ... }'})
+CREATE (child)-[:HAS_METADATA]->(m);
+    MATCH (child:Subtree {... Inner10'})
+    MERGE (m:Metadata {value: '{"newick": "KF383036.1", ..."geo_loc_name": ["Cote d'Ivoire"]... }'})
+    CREATE (child)-[:HAS_METADATA]->(m);
+```
+— vira um único bloco de 4009 caracteres, com o `CREATE (child)-[:HAS_METADATA]->(m);` do meio absorvido como texto.
+
+#### Formalização
+
+`parse_cql_blocks` deve computar: o conjunto maximal de instruções Cypher sintaticamente independentes de um texto, onde um limite de instrução é um `;` que está fora de toda string (aspas simples ou duplas, respeitando `\` como escape) e fora de todo comentário (`//`, `/* */`). Não há métrica de domínio (RF, quarteto, clado) aqui — é sintaxe de texto, não filogenia.
+
+#### Oráculo
+
+Sem oráculo de domínio aplicável (não é dendropy/ete3/tqDist). Usados dois substitutos, na falta de um parser Cypher formal disponível neste ambiente:
+1. **Segunda implementação independente**: `CQLExecutor.jsx::parseCQLBlocks` (frontend), que já usa a mesma regra de aspas/escape desde a rodada de correções anterior. Backend e frontend devem concordar no número de blocos para o mesmo arquivo — confirmado (ver diff abaixo).
+2. **Contagem de `;` de fechamento no texto bruto** como teto superior do número de instruções pretendidas pelo gerador (o layout sempre coloca uma instrução por parágrafo).
+
+#### Casos-limite (`Backend/tests/unit/test_parse_cql_blocks.py`, 9 testes novos)
+
+`;` dentro de string dupla e simples, aspas duplas literais dentro de string simples (o caso do JSON embutido), aspa simples escapada, comentário de linha e de bloco, conteúdo vazio, último bloco sem `;` final, e o caso de aspa **não** escapada (documenta o limite do tokenizer: sem reescapar o dado, nenhum parser resolve — por isso o reparo é no dado, não só no código).
+
+#### Diff de resultado
+
+| Arquivo | Blocos antes (naive `split(';')`) | Blocos depois (tokenizer) | Δ | Afeta número publicado? |
+|---|---:|---:|---:|---|
+| `Small_6seq` | 318 | 318 | 0 | Não |
+| `Medium_11seq` (pós-reparo do dado) | 866 | 836 | −30 | Não |
+| `Advanced_21seq` | 2854 | 2796 | −58 | Não |
+| `Large_21seq` | 1840 | 1802 | −38 | Não |
+
+O Δ é sempre o número de blocos fantasma eliminados (um por `;` embutido em string) — **nunca** um número que vai para o artigo: este parser ingere metadado já extraído no grafo Neo4j de visualização, não recalcula distância, clado ou padrão FPMax. **Não bloqueia nada em M2/M4/M7.**
+
+Reparo do dado (`BioComp_UFF/workflow/utils/reparar_cql_legado.py`, escapa aspa simples não escapada dentro do blob após validar que o JSON resultante decodifica; grava backup `.bak-preDEC052`):
+
+```
+Zika_Virus_Singapura_Small_6seq:    146 blobs, 0 corrigidos
+Zika_Virus_Singapura_Medium_11seq:  354 blobs, 64 corrigidos
+Zika_Virus_Singapura_Advanced_21seq: 1627 blobs, 0 corrigidos
+Zika_Virus_Singapura_Large_21seq:    880 blobs, 0 corrigidos
+```
+
+Antes do reparo, `Medium_11seq` produzia 804 blocos no parser do frontend (32 fusões) contra 836 esperados. Depois do reparo, backend e frontend concordam em 836/836, com 0 blocos fundidos.
+
+`Zika_Virus_Singapura_Large_480seq` (472 MB) usa o formato seguro (`json.dumps` por campo) — não tem o defeito de aspa; não foi tocado. Os 5 projetos `Zika_21seq_{d1,runid,manifesto,validacao,validacao_mv}` e `zika_virus` também já usam o formato seguro.
+
+#### Achado fora de escopo — não corrigido
+
+`BioComp_UFF/workflow/utils/neo4jUploader.py` tem URI e senha de uma instância Neo4j Aura em texto puro, commitados desde `08219cc` (jun/2025), presentes na árvore de trabalho atual. Não é dado pessoal de participante de pesquisa, mas é credencial de escrita num banco de terceiro. **Reportado ao usuário; não mexido** — rotação de credencial e decisão sobre reescrever histórico do submódulo são dele.
+
+**Evidência de execução:**
+```
+cd Backend && python -m pytest tests -q   → 241 passed, 1 xfailed (era 232; +9 testes novos)
+```
+
+**Write-lock:** `Backend/src/services/cql_batch_service.py`, `Backend/tests/unit/test_parse_cql_blocks.py` (novo), `BioComp_UFF/workflow/utils/reparar_cql_legado.py` (novo), os 4 `.cql` legados reparados (dado, gitignorado — não versionado), `docs/audit/06-eixo-bugs.md`, `docs/automation/07`. **Reversível:** sim (backups `.bak-preDEC052` mantidos; código é diff de texto).
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1774,6 +1845,7 @@ Toda mudança na zona sagrada ([04-rigor-cientifico §1](04-rigor-cientifico.md)
 | M1.2 — D5, identidade de clado de 16 bits e dependente da ordem | 2026-08-24 | **Sim** — todo item do FPMax e todo padrão da Deep Analysis | [DEC-022](#dec-022--2026-08-24--m12--d5-o-pipeline-passa-a-usar-a-identidade-canônica-de-clado). Itens distintos caem de 155/194/405/20 para 101/120/270/11, batendo com a contagem de clados canônicos do oráculo (+1, o clado universal, que o builder inclui). O padrão de maior suporte de VARV-49 vai de **1 clado a 6/8** para **16 clados a 8/8** — `02-defeitos` previa 15 a 8/8. | **Coberta** pela decisão 5; materializa na reexecução |
 | M1.3 — D3, RF sobre clados enraizados | 2026-08-24 | **Sim** — `rf_matrix`, `factor_effects`, `support_profile`, `universal_clades` e todo padrão maximal | [DEC-023](#dec-023--2026-08-24--m13--d3-a-unidade-de-comparação-passa-a-ser-a-bipartição-e-m1-fecha). Confronto contra dendropy: **137 pares, 0 divergências**. VARV-6 sai de 0 para 1 clado universal e a discordância entre três métodos de topologia idêntica cai de 75% para 0%. A distância **sobe** em pares genuinamente diferentes (fasttree × nj, +2,2%), o que descarta a hipótese de redutor cego. | **Coberta** pela decisão 5; a análise enraizada legítima é M2.3 |
 | M2.5 — DEC-046, instrumentação do manifesto | 2026-08-26 | **Não pelo lote; sim pelo que ele revelou** | [DEC-046](#dec-046--2026-08-26--tools_invoked-deixa-de-sair-vazio--o-manifesto-passa-a-registrar-o-que-rodou). A mudança é de registro, não de cálculo: **12 dos 14 pipelines saem idênticos** à execução anterior e o oráculo dendropy devolve **91 pares, 0 divergências**. Os 2 divergentes são os de IQ-TREE e a causa é [D21](../science/02-defeitos-que-alteram-resultado.md#d21), anterior a este lote: com `-nt 4` a ferramenta devolve **3 topologias em 3 repetições** da mesma semente. Por arrasto, itemsets do FPMax, clados canônicos e bipartições universais **variam entre execuções idênticas** (38/47/6 contra 34/43/7). Corrige a atribuição de causa de [DEC-045](#dec-045--2026-08-25--pré-voo-40-na-máquina-de-validação--o-que-muda-entre-máquinas-é-a-versão-e-só-ela) para o braço do IQ-TREE. | **Pendente** — D21 oferece três saídas (`-nt 1`, declarar não reprodutível, ou repetições com consenso) e **bloqueia §4.1** até ser decidida |
+| C-5e — `parse_cql_blocks` corta em `;` dentro de dado | 2026-09-01 | **Não** — parser de ingestão do grafo Neo4j de visualização, não recalcula distância/clado/FPMax | [DEC-052](#dec-052--2026-09-01--pente-fino-nos-cql-dos-projetos-zika--c-5e-fechado-4-artefatos-legados-reparados). Sem oráculo de domínio aplicável (é sintaxe de texto); cross-check contra a segunda implementação independente (`CQLExecutor.jsx`) e contra a contagem de `;` de fechamento no texto bruto — os três concordam após o reparo. Δ medido: −30/−58/−38 blocos fantasma em `Medium_11seq`/`Advanced_21seq`/`Large_21seq` (eram instruções fundidas ou fatiadas por `;` embutido em descrição do GenBank). 4 artefatos legados com aspa simples não escapada também reparados (dado, não código) | Não se aplica — nenhum número publicado envolvido; fila de triagem original (`docs/audit/06-eixo-bugs.md`) marcada resolvida |
 
 ## Handoffs e relatórios
 

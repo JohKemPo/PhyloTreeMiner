@@ -25,6 +25,6 @@
   - **5b** `lineage = annotations.get("organism",'Unknown') or annotations.get("source",'Unknown')` — fallback morto (default truthy) → `get("organism") or get("source") or 'Unknown'` (`app.py:628`).
   - **5c** `iter_metadata_nodes(only_first=True)` default + `break` processa só a 1ª árvore (`app.py:573-595`) — **confirmar intenção com o usuário antes de mudar**.
   - **5d** 3 tabelas país/região divergentes: front `COUNTRY_DICTIONARY` ~44 (`useGeocoding.jsx:3`), back `REGION_MAPPING` ~14 (`treePlot.py:4`), `color_map` 6 regiões (`treePlot.py:58`) → fonte única.
-  - **5e** `parse_cql_blocks` quebra em `;` dentro de dados (`cql_batch_service.py:164`) → tokenizer que respeita aspas.
+  - **5e** `parse_cql_blocks` quebra em `;` dentro de dados (`cql_batch_service.py:164`) → tokenizer que respeita aspas. — ✅ **aplicado** ([DEC-052](../automation/07-log-de-execucao.md#dec-052--2026-09-01--pente-fino-nos-cql-dos-projetos-zika--c-5e-fechado-4-artefatos-legados-reparados))
 
 - **Menores:** `else` de `progress_match` duplica broadcast (`app.py:248`); `label.length`/`substring` assume string (`GraphVisualization.jsx:260`); `search_tree_nodes` docstring x retorno; typo `heigh` (`GraphVisualization.jsx:566`).

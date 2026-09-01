@@ -163,20 +163,58 @@ class CQLBatchService:
 
     def parse_cql_blocks(self, content: str) -> List[str]:
         """
-        Parseia o conteúdo CQL em blocos individuais de forma consistente
+        Parseia o conteúdo CQL em blocos individuais.
+
+        C-5e: dividir por `;` sem olhar para aspas quebra qualquer instrução cujo
+        dado contenha um `;` literal — descrições do GenBank trazem isso com
+        frequência (ex.: "African green monkey kidney cells 1 time; serogroup:
+        Spondweni"). Um único `;` dentro de string funde duas instruções em um
+        bloco (a segunda vira texto solto) ou corta uma em duas (a segunda fica
+        sem MATCH/MERGE). Ambos os casos falham na execução ou gravam lixo.
+
+        Este tokenizer varre caractere a caractere e só corta em `;` fora de
+        string simples/dupla, respeitando `\` como escape — mesma regra usada
+        pelo parser "inteligente" do frontend (`CQLExecutor.jsx`), mantida em
+        paridade para que os dois lados do sistema concordem no número de
+        blocos para o mesmo arquivo.
         """
         if not content:
             return []
-        
+
         cleaned_content = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
         cleaned_content = re.sub(r'/\*[\s\S]*?\*/', '', cleaned_content)
-        
-        blocks = [
-            block.strip() + ';' 
-            for block in cleaned_content.split(';') 
-            if block.strip() and not block.strip().startswith('//')
-        ]
-        
+
+        blocks: List[str] = []
+        current: List[str] = []
+        in_single_quote = False
+        in_double_quote = False
+        escaped = False
+
+        for char in cleaned_content:
+            current.append(char)
+
+            if escaped:
+                escaped = False
+                continue
+
+            if char == '\\':
+                escaped = True
+                continue
+
+            if char == "'" and not in_double_quote:
+                in_single_quote = not in_single_quote
+            elif char == '"' and not in_single_quote:
+                in_double_quote = not in_double_quote
+            elif char == ';' and not in_single_quote and not in_double_quote:
+                block = ''.join(current).strip()
+                if block:
+                    blocks.append(block)
+                current = []
+
+        last_block = ''.join(current).strip()
+        if last_block:
+            blocks.append(last_block)
+
         return blocks
 
     def convert_block_to_parameterized(self, block: str) -> Tuple[str, dict]:
