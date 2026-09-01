@@ -29,6 +29,8 @@ import {
   DatabaseOutlined,
   ExperimentOutlined,
   FileProtectOutlined,
+  FileTextOutlined,
+  PartitionOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   WarningOutlined,
@@ -78,6 +80,65 @@ const formatarData = (iso) => (iso ? new Date(iso).toLocaleString("pt-BR") : "�
 const humanizarChave = (chave) =>
   chave.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
+/** Mesmo tratamento de rótulo do "Review Final Settings" em pipelineConfigurator.jsx. */
+/** Acima disto, o resumo tabular de um objeto ganha altura máxima e rolagem. */
+const LIMIAR_ROLAGEM = 15;
+
+const capitalizarPalavras = (chave) =>
+  chave.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+/**
+ * Renderiza um valor de parâmetro no mesmo formato do resumo pré-execução
+ * (`pipelineConfigurator.jsx`, passo "Review Final Settings"): booleano vira
+ * Sim/Não, lista vira uma linha por item, objeto vira `Descriptions`
+ * aninhado. A versão original não recursava em objeto dentro de objeto —
+ * aqui recursa, porque `manifest.params` tem mais de um nível
+ * (`tree_config.subtree_config...`), o que o formulário ao vivo não tinha.
+ */
+const renderValorParametro = (valor) => {
+  if (typeof valor === "boolean") return valor ? "Sim" : "Não";
+  if (valor === null || valor === undefined || valor === "") {
+    return <Text type="secondary">—</Text>;
+  }
+  if (Array.isArray(valor)) {
+    if (valor.length === 0) return <Text type="secondary">Nenhum</Text>;
+    return (
+      <div>
+        {valor.map((item, i) => (
+          <div key={i} style={{ marginBottom: 4 }}>
+            {typeof item === "object" && item !== null
+              ? renderValorParametro(item)
+              : String(item)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (typeof valor === "object") {
+    const entradas = Object.entries(valor);
+    const tabela = (
+      <Descriptions column={1} bordered size="small" style={{ marginTop: 8 }}>
+        {entradas.map(([chave, filho]) => (
+          <Descriptions.Item key={chave} label={capitalizarPalavras(chave)}>
+            {renderValorParametro(filho)}
+          </Descriptions.Item>
+        ))}
+      </Descriptions>
+    );
+    // out/outputs_sha256 de uma execução grande passa de 200 entradas — sem
+    // teto, a tabela derruba o desempenho da página inteira.
+    if (entradas.length > LIMIAR_ROLAGEM) {
+      return (
+        <div style={{ maxHeight: 420, overflow: "auto", border: "1px solid #f0f0f0" }}>
+          {tabela}
+        </div>
+      );
+    }
+    return tabela;
+  }
+  return String(valor);
+};
+
 /**
  * Proveniência e reprodutibilidade de uma execução — leitura analítica do
  * `manifest.json` que o pipeline grava desde M2.5 (DEC-027).
@@ -94,6 +155,8 @@ const ProvenanceView = ({ projectName }) => {
   const [erro, setErro] = useState(null);
   const [semManifesto, setSemManifesto] = useState(false);
   const [filtroSaidas, setFiltroSaidas] = useState("");
+  const [paramsBruto, setParamsBruto] = useState(false);
+  const [manifestoResumo, setManifestoResumo] = useState(true);
   const [atualizadoEm, setAtualizadoEm] = useState(null);
 
   const carregar = useCallback(async () => {
@@ -602,9 +665,35 @@ const ProvenanceView = ({ projectName }) => {
         />
       </Card>
 
-      <Card title="Parâmetros do workflow" size="small">
+      <Card
+        title="Parâmetros do workflow"
+        size="small"
+        extra={
+          manifest.params && (
+            <Tooltip title={paramsBruto ? "Ver como resumo" : "Ver JSON bruto"}>
+              <Button
+                size="small"
+                icon={paramsBruto ? <PartitionOutlined /> : <FileTextOutlined />}
+                onClick={() => setParamsBruto((v) => !v)}
+              >
+                {paramsBruto ? "Resumo" : "Bruto"}
+              </Button>
+            </Tooltip>
+          )
+        }
+      >
         {manifest.params ? (
-          <JsonViewer data={manifest.params} nomeArquivo="params" />
+          paramsBruto ? (
+            <JsonViewer data={manifest.params} nomeArquivo="params" />
+          ) : (
+            <Descriptions bordered column={1} size="small">
+              {Object.entries(manifest.params).map(([chave, valor]) => (
+                <Descriptions.Item key={chave} label={capitalizarPalavras(chave)}>
+                  {renderValorParametro(valor)}
+                </Descriptions.Item>
+              ))}
+            </Descriptions>
+          )
         ) : (
           <Empty description="Parâmetros não registrados." />
         )}
@@ -615,7 +704,31 @@ const ProvenanceView = ({ projectName }) => {
           {
             key: "bruto",
             label: "Manifesto bruto",
-            children: <JsonViewer data={manifest} nomeArquivo="manifest.json" />,
+            extra: (
+              <Tooltip title={manifestoResumo ? "Ver JSON bruto" : "Ver como resumo"}>
+                <Button
+                  size="small"
+                  icon={manifestoResumo ? <FileTextOutlined /> : <PartitionOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setManifestoResumo((v) => !v);
+                  }}
+                >
+                  {manifestoResumo ? "Bruto" : "Resumo"}
+                </Button>
+              </Tooltip>
+            ),
+            children: manifestoResumo ? (
+              <Descriptions bordered column={1} size="small">
+                {Object.entries(manifest).map(([chave, valor]) => (
+                  <Descriptions.Item key={chave} label={capitalizarPalavras(chave)}>
+                    {renderValorParametro(valor)}
+                  </Descriptions.Item>
+                ))}
+              </Descriptions>
+            ) : (
+              <JsonViewer data={manifest} nomeArquivo="manifest.json" />
+            ),
           },
         ]}
       />

@@ -60,7 +60,7 @@ function App() {
     {
       key: "/provenance",
       icon: <AuditOutlined />,
-      label: <Link to="/provenance">Provenance</Link>,
+      label: <Link to="/provenance">Provenance (beta)</Link>,
     },
     { type: "divider" },
     {
