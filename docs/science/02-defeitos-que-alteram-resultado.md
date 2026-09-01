@@ -991,3 +991,45 @@ pytest Backend/tests/golden/test_golden_compare.py
 #                        não se aplica a este par"
 #         quartet_distance = null, quartet_note = "…a árvore 1 e 2 tem politomia…"
 ```
+
+---
+
+## D25 · Alta · `mafft_iterative` nunca era reconhecido como alinhador em `stability.py` — bloqueava a checagem de RF em toda reexecução com os dois braços do MAFFT
+
+> **Estado:** ✅ **corrigido em 2026-09-01** (parecer no ledger). Achado ao validar as três primeiras reexecuções de [`13-guia-reexecucao-m2.md`](../automation/13-guia-reexecucao-m2.md) (Zika-21, VARV-6, VARV-49).
+
+**Onde.** `BioComp_UFF/workflow/stability/stability.py:44` — `ALIGNERS = ("mafft", "clustalo")`, consumida por `PipelineLabel.parse`.
+
+```python
+tokens = set(stem.split("_"))
+aligner = next((a for a in ALIGNERS if a in tokens), "unknown")
+```
+
+**O que aconteceu.** [DEC-050](../automation/07-log-de-execucao.md#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir) criou o fator alinhador `mafft` × `mafft_iterative`, com o registro autoritativo em `workflow/alignment/aligners.py::ALIGNERS`. `stability.py` mantinha uma **cópia paralela** dessa lista — a mesma classe de defeito de [D5](#d5) e de [DEC-050 em `treeBuilderController`](../automation/07-log-de-execucao.md#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir) (três lugares fixavam o par de alinhadores; este era um quarto, fora do escopo daquele lote) — e nunca foi atualizada. `tokens = set(stem.split("_"))` fragmenta `"mafft_iterative_fasttree"` em `{"mafft", "iterative", "fasttree"}`; como `"mafft_iterative"` nunca é um token isolado, a checagem `"mafft" in tokens` sempre vencia primeiro, e o pipeline do braço iterativo recebia o rótulo do braço progressivo.
+
+**O que isso produzia.** Duas árvores genuinamente diferentes — mesmo método de inferência, alinhamentos distintos — mapeadas ao mesmo `PipelineLabel.name`. A guarda contra rótulo duplicado que [D19](#d19) introduziu (`TreeSet.from_directory` recusa com `ValueError` em vez de sobrescrever em silêncio) capturou a colisão em vez de mascará-la — mas o efeito prático foi **bloquear toda a análise de RF por bipartição (M1.3)** em qualquer reexecução com os dois braços do MAFFT: as três primeiras reexecuções da máquina de validação (Zika-21, VARV-6, VARV-49) tinham `conferir_correcoes_m1.py` crashando nesse ponto, com M1.1 e M1.2 verdes antes dele.
+
+**Número afetado.** `StabilityAnalyzer` inteiro quando o `TreeSet` teria colidido: suporte metodológico por clado, padrões maximais de estabilidade, bipartições universais — tudo que depende de `TreeSet.from_directory` sobre um diretório com os dois braços do MAFFT. Não altera número **já publicado** (a checagem nunca tinha completado com sucesso nessas condições, então não havia número aceito para divergir) — o Δ é de "sem medição" para "medição correta", não de um valor aceito para outro.
+
+**Correção.** `ALIGNERS` em `stability.py` passa a ser derivada de `workflow.alignment.aligners.ALIGNERS.keys()` — a mesma fonte que `DEC-050` já usa para as outras três cópias —, e o casamento passa a procurar o membro **mais longo** que aparece delimitado por `"_"` no nome do arquivo (`f"_{aligner}_" in f"_{stem}_"`), pela mesma razão já documentada para `INFERENCE_METHODS`: `"mafft"` é substring de `"mafft_iterative"`, e o mais curto sempre venceria primeiro sem o critério de tamanho.
+
+**Evidência.**
+
+```bash
+cd BioComp_UFF && python -m unittest workflow.tests.test_stability -v
+#  4 casos novos: distingue mafft de mafft_iterative, combina com método de dois
+#  tokens, alinhador desconhecido não quebra, diretório com os dois braços não colide
+#  20 passed (eram 16)
+
+cd Backend && python scripts/conferir_correcoes_m1.py Zika_21seq_reexec_20260901
+cd Backend && python scripts/conferir_correcoes_m1.py Variola_VARV6_reexec_20260901
+cd Backend && python scripts/conferir_correcoes_m1.py Variola_VARV49_reexec_20260901
+#  as três: TUDO VERDE (antes: ValueError em M1.3 nas três)
+
+cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Zika_21seq_reexec_20260901
+#  91 pares, 0 divergências
+cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Variola_VARV6_reexec_20260901
+#  91 pares, 0 divergências
+cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Variola_VARV49_reexec_20260901
+#  45 pares, 0 divergências
+```

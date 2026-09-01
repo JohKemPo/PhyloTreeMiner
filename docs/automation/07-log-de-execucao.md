@@ -1913,6 +1913,134 @@ Teste manual (tree_dataset_final_mafft_iqtree.nexus, Zika_21seq_reexec_20260901)
 
 **Write-lock:** `Frontend/phylotreeminer/src/components/analysis/{PhylogeneticTreeViewer,TreeComparisonViewer}.jsx`, `Frontend/phylotreeminer/src/components/displayData/projectExplorer.jsx`. **Reversível:** sim.
 
+### DEC-057 · 2026-09-01 · D25 — `mafft_iterative` colidia com `mafft` em `stability.py`, e M1.3 crashava nas três reexecuções
+
+**Gatilho:** achado ao validar as 3 reexecuções já concluídas de [`13-guia-reexecucao-m2.md`](13-guia-reexecucao-m2.md) (Zika-21, VARV-6, VARV-49): o usuário pediu validação dos artefatos e da UI, relatando também um problema à parte de metadado geo/temporal ausente no NCBI para VARV-49 (achado 2, ver parecer abaixo). Investigando o primeiro, `conferir_correcoes_m1.py` crashava em M1.3 (RF por bipartição) nas três, com M1.1 e M1.2 verdes.
+
+#### Diagnóstico e causa raiz
+
+`BioComp_UFF/workflow/stability/stability.py:44` mantinha `ALIGNERS = ("mafft", "clustalo")` — uma **cópia duplicada e desatualizada** do registro autoritativo `workflow.alignment.aligners.ALIGNERS`, que [DEC-050](#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir) já havia estendido com `mafft_iterative` — mas só nos outros três lugares que fixavam a lista, não neste quarto. `PipelineLabel.parse` casava o alinhador por `tokens = set(stem.split("_"))`, que fragmenta `"mafft_iterative"` em tokens soltos (`"mafft"`, `"iterative"`); como `"mafft"` está na lista e vence primeiro, todo pipeline do braço iterativo do MAFFT recebia o rótulo do braço progressivo. Com os dois braços presentes no mesmo diretório — o caso das três reexecuções —, dois arquivos colidiam no mesmo `PipelineLabel.name`, e a guarda anticolisão de [D19](../science/02-defeitos-que-alteram-resultado.md#d19) barrava com `ValueError` em vez de sobrescrever em silêncio: o efeito prático era travar `TreeSet.from_directory`, e com ele toda a checagem M1.3. Detalhe completo em [D25](../science/02-defeitos-que-alteram-resultado.md#d25).
+
+#### Correção
+
+`ALIGNERS` em `stability.py` passa a vir de `workflow.alignment.aligners.ALIGNERS.keys()` — mesma fonte que as outras três cópias já usam desde DEC-050 — e o casamento passa a ser por substring delimitada por `"_"`, preferindo o mais longo (`f"_mafft_iterative_" in f"_{stem}_"` vence sobre `f"_mafft_"`). A primeira tentativa usou `stem.startswith(a + "_")`, mas quebrou 2 testes pré-existentes: `PipelineLabel.parse` também é chamado com `prefix` parcial, deixando texto antes do nome do alinhador no stem (ex. `"dataset_final_"`), então a posição do alinhador não pode ser assumida como 0.
+
+#### Diff de resultado
+
+| Métrica | Antes | Depois | Δ | Afeta número publicado? |
+|---|---|---|---|---|
+| `conferir_correcoes_m1.py` — Zika-21/VARV-6/VARV-49, M1.3 | `ValueError` (crash) | TUDO VERDE | de "sem medição" para "medição correta" | Não — não havia número aceito antes para divergir |
+| Oráculo RF × dendropy — Zika-21 | não executava (bloqueado) | 91 pares, 0 divergências | idem | Não |
+| Oráculo RF × dendropy — VARV-6 | não executava (bloqueado) | 91 pares, 0 divergências | idem | Não |
+| Oráculo RF × dendropy — VARV-49 | não executava (bloqueado) | 45 pares, 0 divergências | idem | Não |
+| `test_stability.py` | 16 passed | 20 passed | +4 (casos-limite do achado) | — |
+| BioComp_UFF `unittest` completo | 160 passed | 164 passed | +4 | — |
+| `make test-backend` | 250 passed, 1 xfailed | 250 passed, 1 xfailed | 0 (sem regressão) | — |
+
+**Parecer:** este é um caso de zona sagrada sem reafirmação de número publicado — a checagem M1.3 nunca havia completado com sucesso sob essas condições, então não há valor aceito sendo trocado por outro; o que muda é que uma medição que antes era impossível (bloqueada por crash) passa a existir e a bater com o oráculo independente nos três conjuntos. Registrado por força da regra 7 do projeto (nenhuma mudança de zona sagrada fica fora do ledger), não porque haja um número anterior a corrigir.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_stability -v
+  → 20 passed (eram 16; +4 casos-limite do achado)
+cd BioComp_UFF && python -m unittest workflow.tests.test_stability workflow.tests.test_subtree_mining \
+  workflow.tests.test_tree_identity workflow.tests.test_rf_bipartition workflow.tests.test_manifest \
+  workflow.tests.test_rooting workflow.tests.test_taxonomy workflow.tests.test_aligners \
+  workflow.tests.test_external_tools
+  → 164 passed (eram 160; +4)
+
+cd Backend && python scripts/conferir_correcoes_m1.py Zika_21seq_reexec_20260901       → TUDO VERDE
+cd Backend && python scripts/conferir_correcoes_m1.py Variola_VARV6_reexec_20260901    → TUDO VERDE
+cd Backend && python scripts/conferir_correcoes_m1.py Variola_VARV49_reexec_20260901   → TUDO VERDE
+  (antes: ValueError em M1.3 nas três)
+
+cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Zika_21seq_reexec_20260901
+  → 91 pares, 0 divergências
+cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Variola_VARV6_reexec_20260901
+  → 91 pares, 0 divergências
+cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Variola_VARV49_reexec_20260901
+  → 45 pares, 0 divergências
+
+cd Backend && python -m pytest tests -q   → 250 passed, 1 xfailed (sem regressão)
+```
+
+**Write-lock:** `BioComp_UFF/workflow/stability/stability.py`, `BioComp_UFF/workflow/tests/test_stability.py`, `docs/science/02-defeitos-que-alteram-resultado.md`, `docs/automation/07-log-de-execucao.md`. Não toca `Backend/` nem `Frontend/`. **Reversível:** sim.
+
+### DEC-058 · 2026-09-01 · Link para o artigo-fonte (PubMed) na tabela de sequências, e sinalização de cobertura baixa em geoloc/temporal
+
+**Gatilho:** pedido do usuário, encadeado ao achado 2 da validação das reexecuções (metadado geo/temporal ausente do NCBI em VARV-49): "quero que na tabela apareça o PUBMED... e quero sinalizar nos gráficos quando tivermos poucos dados com valor semântico, importante levar ao NCBI e PUBMED para mostrar que é ausência de informações das bases de dados".
+
+#### Link do PubMed
+
+`workflow/utils/treeUtils.py` (BioComp_UFF) já serializa `annotations['references']` — incluindo `pubmed_id` — para o `metadata.json` desde antes deste lote; só não havia consumidor. `get_node_information` (`Backend/src/app.py`) passa a extrair a primeira referência com `pubmed_id` não vazio e devolvê-la como `pubmedId`; `PhylogeneticInsights.jsx` ganhou a coluna "PubMed Link" ao lado de "NCBI Link", no mesmo estilo (`Button` com `ExportOutlined`), apontando para `pubmed.ncbi.nlm.nih.gov/{id}`. Sequência sem referência com PMID mostra "-", nunca um link quebrado.
+
+#### Sinalização de cobertura
+
+`Frontend/phylotreeminer/src/utils/metadataCoverage.js` (novo) mede a fração de sequências com valor semântico (não `"Unknown"`/`"Unknown Date"`) por campo. `GeographicDistribution.jsx` e `TemporalInsights.jsx` mostram um `Alert` de aviso quando a cobertura de `country`/`year` cai abaixo de 50%, explicitando que a ausência é da submissão original ao NCBI — não um defeito do pipeline — e apontando de volta para os links de NCBI/PubMed da tabela acima, para que quem lê o gráfico confira a limitação na fonte primária. Não há alteração de nenhum valor calculado: os números por trás do mapa e da série temporal são os mesmos; a mudança é só o aviso quando eles são majoritariamente `Unknown`.
+
+#### Δ em métrica publicada: nenhum
+
+Passthrough de um campo já existente no metadado e camada de aviso na apresentação — não recalcula distância, clado, país/região nem padrão FPMax.
+
+**Evidência de execução:**
+```
+cd Backend && python -m pytest tests -q   → 250 passed, 1 xfailed (sem regressão)
+Frontend: pnpm run build → ok; pnpm run test → 18 passed (18); lint:ratchet → débito reduzido (não cresceu)
+
+curl localhost:8000/api/tree/Zika_21seq_validacao/search-nodes
+  → 20/20 nós com pubmedId (ex.: KF270886 → "24516683")
+curl localhost:8000/api/tree/Variola_VARV49_reexec_20260901/search-nodes
+  → 49/49 nós com pubmedId; geo_ok 1/49 (2%); year_ok 0/49 (0%)
+
+Teste manual (Deep Analysis, Variola_VARV49_reexec_20260901):
+  - tabela "Sequences Dataset": coluna "PubMed Link" ao lado de "NCBI Link",
+    "Source article" → https://pubmed.ncbi.nlm.nih.gov/16873609/ nas 49 linhas
+  - "Geographical Distribution": alerta "Only 2% of sequences (1/49) have a
+    geolocation in the source GenBank record" acima do mapa
+  - "Time Series Analysis": alerta "Only 0% of sequences (0/49) have a
+    collection date in the source GenBank record" acima do gráfico
+```
+
+**Write-lock:** `Backend/src/app.py`, `Frontend/phylotreeminer/src/components/analysis/Tree/{PhylogeneticInsights,GeographicDistribution,TemporalInsights}.jsx`, `Frontend/phylotreeminer/src/utils/metadataCoverage.js` (novo). Não toca `BioComp_UFF/`. **Reversível:** sim.
+
+### DEC-059 · 2026-09-01 · Alinhamento grande deixava de abrir no explorador — `/file` recusava com mensagem que não ajudava
+
+**Gatilho:** pedido do usuário — "Por que estou com erro Failed to load dataset_final_mafft_iterative.aln para VARV49?"
+
+#### Diagnóstico
+
+```
+curl "localhost:8000/file?path=Variola_VARV49_reexec_20260901/out/Align/dataset_final_mafft_iterative.aln"
+→ 413 {"detail":"Arquivo de 11.7 MB é grande demais para pré-visualização (limite 8 MB). Use /api/file/paginated."}
+```
+
+O arquivo (11,2 MB) passa do teto de 8 MB de `GET /file` — decisão correta e antiga (`app.py:1229`, mesma razão que já limita `metadata.json`). Dois efeitos colaterais não intencionais, esses sim defeito: (1) `projectExplorer.jsx:255-256` só olhava `response.ok` e nunca lia o `detail` do corpo — por isso a UI mostrava só "Failed to load..." genérico, escondendo o motivo real; (2) a própria mensagem de erro recomendava `/api/file/paginated`, que **só pagina JSON** — chamá-la com um `.aln` devolveria 400 "não contém JSON válido". Não havia, portanto, nenhum caminho para pré-visualizar um alinhamento acima de 8 MB, e VARV-121 (283 874 colunas) bate nisso com folga maior ainda.
+
+#### Correção
+
+Estendido ao FASTA/Clustal (`.fasta`, `.fa`, `.fas`, `.faa`, `.aln`, `.clustal`) o mesmo tratamento que `.cql` já tinha desde antes: em vez de recusar, lê os primeiros 8 MB e corta num limite seguro — no último cabeçalho `>` completo para FASTA, na última linha inteira para Clustal/`.aln` (que não tem marcador de registro; o `MSAViewer` já descarta linha incompleta) — sinalizando `truncated: true`, que o frontend já sabia exibir. A sugestão "`Use /api/file/paginated`" passa a aparecer só quando o arquivo é `.json` de fato, já que é a única extensão que esse endpoint sabe processar. O frontend (`projectExplorer.jsx`) agora lê `detail` do corpo da resposta de erro e mostra o motivo real na mensagem, em vez do genérico fixo.
+
+#### Δ em métrica publicada: nenhum
+
+Pré-visualização no explorador de arquivos — o `.aln` em disco não muda; só o que é servido para visualização parcial.
+
+**Evidência de execução:**
+```
+curl "localhost:8000/file?path=Variola_VARV49_reexec_20260901/out/Align/dataset_final_mafft_iterative.aln"
+  → 200 {"type":"clustal","truncated":true,"total_bytes":11736853,"preview_bytes":8388573,...}
+curl "localhost:8000/file?path=Variola_VARV49_reexec_20260901/out/outputs/metadata.json"
+  → 413 (comportamento de JSON grande inalterado, sugestão de /api/file/paginated mantida)
+
+cd Backend && python -m pytest tests -q   → 250 passed, 1 xfailed (sem regressão)
+Frontend: pnpm run build → ok; pnpm run test → 18 passed (18)
+
+Teste manual (Deep Analysis → File Explorer, Variola_VARV49_reexec_20260901):
+  clique em dataset_final_mafft_iterative.aln → MSAViewer renderiza 36 de 49
+  sequências (comprimento 235 526), "Sequences: 36" — antes: modal de erro
+```
+
+**Write-lock:** `Backend/src/app.py`, `Frontend/phylotreeminer/src/components/displayData/projectExplorer.jsx`. Não toca `BioComp_UFF/`. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -1955,6 +2083,7 @@ Toda mudança na zona sagrada ([04-rigor-cientifico §1](04-rigor-cientifico.md)
 | M1.3 — D3, RF sobre clados enraizados | 2026-08-24 | **Sim** — `rf_matrix`, `factor_effects`, `support_profile`, `universal_clades` e todo padrão maximal | [DEC-023](#dec-023--2026-08-24--m13--d3-a-unidade-de-comparação-passa-a-ser-a-bipartição-e-m1-fecha). Confronto contra dendropy: **137 pares, 0 divergências**. VARV-6 sai de 0 para 1 clado universal e a discordância entre três métodos de topologia idêntica cai de 75% para 0%. A distância **sobe** em pares genuinamente diferentes (fasttree × nj, +2,2%), o que descarta a hipótese de redutor cego. | **Coberta** pela decisão 5; a análise enraizada legítima é M2.3 |
 | M2.5 — DEC-046, instrumentação do manifesto | 2026-08-26 | **Não pelo lote; sim pelo que ele revelou** | [DEC-046](#dec-046--2026-08-26--tools_invoked-deixa-de-sair-vazio--o-manifesto-passa-a-registrar-o-que-rodou). A mudança é de registro, não de cálculo: **12 dos 14 pipelines saem idênticos** à execução anterior e o oráculo dendropy devolve **91 pares, 0 divergências**. Os 2 divergentes são os de IQ-TREE e a causa é [D21](../science/02-defeitos-que-alteram-resultado.md#d21), anterior a este lote: com `-nt 4` a ferramenta devolve **3 topologias em 3 repetições** da mesma semente. Por arrasto, itemsets do FPMax, clados canônicos e bipartições universais **variam entre execuções idênticas** (38/47/6 contra 34/43/7). Corrige a atribuição de causa de [DEC-045](#dec-045--2026-08-25--pré-voo-40-na-máquina-de-validação--o-que-muda-entre-máquinas-é-a-versão-e-só-ela) para o braço do IQ-TREE. | **Pendente** — D21 oferece três saídas (`-nt 1`, declarar não reprodutível, ou repetições com consenso) e **bloqueia §4.1** até ser decidida |
 | C-5e — `parse_cql_blocks` corta em `;` dentro de dado | 2026-09-01 | **Não** — parser de ingestão do grafo Neo4j de visualização, não recalcula distância/clado/FPMax | [DEC-052](#dec-052--2026-09-01--pente-fino-nos-cql-dos-projetos-zika--c-5e-fechado-4-artefatos-legados-reparados). Sem oráculo de domínio aplicável (é sintaxe de texto); cross-check contra a segunda implementação independente (`CQLExecutor.jsx`) e contra a contagem de `;` de fechamento no texto bruto — os três concordam após o reparo. Δ medido: −30/−58/−38 blocos fantasma em `Medium_11seq`/`Advanced_21seq`/`Large_21seq` (eram instruções fundidas ou fatiadas por `;` embutido em descrição do GenBank). 4 artefatos legados com aspa simples não escapada também reparados (dado, não código) | Não se aplica — nenhum número publicado envolvido; fila de triagem original (`docs/audit/06-eixo-bugs.md`) marcada resolvida |
+| D25 — `mafft_iterative` colidia com `mafft` em `stability.py`, M1.3 crashava | 2026-09-01 | **Não pelo lote; sim pelo que ele desbloqueou** | [DEC-057](#dec-057--2026-09-01--d25--mafft_iterative-colidia-com-mafft-em-stabilitypy-e-m13-crashava-nas-três-reexecuções). Oráculo dendropy: **0 divergências em 91+91+45 pares** (Zika-21, VARV-6, VARV-49) — a checagem M1.3, antes bloqueada por `ValueError`, passa a existir e bate com o oráculo independente nas três reexecuções da máquina de validação. Não há valor aceito sendo substituído: a medição nunca havia completado sob essas condições | **Aprovada** — coberta pelo pedido explícito "abra o lote e corrija o Achado 1" |
 
 ## Handoffs e relatórios
 
