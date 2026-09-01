@@ -101,23 +101,23 @@ const ProjectsTableView = ({
 
   const handleDeleteProject = (projectName) => {
     Modal.confirm({
-      title: "Excluir projeto permanentemente?",
+      title: "Delete project permanently?",
       icon: <ExclamationCircleFilled style={{ color: "#ff4d4f" }} />,
       content: (
         <>
           <p>
-            Isso remove <Text strong>"{projectName}"</Text> e tudo em{" "}
-            <Text code>out/</Text> — árvores, alinhamentos, metadados
-            minerados e o manifesto de execução.
+            This removes <Text strong>"{projectName}"</Text> and everything in{" "}
+            <Text code>out/</Text> — trees, alignments, mined metadata, and
+            the execution manifest.
           </p>
           <p>
-            <Text type="danger">Esta ação não pode ser desfeita.</Text>
+            <Text type="danger">This action cannot be undone.</Text>
           </p>
         </>
       ),
-      okText: "Excluir",
+      okText: "Delete",
       okType: "danger",
-      cancelText: "Cancelar",
+      cancelText: "Cancel",
       onOk: async () => {
         setDeleteLoading((prev) => ({ ...prev, [projectName]: true }));
         try {
@@ -126,16 +126,16 @@ const ProjectsTableView = ({
             { method: "DELETE" },
           );
           if (response.ok) {
-            message.success(`Projeto "${projectName}" excluído.`);
+            message.success(`Project "${projectName}" deleted.`);
             onRefresh?.();
           } else {
             const errorData = await response.json().catch(() => ({}));
             message.error(
-              errorData.detail || `Erro ${response.status} ao excluir projeto`,
+              errorData.detail || `Error ${response.status} while deleting project`,
             );
           }
         } catch (error) {
-          message.error("Erro de conexão ao excluir projeto");
+          message.error("Connection error while deleting project");
         } finally {
           setDeleteLoading((prev) => ({ ...prev, [projectName]: false }));
         }

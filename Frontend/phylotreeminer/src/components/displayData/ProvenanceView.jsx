@@ -42,16 +42,16 @@ import JsonViewer from "./utils/JsonViewer";
 
 const { Title, Text, Paragraph } = Typography;
 
-const copiar = async (texto, rotulo = "Valor") => {
+const copiar = async (texto, rotulo = "Value") => {
   try {
     await navigator.clipboard.writeText(texto);
-    message.success(`${rotulo} copiado.`);
+    message.success(`${rotulo} copied.`);
   } catch {
-    message.error("O navegador bloqueou o acesso à área de transferência.");
+    message.error("The browser blocked access to the clipboard.");
   }
 };
 
-/** Monospace com botão de copiar — usado para run_id, commits e hashes. */
+/** Monospace with a copy button — used for run_id, commits and hashes. */
 const CampoMonoCopiavel = ({ valor, truncarEm, rotulo }) => {
   if (!valor) return <Text type="secondary">—</Text>;
   const exibido =
@@ -63,7 +63,7 @@ const CampoMonoCopiavel = ({ valor, truncarEm, rotulo }) => {
           {exibido}
         </Text>
       </Tooltip>
-      <Tooltip title="Copiar">
+      <Tooltip title="Copy">
         <Button
           type="text"
           size="small"
@@ -75,33 +75,33 @@ const CampoMonoCopiavel = ({ valor, truncarEm, rotulo }) => {
   );
 };
 
-const formatarData = (iso) => (iso ? new Date(iso).toLocaleString("pt-BR") : "—");
+const formatarData = (iso) => (iso ? new Date(iso).toLocaleString("en-US") : "—");
 
 const humanizarChave = (chave) =>
   chave.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
-/** Mesmo tratamento de rótulo do "Review Final Settings" em pipelineConfigurator.jsx. */
-/** Acima disto, o resumo tabular de um objeto ganha altura máxima e rolagem. */
+/** Same label treatment as "Review Final Settings" in pipelineConfigurator.jsx. */
+/** Above this many entries, a nested object's table gets a max height and scroll. */
 const LIMIAR_ROLAGEM = 15;
 
 const capitalizarPalavras = (chave) =>
   chave.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 /**
- * Renderiza um valor de parâmetro no mesmo formato do resumo pré-execução
- * (`pipelineConfigurator.jsx`, passo "Review Final Settings"): booleano vira
- * Sim/Não, lista vira uma linha por item, objeto vira `Descriptions`
- * aninhado. A versão original não recursava em objeto dentro de objeto —
- * aqui recursa, porque `manifest.params` tem mais de um nível
- * (`tree_config.subtree_config...`), o que o formulário ao vivo não tinha.
+ * Renders a parameter value in the same format as the pre-run summary
+ * (`pipelineConfigurator.jsx`, "Review Final Settings" step): boolean becomes
+ * Yes/No, array becomes one line per item, object becomes a nested
+ * `Descriptions`. The original version didn't recurse into an object inside
+ * an object — this one does, because `manifest.params` has more than one
+ * level (`tree_config.subtree_config...`), which the live form never had.
  */
 const renderValorParametro = (valor) => {
-  if (typeof valor === "boolean") return valor ? "Sim" : "Não";
+  if (typeof valor === "boolean") return valor ? "Yes" : "No";
   if (valor === null || valor === undefined || valor === "") {
     return <Text type="secondary">—</Text>;
   }
   if (Array.isArray(valor)) {
-    if (valor.length === 0) return <Text type="secondary">Nenhum</Text>;
+    if (valor.length === 0) return <Text type="secondary">None</Text>;
     return (
       <div>
         {valor.map((item, i) => (
@@ -125,8 +125,8 @@ const renderValorParametro = (valor) => {
         ))}
       </Descriptions>
     );
-    // out/outputs_sha256 de uma execução grande passa de 200 entradas — sem
-    // teto, a tabela derruba o desempenho da página inteira.
+    // outputs_sha256 of a large run can pass 200 entries — without a cap,
+    // the table tanks the performance of the whole page.
     if (entradas.length > LIMIAR_ROLAGEM) {
       return (
         <div style={{ maxHeight: 420, overflow: "auto", border: "1px solid #f0f0f0" }}>
@@ -140,13 +140,13 @@ const renderValorParametro = (valor) => {
 };
 
 /**
- * Proveniência e reprodutibilidade de uma execução — leitura analítica do
- * `manifest.json` que o pipeline grava desde M2.5 (DEC-027).
+ * Provenance and reproducibility of a run — an analytical reading of the
+ * `manifest.json` the pipeline has written since M2.5 (DEC-027).
  *
- * Não recalcula nada: cada campo vem direto do manifesto, que é a fonte
- * declarada pelo próprio pipeline. Um projeto sem manifesto (nunca executado,
- * ou executado antes de M2.5) não tem proveniência para mostrar — a tela diz
- * isso explicitamente em vez de inventar zeros.
+ * Nothing here is recomputed: every field comes straight from the manifest,
+ * which is the source declared by the pipeline itself. A project with no
+ * manifest (never run, or run before M2.5) has no provenance to show — the
+ * screen says so explicitly instead of inventing zeros.
  */
 const ProvenanceView = ({ projectName }) => {
   const [manifest, setManifest] = useState(null);
@@ -191,7 +191,7 @@ const ProvenanceView = ({ projectName }) => {
       }
       setAtualizadoEm(new Date());
     } catch (error) {
-      setErro(error.message || "Falha ao carregar proveniência.");
+      setErro(error.message || "Failed to load provenance.");
     } finally {
       setLoading(false);
     }
@@ -259,14 +259,14 @@ const ProvenanceView = ({ projectName }) => {
 
   if (!projectName) {
     return (
-      <Empty description="Selecione um projeto para ver sua proveniência." />
+      <Empty description="Select a project to see its provenance." />
     );
   }
 
   if (loading && !manifest && !semManifesto) {
     return (
       <div style={{ textAlign: "center", padding: 50 }}>
-        <Spin size="large" tip="Carregando proveniência…" />
+        <Spin size="large" tip="Loading provenance…" />
       </div>
     );
   }
@@ -276,11 +276,11 @@ const ProvenanceView = ({ projectName }) => {
       <Alert
         type="error"
         showIcon
-        message="Não foi possível carregar a proveniência"
+        message="Could not load provenance"
         description={erro}
         action={
           <Button size="small" onClick={carregar}>
-            Tentar novamente
+            Try again
           </Button>
         }
       />
@@ -300,11 +300,11 @@ const ProvenanceView = ({ projectName }) => {
       <Col>
         <Space direction="vertical" align="end" size={4}>
           <Button icon={<ReloadOutlined />} onClick={carregar} loading={loading}>
-            Atualizar
+            Refresh
           </Button>
           {atualizadoEm && (
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Atualizado às {atualizadoEm.toLocaleTimeString("pt-BR")}
+              Updated at {atualizadoEm.toLocaleTimeString("en-US")}
             </Text>
           )}
         </Space>
@@ -319,18 +319,18 @@ const ProvenanceView = ({ projectName }) => {
         <Alert
           type="warning"
           showIcon
-          message="Este projeto não tem manifesto de execução"
+          message="This project has no execution manifest"
           description={
             <Paragraph style={{ marginBottom: 0 }}>
-              Proveniência (versão do código, ambiente, sementes e hashes de
-              arquivo) só existe a partir do manifesto que o pipeline grava
-              desde M2.5. Projetos nunca executados, ou executados antes
-              dessa correção, não têm esse registro — não é um erro de
-              carregamento, é ausência real do dado.
+              Provenance (code version, environment, seeds and file hashes)
+              only exists from the manifest the pipeline has written since
+              M2.5. Projects never run, or run before that fix, don't have
+              this record — this isn't a loading error, it's a genuine
+              absence of data.
               {details?.state && (
                 <>
                   {" "}
-                  Estado atual pelo log:{" "}
+                  Current state from the log:{" "}
                   <Tag color={statusInfo.color} icon={statusInfo.icon}>
                     {statusInfo.text}
                   </Tag>
@@ -352,16 +352,16 @@ const ProvenanceView = ({ projectName }) => {
           type="warning"
           showIcon
           icon={<WarningOutlined />}
-          message="Execução feita com alterações não commitadas"
+          message="This run was made with uncommitted changes"
           description={
             <>
-              Esta execução não é reproduzível a partir de um checkout limpo:{" "}
+              This run is not reproducible from a clean checkout:{" "}
               {reposSujos.map(([repo]) => (
                 <Tag key={repo} color="orange">
                   {repo}
                 </Tag>
               ))}
-              {" "}estava(m) com mudanças não versionadas no momento da execução.
+              {" "}had unversioned changes at the time of the run.
             </>
           }
         />
@@ -383,7 +383,7 @@ const ProvenanceView = ({ projectName }) => {
         <Col xs={12} md={6}>
           <Card>
             <Statistic
-              title="Duração"
+              title="Duration"
               value={formatarDuracao(duracaoSegundos)}
               prefix={<ClockCircleOutlined />}
             />
@@ -392,7 +392,7 @@ const ProvenanceView = ({ projectName }) => {
         <Col xs={12} md={6}>
           <Card>
             <Statistic
-              title="Artefatos com hash"
+              title="Hashed artifacts"
               value={entradas.length + saidas.length}
               prefix={<FileProtectOutlined />}
             />
@@ -401,7 +401,7 @@ const ProvenanceView = ({ projectName }) => {
         <Col xs={12} md={6}>
           <Card>
             <Statistic
-              title="Repositórios sujos"
+              title="Dirty repositories"
               value={reposSujos.length}
               valueStyle={{ color: reposSujos.length > 0 ? "#faad14" : "#52c41a" }}
               prefix={reposSujos.length > 0 ? <WarningOutlined /> : <CheckCircleOutlined />}
@@ -410,21 +410,21 @@ const ProvenanceView = ({ projectName }) => {
         </Col>
       </Row>
 
-      <Card title="Identidade da execução" size="small">
+      <Card title="Run identity" size="small">
         <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
           <Descriptions.Item label="Run ID">
             <CampoMonoCopiavel valor={manifest.run_id} rotulo="run_id" />
           </Descriptions.Item>
-          <Descriptions.Item label="Versão do manifesto">
+          <Descriptions.Item label="Manifest version">
             {manifest.manifest_version ?? "—"}
           </Descriptions.Item>
-          <Descriptions.Item label="Início (UTC)">
+          <Descriptions.Item label="Started (UTC)">
             {formatarData(manifest.started_at_utc)}
           </Descriptions.Item>
-          <Descriptions.Item label="Fim (UTC)">
+          <Descriptions.Item label="Finished (UTC)">
             {formatarData(manifest.finished_at_utc)}
           </Descriptions.Item>
-          <Descriptions.Item label="Arquivo de log" span={2}>
+          <Descriptions.Item label="Log file" span={2}>
             <Text code>{manifest.log_file || "—"}</Text>
           </Descriptions.Item>
         </Descriptions>
@@ -434,7 +434,7 @@ const ProvenanceView = ({ projectName }) => {
         title={
           <Space>
             <BranchesOutlined />
-            <span>Código (git)</span>
+            <span>Code (git)</span>
           </Space>
         }
         size="small"
@@ -445,7 +445,7 @@ const ProvenanceView = ({ projectName }) => {
           rowKey={([repo]) => repo}
           dataSource={Object.entries(manifest.git || {})}
           columns={[
-            { title: "Repositório", render: ([repo]) => <Text strong>{repo}</Text> },
+            { title: "Repository", render: ([repo]) => <Text strong>{repo}</Text> },
             { title: "Branch", render: ([, info]) => info?.branch || "—" },
             {
               title: "Commit",
@@ -457,12 +457,12 @@ const ProvenanceView = ({ projectName }) => {
                 ),
             },
             {
-              title: "Estado",
+              title: "State",
               render: ([, info]) =>
                 info?.dirty ? (
-                  <Tag color="orange">com alterações não commitadas</Tag>
+                  <Tag color="orange">uncommitted changes</Tag>
                 ) : (
-                  <Tag color="green">limpo</Tag>
+                  <Tag color="green">clean</Tag>
                 ),
             },
           ]}
@@ -475,7 +475,7 @@ const ProvenanceView = ({ projectName }) => {
             title={
               <Space>
                 <CloudServerOutlined />
-                <span>Ambiente de execução</span>
+                <span>Execution environment</span>
               </Space>
             }
             size="small"
@@ -490,7 +490,7 @@ const ProvenanceView = ({ projectName }) => {
                 ))}
               </Descriptions>
             ) : (
-              <Empty description="Ambiente não registrado." />
+              <Empty description="Environment not recorded." />
             )}
           </Card>
         </Col>
@@ -499,7 +499,7 @@ const ProvenanceView = ({ projectName }) => {
             title={
               <Space>
                 <SafetyCertificateOutlined />
-                <span>Sementes e parâmetros de determinismo</span>
+                <span>Seeds and determinism parameters</span>
               </Space>
             }
             size="small"
@@ -514,7 +514,7 @@ const ProvenanceView = ({ projectName }) => {
                 ))}
               </Descriptions>
             ) : (
-              <Empty description="Nenhum parâmetro de determinismo declarado nesta execução." />
+              <Empty description="No determinism parameter declared for this run." />
             )}
           </Card>
         </Col>
@@ -524,7 +524,7 @@ const ProvenanceView = ({ projectName }) => {
         title={
           <Space>
             <ExperimentOutlined />
-            <span>Ferramentas</span>
+            <span>Tools</span>
             <Badge count={ferramentas.filter((f) => f.foiInvocada).length} showZero color="#52c41a" />
           </Space>
         }
@@ -536,23 +536,23 @@ const ProvenanceView = ({ projectName }) => {
           dataSource={ferramentas}
           pagination={false}
           columns={[
-            { title: "Ferramenta", dataIndex: "nome" },
+            { title: "Tool", dataIndex: "nome" },
             {
-              title: "Versão disponível",
+              title: "Available version",
               dataIndex: "versaoDisponivel",
-              render: (v) => v || <Text type="secondary">não detectada</Text>,
+              render: (v) => v || <Text type="secondary">not detected</Text>,
             },
             {
-              title: "Invocada nesta execução",
+              title: "Invoked in this run",
               dataIndex: "foiInvocada",
               render: (v, r) =>
                 v ? (
-                  <Tag color="blue">{r.execucoes} execução(ões)</Tag>
+                  <Tag color="blue">{r.execucoes} run(s)</Tag>
                 ) : (
-                  <Tag>não</Tag>
+                  <Tag>no</Tag>
                 ),
             },
-            { title: "Modelo / estratégia", dataIndex: "resumo" },
+            { title: "Model / strategy", dataIndex: "resumo" },
           ]}
           expandable={{
             rowExpandable: (r) => r.foiInvocada,
@@ -596,7 +596,7 @@ const ProvenanceView = ({ projectName }) => {
         title={
           <Space>
             <DatabaseOutlined />
-            <span>Integridade dos artefatos (SHA-256)</span>
+            <span>Artifact integrity (SHA-256)</span>
           </Space>
         }
         size="small"
@@ -606,7 +606,7 @@ const ProvenanceView = ({ projectName }) => {
           items={[
             {
               key: "entradas",
-              label: `Entradas (${entradas.length})`,
+              label: `Inputs (${entradas.length})`,
               children: (
                 <Table
                   size="small"
@@ -615,7 +615,7 @@ const ProvenanceView = ({ projectName }) => {
                   pagination={false}
                   columns={[
                     {
-                      title: "Caminho",
+                      title: "Path",
                       dataIndex: "caminho",
                       render: (v) => <Text code style={{ fontSize: 12 }}>{v}</Text>,
                     },
@@ -630,12 +630,12 @@ const ProvenanceView = ({ projectName }) => {
             },
             {
               key: "saidas",
-              label: `Saídas (${saidas.length}${filtroSaidas ? ` de ${Object.keys(manifest.outputs_sha256 || {}).length}` : ""})`,
+              label: `Outputs (${saidas.length}${filtroSaidas ? ` of ${Object.keys(manifest.outputs_sha256 || {}).length}` : ""})`,
               children: (
                 <Space direction="vertical" style={{ width: "100%" }}>
                   <Input.Search
                     allowClear
-                    placeholder="Filtrar por caminho"
+                    placeholder="Filter by path"
                     value={filtroSaidas}
                     onChange={(e) => setFiltroSaidas(e.target.value)}
                     style={{ maxWidth: 320 }}
@@ -647,7 +647,7 @@ const ProvenanceView = ({ projectName }) => {
                     pagination={{ pageSize: 10, showSizeChanger: true }}
                     columns={[
                       {
-                        title: "Caminho",
+                        title: "Path",
                         dataIndex: "caminho",
                         render: (v) => <Text code style={{ fontSize: 12 }}>{v}</Text>,
                       },
@@ -666,17 +666,17 @@ const ProvenanceView = ({ projectName }) => {
       </Card>
 
       <Card
-        title="Parâmetros do workflow"
+        title="Workflow parameters"
         size="small"
         extra={
           manifest.params && (
-            <Tooltip title={paramsBruto ? "Ver como resumo" : "Ver JSON bruto"}>
+            <Tooltip title={paramsBruto ? "View as summary" : "View raw JSON"}>
               <Button
                 size="small"
                 icon={paramsBruto ? <PartitionOutlined /> : <FileTextOutlined />}
                 onClick={() => setParamsBruto((v) => !v)}
               >
-                {paramsBruto ? "Resumo" : "Bruto"}
+                {paramsBruto ? "Summary" : "Raw"}
               </Button>
             </Tooltip>
           )
@@ -695,7 +695,7 @@ const ProvenanceView = ({ projectName }) => {
             </Descriptions>
           )
         ) : (
-          <Empty description="Parâmetros não registrados." />
+          <Empty description="No parameters recorded." />
         )}
       </Card>
 
@@ -703,9 +703,9 @@ const ProvenanceView = ({ projectName }) => {
         items={[
           {
             key: "bruto",
-            label: "Manifesto bruto",
+            label: "Raw manifest",
             extra: (
-              <Tooltip title={manifestoResumo ? "Ver JSON bruto" : "Ver como resumo"}>
+              <Tooltip title={manifestoResumo ? "View raw JSON" : "View as summary"}>
                 <Button
                   size="small"
                   icon={manifestoResumo ? <FileTextOutlined /> : <PartitionOutlined />}
@@ -714,7 +714,7 @@ const ProvenanceView = ({ projectName }) => {
                     setManifestoResumo((v) => !v);
                   }}
                 >
-                  {manifestoResumo ? "Bruto" : "Resumo"}
+                  {manifestoResumo ? "Raw" : "Summary"}
                 </Button>
               </Tooltip>
             ),

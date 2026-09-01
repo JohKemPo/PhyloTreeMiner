@@ -43,7 +43,7 @@ const ProvenancePage = () => {
           <Select
             showSearch
             allowClear
-            placeholder="Selecione um projeto"
+            placeholder="Select a project"
             style={{ width: "100%", maxWidth: 480 }}
             value={selecionado || undefined}
             onChange={handleChange}
@@ -55,7 +55,7 @@ const ProvenancePage = () => {
       {selecionado ? (
         <ProvenanceView projectName={selecionado} />
       ) : (
-        <Empty description="Selecione um projeto para ver proveniência e reprodutibilidade da execução." />
+        <Empty description="Select a project to see the provenance and reproducibility of its run." />
       )}
     </div>
   );
