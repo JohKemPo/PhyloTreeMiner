@@ -8,6 +8,7 @@ import {
   Progress,
   Dropdown,
   Menu,
+  Modal,
   Empty,
   Tooltip,
   message,
@@ -18,19 +19,24 @@ import {
   FileOutlined,
   PlayCircleOutlined,
   DeleteOutlined,
+  AuditOutlined,
+  ExclamationCircleFilled,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { formatarDuracao } from "../../constants/executionStatus";
 
 const { Text } = Typography;
+const API_BASE_URL = "http://localhost:8000";
 
 const ProjectsTableView = ({
   projects,
   statusMap,
   onProjectSelect,
   progressData = {},
+  onRefresh,
 }) => {
   const [rerunLoading, setRerunLoading] = useState({});
+  const [deleteLoading, setDeleteLoading] = useState({});
 
   const navigate = useNavigate();
   if (projects.length === 0) {
@@ -95,16 +101,43 @@ const ProjectsTableView = ({
 
   const handleDeleteProject = (projectName) => {
     Modal.confirm({
-      title: "Confirmar exclusão",
-      content: `Tem certeza que deseja excluir o projeto "${projectName}"? Esta ação não pode ser desfeita.`,
+      title: "Excluir projeto permanentemente?",
+      icon: <ExclamationCircleFilled style={{ color: "#ff4d4f" }} />,
+      content: (
+        <>
+          <p>
+            Isso remove <Text strong>"{projectName}"</Text> e tudo em{" "}
+            <Text code>out/</Text> — árvores, alinhamentos, metadados
+            minerados e o manifesto de execução.
+          </p>
+          <p>
+            <Text type="danger">Esta ação não pode ser desfeita.</Text>
+          </p>
+        </>
+      ),
       okText: "Excluir",
       okType: "danger",
       cancelText: "Cancelar",
       onOk: async () => {
+        setDeleteLoading((prev) => ({ ...prev, [projectName]: true }));
         try {
-          message.info("Funcionalidade de exclusão em desenvolvimento");
+          const response = await fetch(
+            `${API_BASE_URL}/projects/${projectName}`,
+            { method: "DELETE" },
+          );
+          if (response.ok) {
+            message.success(`Projeto "${projectName}" excluído.`);
+            onRefresh?.();
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            message.error(
+              errorData.detail || `Erro ${response.status} ao excluir projeto`,
+            );
+          }
         } catch (error) {
-          message.error("Erro ao excluir projeto");
+          message.error("Erro de conexão ao excluir projeto");
+        } finally {
+          setDeleteLoading((prev) => ({ ...prev, [projectName]: false }));
         }
       },
     });
@@ -294,11 +327,25 @@ const ProjectsTableView = ({
                   Re-run Project
                 </Menu.Item>
                 <Menu.Item
+                  key="provenance"
+                  icon={<AuditOutlined />}
+                  onClick={() =>
+                    navigate(
+                      `/provenance?project=${encodeURIComponent(record.name)}`,
+                    )
+                  }
+                >
+                  Provenance
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item
                   key="delete"
                   icon={<DeleteOutlined />}
                   onClick={() => handleDeleteProject(record.name)}
                   danger
-                  disabled
+                  disabled={
+                    record.status === "running" || deleteLoading[record.name]
+                  }
                 >
                   Delete Project
                 </Menu.Item>

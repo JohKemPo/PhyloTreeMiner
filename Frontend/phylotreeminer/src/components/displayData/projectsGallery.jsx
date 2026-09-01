@@ -279,6 +279,7 @@ const ProjectGallery = ({ onProjectSelect }) => {
             statusMap={statusMap}
             onProjectSelect={onProjectSelect}
             progressData={progressData}
+            onRefresh={fetchJobsData}
           />
         ))}
     </div>

@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 
 from typing import List, Dict, Literal, Optional, Any, Tuple
-import os, sys, datetime, mimetypes, asyncio, re, psutil, json, ijson, random, glob, zipfile 
+import os, sys, datetime, mimetypes, asyncio, re, psutil, json, ijson, random, glob, zipfile, shutil
 import pandas as pd
 from collections import defaultdict, Counter
 import threading
@@ -461,6 +461,44 @@ async def can_rerun_project(project_name: str):
         return {"can_rerun": False, "reason": "Configurações não salvas"}
     
     return {"can_rerun": True}
+
+@app.delete("/projects/{project_name}", status_code=200)
+async def delete_project(project_name: str):
+    """
+    Exclui permanentemente um projeto e todos os artefatos em `out/`.
+
+    Não é reversível: `shutil.rmtree` não passa por lixeira, e não há backup
+    automático. Recusa projetos em execução — inclusive os lançados por fora
+    da API (CLI), que `resolver_estado` passou a reconhecer como vivos via
+    checagem de processo no sistema operacional (DEC-053), não só pelo dict
+    `running_workflows`.
+
+    Raises:
+        HTTPException 400: Nome de projeto inválido.
+        HTTPException 404: Projeto não encontrado.
+        HTTPException 409: Projeto em execução.
+        HTTPException 500: Falha ao remover o diretório.
+    """
+    if not re.match(r'^[A-Za-z0-9_-]+$', project_name):
+        raise HTTPException(status_code=400, detail="Nome de projeto inválido.")
+    project_path = resolve_within(PROJECTS_ROOT, project_name)
+
+    if not os.path.isdir(project_path):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    estado = resolver_estado(project_path, em_execucao=project_name in running_workflows)
+    if estado.estado == "running":
+        raise HTTPException(
+            status_code=409,
+            detail=f"O projeto '{project_name}' está em execução; não pode ser excluído.",
+        )
+
+    try:
+        shutil.rmtree(project_path)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Falha ao excluir o projeto: {e}")
+
+    return {"message": f"Projeto '{project_name}' excluído com sucesso."}
 
 @app.get("/projects", response_model=List[Project])
 async def get_projects():
