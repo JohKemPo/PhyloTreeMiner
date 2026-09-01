@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { Card, Row, Col, Timeline, Tag, List, Statistic } from "antd";
+import { Card, Row, Col, Timeline, Tag, List, Statistic, Alert } from "antd";
 import { Line } from "@ant-design/charts";
+import {
+  computeFieldCoverage,
+  LOW_COVERAGE_THRESHOLD_PCT,
+} from "../../../utils/metadataCoverage";
 
 const TemporalInsights = ({ sequences,timelineData }) => {
   const processedSequences = useMemo(() => {
@@ -71,6 +75,11 @@ const TemporalInsights = ({ sequences,timelineData }) => {
     return { total, countries, range };
   }, [sequences, processedSequences]);
 
+  const temporalCoverage = useMemo(
+    () => computeFieldCoverage(sequences, "year"),
+    [sequences],
+  );
+
   const config = {
     data: chartData,
     xField: "date",
@@ -100,6 +109,15 @@ const TemporalInsights = ({ sequences,timelineData }) => {
 
   return (
     <Card title="Time Series Analysis">
+      {temporalCoverage.pct < LOW_COVERAGE_THRESHOLD_PCT && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={`Only ${temporalCoverage.pct}% of sequences (${temporalCoverage.known}/${temporalCoverage.total}) have a collection date in the source GenBank record`}
+          description="This is a gap in the original NCBI submission, not a pipeline defect: older or historical isolates are frequently deposited without a structured collection_date field. Use the NCBI and PubMed links in the Sequences Dataset table above to confirm this directly on the original record."
+        />
+      )}
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={8}>
           <Card size="small" style={{ minHeight: '270px' }}>

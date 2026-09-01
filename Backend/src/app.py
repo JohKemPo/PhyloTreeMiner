@@ -728,14 +728,15 @@ def get_metadata_node(node: dict):
 def get_node_information(annotations, features, qualifiers, accession: str):
     """
     Retorna informações do nó
-    
+
     Return
     ----
     accessionId,
     lineage,
     host,
     country,
-    year
+    year,
+    pubmedId
     """
     accessionIdAux = annotations.get('accessions',['Unknown'])
     accessionId = accessionIdAux[0] if isinstance(accessionIdAux, list) else accessionIdAux
@@ -767,7 +768,18 @@ def get_node_information(annotations, features, qualifiers, accession: str):
     if coll_date:
         year_match = re.search(r'\d{4}', coll_date)
         year = year_match.group(0) if year_match else "Unknown Date"
-        
+
+    # `references` já vem serializado pelo BioComp_UFF (workflow/utils/treeUtils.py,
+    # seqrecord_to_serializable_dict) com o `pubmed_id` do artigo associado ao
+    # registro do GenBank, quando o autor da submissão o declarou. Nem todo
+    # registro tem: usa-se a primeira referência que de fato o traga.
+    pubmed_id = None
+    for referencia in annotations.get("references") or []:
+        candidato = referencia.get("pubmed_id") if isinstance(referencia, dict) else None
+        if candidato:
+            pubmed_id = candidato
+            break
+
     return {
         "accessionId":accessionId,
         "lineage":lineage,
@@ -775,7 +787,8 @@ def get_node_information(annotations, features, qualifiers, accession: str):
         "country":country,
         "region": region,
         "year":year,
-        "isolate": isolate
+        "isolate": isolate,
+        "pubmedId": pubmed_id
     }
 
 @app.get("/api/tree/{project_name}/search-nodes")

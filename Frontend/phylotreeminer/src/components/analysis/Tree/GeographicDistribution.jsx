@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { Card, Row, Col, Tag, List, Spin, Space, Button } from "antd";
+import { Card, Row, Col, Tag, List, Spin, Space, Button, Alert } from "antd";
 import {
   getCoordinatesForCountryWithFallback,
   isValidCoordinates,
@@ -8,6 +8,10 @@ import { ExportOutlined } from "@ant-design/icons";
 import { MapContainer, TileLayer, Circle, Popup, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import {
+  computeFieldCoverage,
+  LOW_COVERAGE_THRESHOLD_PCT,
+} from "../../../utils/metadataCoverage";
 
 const COUNTRY_COORDINATES_CACHE = new Map();
 
@@ -205,6 +209,11 @@ const GeographicDistribution = ({ sequences }) => {
   const { geoData, loading, reloadCountryData } =
     useGeoDataProcessing(sequences);
 
+  const geoCoverage = useMemo(
+    () => computeFieldCoverage(sequences, "country"),
+    [sequences],
+  );
+
   useEffect(() => {
     setIsClient(true);
     createLeafletIcon();
@@ -275,6 +284,15 @@ const GeographicDistribution = ({ sequences }) => {
       //   </div>
       // }
     >
+      {geoCoverage.pct < LOW_COVERAGE_THRESHOLD_PCT && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={`Only ${geoCoverage.pct}% of sequences (${geoCoverage.known}/${geoCoverage.total}) have a geolocation in the source GenBank record`}
+          description="This is a gap in the original NCBI submission, not a pipeline defect: older or historical isolates are frequently deposited without a structured geo_loc_name field. Use the NCBI and PubMed links in the Sequences Dataset table above to confirm this directly on the original record."
+        />
+      )}
       <Row gutter={[16, 16]}>
         <Col xs={24} md={16}>
           <div

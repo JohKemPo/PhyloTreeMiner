@@ -213,6 +213,27 @@ const PhylogeneticInsights = ({
           );
         },
       },
+      {
+        title: "PubMed Link",
+        key: "pubmedLink",
+        align: "center",
+        width: "250px",
+        render: (_, record) => {
+          if (!record.pubmedId) return "-";
+
+          return (
+            <a
+              href={`https://pubmed.ncbi.nlm.nih.gov/${record.pubmedId}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button icon={<ExportOutlined />} size="small" type="link">
+                Source article
+              </Button>
+            </a>
+          );
+        },
+      },
     ],
     [accessionFilters, dateFilters, countryFilters],
   );
