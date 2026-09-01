@@ -395,8 +395,8 @@ Nenhum agente decide estas seis. Estão em [`08-ficha-de-fatos.md §5`](08-ficha
 | ~~**4**~~ | ✅ **Tomada** (DEC-024): fica, reportando com e sem | ~~números de suporte~~ | — |
 | ~~**2**~~ | ✅ **Tomada** (DEC-024): fica, como histórico de experimentos e caso de escala | ~~composição de M2~~ | — |
 | ~~**3**~~ | ✅ **Tomada** (DEC-024): fica, como demo didático | ~~composição de M2~~ | — |
-| ~~**1**~~ | ✅ **Tomada** (DEC-036): a biblioteca é **MAFFT + Clustal Omega + MUSCLE**. Substitui a recomendação de duas estratégias do MAFFT | ~~E4~~ | — |
+| ~~**1**~~ | ✅ **Tomada** (DEC-036, biblioteca; refinada por [DEC-050](07-log-de-execucao.md)): a biblioteca é **MAFFT + Clustal Omega + MUSCLE**, e o **fator alinhador em si é `mafft` × `mafft_iterative`** — duas estratégias do MAFFT, remedidas no ambiente pinado. Clustal Omega não termina em 1 h nestes genomas (limite de tempo, não OOM) e MUSCLE 5.3 recusa o alinhamento | ~~E4~~ — fecha [D1](../science/02-defeitos-que-alteram-resultado.md#d1) | — |
 
-> Sobre a decisão 1: a ficha de fatos registra que o MUSCLE instalado é **3.8.1551, não MUSCLE5**. Isso reforça a recomendação de contrastar duas *estratégias* do MAFFT — não exige instalação nova, e isola melhor a variável de interesse (esforço de refinamento) do que contrastar dois programas com heurísticas independentes.
+> Sobre a decisão 1: a ficha de fatos registrava que o MUSCLE instalado era **3.8.1551, não MUSCLE5** — o que já apontava para contrastar duas *estratégias* do MAFFT em vez de dois programas com heurísticas independentes. O fator alinhador remedido em 2026-08-27 confirmou essa leitura.
 
-**Situação em 2026-08-25: as seis estão tomadas.** Nenhuma decisão do usuário bloqueia qualquer marco.
+**Situação em 2026-08-27: as seis estão tomadas.** Nenhuma decisão do usuário bloqueia qualquer marco.
