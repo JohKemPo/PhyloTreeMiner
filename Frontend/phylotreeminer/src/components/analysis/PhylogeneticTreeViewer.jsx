@@ -22,6 +22,7 @@ import {
   FieldTimeOutlined,
   InfoCircleOutlined,
   ExportOutlined,
+  ColumnWidthOutlined,
 } from "@ant-design/icons";
 
 import { API_BASE_URL, fetchNcbiInfo } from "../../services/dataServices";
@@ -71,6 +72,9 @@ const PhylogeneticTreeViewer = ({
   // Filograma vs. cladograma: só se sabe depois de tentar renderizar com o
   // comprimento de ramo real — ver `renderTree`.
   const [temComprimentoRamo, setTemComprimentoRamo] = useState(true);
+  // Override manual: força espaçamento por profundidade mesmo com comprimento
+  // real disponível — para quando um ramo muito longo esmaga o resto da árvore.
+  const [normalizarDistancias, setNormalizarDistancias] = useState(false);
 
   // Índice leve de metadado do projeto — `accessionId -> {host,country,...}`.
   // Substitui o `metadata.json` inteiro que a versão anterior recebia como
@@ -120,7 +124,7 @@ const PhylogeneticTreeViewer = ({
       setFilteredTreeData(parsedTree);
       setError(null);
     } catch (err) {
-      setError("Erro ao analisar os dados da árvore: " + err.message);
+      setError("Failed to parse tree data: " + err.message);
     }
   }, [data]);
 
@@ -134,7 +138,7 @@ const PhylogeneticTreeViewer = ({
         return parseNewick(newickString);
       }
       throw new Error(
-        'Arquivo Nexus válido, mas não foi encontrada uma árvore no formato "TREE ... = (...);"'
+        'Valid Nexus file, but no tree was found in the "TREE ... = (...);" format'
       );
     }
 
@@ -144,11 +148,11 @@ const PhylogeneticTreeViewer = ({
 
     if (content.startsWith(">")) {
       throw new Error(
-        "Formato FASTA detectado. Por favor, carregue um arquivo de árvore (.nwk, .nexus)."
+        "FASTA format detected. Please upload a tree file (.nwk, .nexus)."
       );
     }
 
-    throw new Error("Formato de arquivo de árvore não reconhecido.");
+    throw new Error("Unrecognized tree file format.");
   };
 
   const parseNewick = (newick) => {
@@ -274,8 +278,13 @@ const PhylogeneticTreeViewer = ({
     const maxLen = d3.max(root.descendants(), (d) => d.lenAcumulado) || 0;
     const comCompimento = maxLen > 0;
     const escala = layoutType === "radial" ? radius : width;
+    // O usuário pode normalizar mesmo quando o arquivo tem comprimento real —
+    // um ramo muito mais longo que os outros comprime o resto da árvore numa
+    // faixa ilegível. Normalizar troca para espaçamento por profundidade,
+    // igual ao cladograma, sem fingir que o arquivo não tem a distância.
+    const usarComprimentoReal = comCompimento && !normalizarDistancias;
 
-    if (comCompimento) {
+    if (usarComprimentoReal) {
       // Filograma: a posição no eixo principal é a distância evolutiva real
       // desde a raiz, não a contagem de arestas. Era isto que faltava — o
       // `d3.tree()`/`d3.cluster()` originais só sabem desenhar cladograma.
@@ -472,7 +481,7 @@ const PhylogeneticTreeViewer = ({
       setIsRendering(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredTreeData, colorBy, collapsedNodes, selectedNode, layoutType, localIndex]);
+  }, [filteredTreeData, colorBy, collapsedNodes, selectedNode, layoutType, localIndex, normalizarDistancias]);
 
   const highlightPath = (node, active) => {
     const paths = getPathToRoot(node);
@@ -656,7 +665,7 @@ const PhylogeneticTreeViewer = ({
           <strong>Search:</strong>
           <Input.Search
             allowClear
-            placeholder="Nome do terminal ou metadado"
+            placeholder="Terminal name or metadata"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ marginTop: 4 }}
@@ -806,7 +815,7 @@ const PhylogeneticTreeViewer = ({
   };
 
   if (error) {
-    return <Alert message="Erro" description={error} type="error" showIcon />;
+    return <Alert message="Error" description={error} type="error" showIcon />;
   }
 
   return (
@@ -953,18 +962,48 @@ const PhylogeneticTreeViewer = ({
             </Button>
             <Tooltip
               title={
-                temComprimentoRamo
-                  ? "Posição dos nós proporcional à distância evolutiva acumulada (comprimento de ramo do arquivo)."
-                  : "Este arquivo não declara comprimento de ramo — exibindo apenas a topologia (cladograma)."
+                !temComprimentoRamo
+                  ? "This file has no branch length — showing topology only."
+                  : normalizarDistancias
+                    ? "Equal spacing by depth — branch length ignored for readability. The real length is unchanged in the file."
+                    : "Node position proportional to accumulated evolutionary distance (branch length from the file)."
               }
             >
               <Tag
                 icon={<InfoCircleOutlined />}
-                color={temComprimentoRamo ? "blue" : "default"}
+                color={
+                  !temComprimentoRamo
+                    ? "default"
+                    : normalizarDistancias
+                      ? "gold"
+                      : "blue"
+                }
               >
-                {temComprimentoRamo ? "Filograma" : "Cladograma"}
+                {!temComprimentoRamo
+                  ? "Cladogram"
+                  : normalizarDistancias
+                    ? "Normalized"
+                    : "Phylogram"}
               </Tag>
             </Tooltip>
+            {temComprimentoRamo && (
+              <Tooltip
+                title={
+                  normalizarDistancias
+                    ? "Show real branch length again"
+                    : "Normalize branch lengths for easier reading (equal spacing by depth)"
+                }
+              >
+                <Button
+                  size="small"
+                  type={normalizarDistancias ? "primary" : "default"}
+                  icon={<ColumnWidthOutlined />}
+                  onClick={() => setNormalizarDistancias((v) => !v)}
+                >
+                  Normalize
+                </Button>
+              </Tooltip>
+            )}
           </Space>
         )}
       </div>
@@ -1017,8 +1056,8 @@ const PhylogeneticTreeViewer = ({
               <Alert
                 type="info"
                 showIcon
-                message="Sem metadado local para este nó"
-                description="Não há registro correspondente em search-nodes — comum para nós internos (InnerN) ou acessos ausentes do metadata."
+                message="No local metadata for this node"
+                description="No matching record in search-nodes — common for internal nodes (InnerN) or accessions missing from the metadata."
                 style={{ marginBottom: 16 }}
               />
             )
@@ -1036,8 +1075,8 @@ const PhylogeneticTreeViewer = ({
                 type="default"
                 showIcon
                 icon={<ExportOutlined />}
-                message="Nó interno"
-                description={`"${selectedNodeInfo.name}" é um clado sintético do pipeline, não um acesso do GenBank — não há o que buscar no NCBI.`}
+                message="Internal node"
+                description={`"${selectedNodeInfo.name}" is a synthetic clade from the pipeline, not a GenBank accession — nothing to look up on NCBI.`}
               />
             )
           )}
