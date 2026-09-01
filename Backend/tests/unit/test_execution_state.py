@@ -10,6 +10,9 @@ projetos sem que nada acusasse.
 Cada caso abaixo é um cenário medido em disco, reduzido a um log sintético.
 """
 import os
+import subprocess
+import sys
+import time
 
 import pytest
 
@@ -179,6 +182,58 @@ def test_manifesto_tem_precedencia_sobre_o_log(tmp_path):
     assert estado.duracao_s == 619          # do manifesto, não os 600 s do log
     assert estado.run_id == "abc123"
     assert estado.estado == "completed"
+
+
+def test_execucao_lancada_por_fora_da_api_nao_e_interrompida(tmp_path):
+    """O caso relatado em 2026-09-01: `python workflow.py -p config.json` rodado
+    direto por CLI (como manda o guia de reexecução), sem passar por
+    `POST /projects/{nome}/run`. A API nunca registra o processo em
+    `running_workflows`, então `em_execucao` chega `False` do início ao fim —
+    mas a execução está viva, escrevendo dentro do próprio diretório do
+    projeto. Sem checar o sistema operacional, a UI mostrava "Interrompida"
+    para uma execução que terminaria com sucesso minutos depois."""
+    caminho = _projeto(tmp_path,
+        manifesto={"run_id": "ext1", "started_at_utc": "2026-08-26T18:00:00+00:00",
+                   "finished_at_utc": None})
+    arquivo_ativo = os.path.join(caminho, "out", "outputs", "log_ativo.tmp")
+    codigo = "import sys, time\nf = open(sys.argv[1], 'w')\ntime.sleep(10)\n"
+    processo = subprocess.Popen(
+        [sys.executable, "-c", codigo, arquivo_ativo, "workflow.py"])
+    try:
+        for _ in range(50):
+            if os.path.exists(arquivo_ativo):
+                break
+            time.sleep(0.1)
+        estado = resolver_estado(caminho)
+        assert estado.estado == "running"
+    finally:
+        processo.kill()
+        processo.wait()
+
+
+def test_processo_vivo_de_outro_projeto_nao_conta(tmp_path):
+    """O processo tem `workflow.py` na linha de comando, mas o arquivo aberto
+    está no diretório de **outro** projeto: não deve valer como prova de vida
+    para este."""
+    alvo = _projeto(tmp_path,
+        manifesto={"run_id": "alvo", "started_at_utc": "2026-08-26T18:00:00+00:00",
+                   "finished_at_utc": None})
+    outro = tmp_path / "outro_projeto"
+    outro.mkdir()
+    arquivo_ativo = str(outro / "log_ativo.tmp")
+    codigo = "import sys, time\nf = open(sys.argv[1], 'w')\ntime.sleep(10)\n"
+    processo = subprocess.Popen(
+        [sys.executable, "-c", codigo, arquivo_ativo, "workflow.py"])
+    try:
+        for _ in range(50):
+            if os.path.exists(arquivo_ativo):
+                break
+            time.sleep(0.1)
+        estado = resolver_estado(alvo)
+        assert estado.estado == "interrupted"
+    finally:
+        processo.kill()
+        processo.wait()
 
 
 def test_manifesto_sem_conclusao_e_sem_processo_e_interrompida(tmp_path):

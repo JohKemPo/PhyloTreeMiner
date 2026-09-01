@@ -44,6 +44,8 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple
 
+import psutil
+
 __all__ = [
     "ESTADOS",
     "ExecutionState",
@@ -259,6 +261,37 @@ def _ultima(padrao: re.Pattern, linhas: List[str]) -> Optional[str]:
 # Resolução
 # ------------------------------------------------------------------ #
 
+def _processo_vivo_no_diretorio(project_path: str) -> bool:
+    """
+    Há processo do workflow com arquivo aberto dentro deste projeto?
+
+    `em_execucao`, o parâmetro do chamador, só enxerga o que a própria API
+    disparou (`running_workflows`, em memória). Uma execução lançada por
+    fora — `python workflow.py -p config.json`, como manda o guia de
+    reexecução — ou uma que sobreviveu a um reinício do backend nunca entra
+    nesse dict. Sem este checque, essas execuções apareciam como
+    "interrompida" do início ao fim, mesmo terminando com sucesso.
+
+    Confirma pelo sistema operacional, não pela linha de comando: um
+    processo com `workflow.py` nos argumentos **e** um arquivo aberto dentro
+    de `project_path` está de fato escrevendo neste projeto — não só citando
+    o nome dele num argumento, o que não distinguiria duas execuções
+    concorrentes de projetos diferentes.
+    """
+    alvo = os.path.abspath(project_path) + os.sep
+    for processo in psutil.process_iter(["cmdline"]):
+        cmdline = processo.info["cmdline"] or []
+        if not any("workflow.py" in arg for arg in cmdline):
+            continue
+        try:
+            abertos = processo.open_files()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+        if any(os.path.abspath(f.path).startswith(alvo) for f in abertos):
+            return True
+    return False
+
+
 def _contar_arvores(project_path: str) -> int:
     trees = os.path.join(project_path, "out", "Trees")
     if not os.path.isdir(trees):
@@ -275,9 +308,12 @@ def resolver_estado(project_path: str, em_execucao: bool = False) -> ExecutionSt
     project_path : str
         Diretório do projeto (o que contém `out/`).
     em_execucao : bool
-        Se há processo vivo para este projeto **agora**. É o único fato que
-        nem o manifesto nem o log conseguem informar, e é o que separa
-        "em execução" de "interrompida".
+        Se o **chamador** sabe de processo vivo para este projeto agora —
+        tipicamente por tê-lo disparado e mantido em memória. Nem o manifesto
+        nem o log informam isso sozinhos; quando `False` mas o manifesto ainda
+        não declarou conclusão, `resolver_estado` faz sua própria checagem via
+        `_processo_vivo_no_diretorio` antes de concluir "interrompida" — é o
+        que cobre uma execução disparada por fora da API.
 
     Return
     ------
@@ -300,6 +336,9 @@ def resolver_estado(project_path: str, em_execucao: bool = False) -> ExecutionSt
         inicio = _instante(manifesto.get("started_at_utc"))
         fim = _instante(manifesto.get("finished_at_utc"))
         run_id = manifesto.get("run_id")
+
+        if not em_execucao and inicio and not fim:
+            em_execucao = _processo_vivo_no_diretorio(project_path)
 
         if inicio and fim:
             duracao, motivo = max(int((fim - inicio).total_seconds()), 0), None

@@ -1804,6 +1804,38 @@ cd Backend && python -m pytest tests -q   → 241 passed, 1 xfailed (era 232; +9
 
 **Write-lock:** `Backend/src/services/cql_batch_service.py`, `Backend/tests/unit/test_parse_cql_blocks.py` (novo), `BioComp_UFF/workflow/utils/reparar_cql_legado.py` (novo), os 4 `.cql` legados reparados (dado, gitignorado — não versionado), `docs/audit/06-eixo-bugs.md`, `docs/automation/07`. **Reversível:** sim (backups `.bak-preDEC052` mantidos; código é diff de texto).
 
+### DEC-053 · 2026-09-01 · "Interrompida" era falso positivo para execução lançada por fora da API
+
+**Gatilho:** pedido do usuário — durante a reexecução do conjunto de validação (`Zika_21seq_reexec_20260901`, disparada por `python workflow.py -p /tmp/zika21_reexec.json`, conforme [`13-guia-reexecucao-m2.md`](13-guia-reexecucao-m2.md)), a UI mostrou o projeto como **"Interrompida"** enquanto ele ainda rodava, e só depois **"Concluída com sucesso"** — sem que tivesse havido interrupção real em nenhum momento.
+
+#### Diagnóstico
+
+O `manifest.json` da execução tem `started_at_utc` às `11:30:28` e `finished_at_utc` às `11:39:24`, ambos do mesmo `run_id`; `log_setup_2026-09-01_952736647882.log` termina em `STEP: Completed successfully!` sem nenhuma linha `ERROR`; e `logs_backend.log` **não registra nenhuma chamada** a `POST /projects/{nome}/run` nem `/rerun` durante a janela — só `/projects`, `/projects/status`, `/browse` e `/file`. A execução real nunca passou pela API.
+
+#### Causa raiz
+
+`em_execucao`, em `resolver_estado` (`Backend/src/services/execution_state.py`), vinha só de `project_name in running_workflows` — um dict em memória (`Backend/src/app.py:206`) que a API só popula quando **ela mesma** dispara o subprocesso, em `/run` ou `/rerun`. Com manifesto tendo `started_at_utc` sem `finished_at_utc` e `em_execucao=False`, o código caía direto no ramo `else: estado = "interrompida"` — mesmo com o processo genuinamente vivo, só não lançado (ou não mais rastreado) pela API. Duas situações batem nesse ramo sem que a execução tenha de fato morrido: lançamento por CLI, como no guia de reexecução (o caso medido aqui); e reinício do processo do backend em memória enquanto um workflow que ele mesmo disparou continua rodando (o dict se perde no restart, o subprocess não).
+
+#### Correção
+
+`_processo_vivo_no_diretorio` (novo, `Backend/src/services/execution_state.py`) confirma pelo sistema operacional via `psutil` — já dependência do projeto: procura processo vivo com `workflow.py` na linha de comando **e** um arquivo aberto dentro do diretório do projeto (não só a string no argumento, o que não distinguiria dois projetos concorrentes). `resolver_estado` só chama esse checque no ramo ambíguo (manifesto sem `finished_at_utc`, `em_execucao=False` vindo do chamador) — os casos comuns (concluído, nunca executado) não pagam o custo da varredura de processos.
+
+#### Casos-limite testados
+
+`Backend/tests/unit/test_execution_state.py`: `test_execucao_lancada_por_fora_da_api_nao_e_interrompida` reproduz o cenário relatado (subprocesso com `workflow.py` no argv, escrevendo dentro do diretório do projeto → `running`); `test_processo_vivo_de_outro_projeto_nao_conta` confirma que o match exige o arquivo aberto **dentro** do diretório do projeto alvo — `workflow.py` em qualquer processo do sistema não basta. O teste pré-existente da interrupção genuína (`test_manifesto_sem_conclusao_e_sem_processo_e_interrompida`, sem processo nenhum de fato aberto no diretório) continua verde.
+
+#### Δ em métrica publicada: nenhum
+
+Rastreamento de estado de execução, não zona sagrada — não toca distância, clado, metadado ou padrão FPMax.
+
+**Evidência de execução:**
+```
+cd Backend && python -m pytest tests/unit/test_execution_state.py -v   → 18 passed (eram 16; +2 novos)
+cd Backend && python -m pytest tests -q                                 → 243 passed, 1 xfailed (era 241; +2)
+```
+
+**Write-lock:** `Backend/src/services/execution_state.py`, `Backend/tests/unit/test_execution_state.py`, `docs/automation/07`. Não toca `BioComp_UFF/` nem `Frontend/`. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
