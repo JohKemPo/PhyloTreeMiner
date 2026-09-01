@@ -252,8 +252,15 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       const response = await fetch(
         `${API_BASE_URL}/file?path=${encodeURIComponent(item.path)}`,
       );
-      if (!response.ok)
-        throw new Error(`Erro ${response.status}: ${response.statusText}`);
+      if (!response.ok) {
+        // O backend manda o motivo real em `detail` (ex.: "arquivo grande
+        // demais, limite 8 MB") — sem isto, todo erro virava o mesmo
+        // "Failed to load" genérico, e não dava para saber o porquê.
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(
+          errorBody?.detail || `Erro ${response.status}: ${response.statusText}`,
+        );
+      }
 
       if (response.headers.get("content-type")?.startsWith("image/")) {
         const blob = await response.blob();
@@ -306,9 +313,11 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
       setModalContentType("error");
 
       message.error({
-        content: `Failed to load ${item.name}`,
+        content: error.message
+          ? `Failed to load ${item.name}: ${error.message}`
+          : `Failed to load ${item.name}`,
         key: item.path,
-        duration: 3,
+        duration: 5,
       });
     } finally {
       setIsModalLoading(false);

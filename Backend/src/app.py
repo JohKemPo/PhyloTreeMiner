@@ -1023,6 +1023,11 @@ async def inputs_data_path(path: str = Query("", description="O caminho relativo
 #: Os `metadata.json` chegam a 3,2 GB — lê-los de uma vez derruba o processo.
 MAX_JSON_INLINE_BYTES = 8 * 1024 * 1024
 
+#: Extensões de sequência/alinhamento: como o `.cql`, um prefixo continua útil
+#: para pré-visualização. O alinhamento MAFFT-iterativo de VARV-49 já passa de
+#: 11 MB, e VARV-121 (283 874 colunas) passa disso com folga.
+EXTENSOES_SEQUENCIA_TRUNCAVEL = (".fasta", ".fa", ".fas", ".faa", ".aln", ".clustal")
+
 
 def json_root_kind(file_path: str) -> str:
     """
@@ -1223,16 +1228,24 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
         # .cql não é um documento estruturado como o JSON: um prefixo com blocos
         # Cypher completos ainda é útil para pré-visualização, então em vez de
         # recusar servimos os primeiros MAX_JSON_INLINE_BYTES e sinalizamos o corte.
+        # Sequência/alinhamento (.fasta/.aln/...) é a mesma história: um prefixo
+        # com os primeiros registros já é útil, e cortar não muda o arquivo em
+        # disco — só a pré-visualização.
         eh_cql = full_path.endswith(".cql")
+        eh_sequencia = full_path.endswith(EXTENSOES_SEQUENCIA_TRUNCAVEL)
+        eh_json = full_path.endswith(".json")
         truncado = False
 
-        if tamanho > MAX_JSON_INLINE_BYTES and not eh_cql:
+        if tamanho > MAX_JSON_INLINE_BYTES and not eh_cql and not eh_sequencia:
             # `f.read()` abaixo carrega o arquivo inteiro; com um metadata.json de
-            # 3,2 GB isso derruba o processo. Quem é grande é servido paginado.
+            # 3,2 GB isso derruba o processo. Quem é grande é servido paginado —
+            # mas `/api/file/paginated` só sabe paginar JSON, então só se sugere
+            # a saída para quem de fato pode usá-la.
+            sugestao = " Use /api/file/paginated." if eh_json else ""
             raise HTTPException(
                 status_code=413,
                 detail=(f"Arquivo de {tamanho / 1e6:.1f} MB é grande demais para pré-visualização "
-                        f"(limite {MAX_JSON_INLINE_BYTES / 1e6:.0f} MB). Use /api/file/paginated."))
+                        f"(limite {MAX_JSON_INLINE_BYTES / 1e6:.0f} MB).{sugestao}"))
 
         mime_type, _ = mimetypes.guess_type(full_path)
         if mime_type and mime_type.startswith("image/"):
@@ -1247,6 +1260,21 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
                 ultimo_fim_de_bloco = content.rfind(";")
                 if ultimo_fim_de_bloco != -1:
                     content = content[:ultimo_fim_de_bloco + 1]
+            elif eh_sequencia and tamanho > MAX_JSON_INLINE_BYTES:
+                content = f.read(MAX_JSON_INLINE_BYTES)
+                truncado = True
+                # Corta no último registro completo. Em FASTA isso é o '>' do
+                # próximo cabeçalho (ainda incompleto); em Clustal/.aln, que não
+                # tem um marcador de registro, a última linha inteira já basta —
+                # o MSAViewer descarta linha incompleta (`parts.length < 2`).
+                if full_path.endswith((".fasta", ".fa", ".fas", ".faa")):
+                    ultimo_registro = content.rfind("\n>")
+                    if ultimo_registro != -1:
+                        content = content[:ultimo_registro]
+                else:
+                    ultima_linha = content.rfind("\n")
+                    if ultima_linha != -1:
+                        content = content[:ultima_linha]
             else:
                 content = f.read()
 
