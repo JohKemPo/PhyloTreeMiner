@@ -228,14 +228,72 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 
 ### M4 — Segurança (W1) e desempenho (W2)
 
-| Bloco | Itens | Trilha |
-|---|---|---|
-| Segurança | Resiliência Neo4j → `503` (`C-3c`/`B-9`); residual de `resolve_within` em `rerun_workflow`/`can_rerun_project`; `S-4` logging estruturado (parar de vazar `str(e)`); `S-5` limites rígidos + `ADMIN_TOKEN` nas rotas administrativas + checagem de `origin` no WebSocket | T2 |
-| Grafo | Credenciais leitura/escrita separadas; `$user_id` parametrizado; restrição de APOC → fecha `S-1` **sem login** ([DEC-004](07-log-de-execucao.md)) | T5 |
-| Desempenho | `asyncio.to_thread` em NCBI (`B-4`) e bioinformática pesada (`B-5`); `psutil interval=None`; reescrita de `stream_workflow_output` com duas tasks + EOF; `treePlot` recebendo `dict` em vez de lista | T2 |
-| Frontend | Índice memoizado (`F-4`); leak de zoom D3 (`F-5`); update incremental do vis-network; tratar `503` na UI | T4 |
-| **Observabilidade** | ✅ **M4.O — 8 de 8** ([DEC-048](07-log-de-execucao.md) no backend e no frontend, [DEC-049](07-log-de-execucao.md) no pipeline): estado e duração vindos do manifesto, não do log, e **um arquivo de log por execução** ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)). Um manifesto por execução com `run_id` no nome (**pré-requisito**: hoje duas execuções do mesmo dia se fundem no mesmo arquivo); estado como enumeração fechada, com `desconhecido` distinto de `nunca executado`; `duration` indefinido devolve `null` **com motivo**; progresso por etapas concluídas / planejadas; `stream_workflow_output` para de rotular todo stderr como `ERROR`; apagar `progress_percent`, que é código morto | T2 + T4 |
-| Grafo/perf | Índices em `uid`/`q.key` justificados por `PROFILE`; `LIMIT` obrigatório no servidor; ingest em transação por lote (`P-3`) | T5 |
+**Fatiado em lotes em 2026-09-01** (papel P), com verificação ao vivo contra o código — não contra a ficha de fatos, que estava desatualizada em 5 pontos desta tabela (ver nota ao fim). Cinco itens do levantamento original já **fecharam** por trabalho recente e não geram lote: residual de `resolve_within` em `rerun_workflow`/`can_rerun_project`, índice memoizado `F-4`, CORS `S-3`, sanitização de nome/extensão de upload, `progress_percent` (M4.O).
+
+**Observabilidade — ✅ M4.O, 8 de 8** ([DEC-048](07-log-de-execucao.md) no backend e no frontend, [DEC-049](07-log-de-execucao.md) no pipeline): estado e duração vindos do manifesto, não do log, e **um arquivo de log por execução** ([D22](../science/02-defeitos-que-alteram-resultado.md#d22)). Ver o gate executável logo abaixo — já fechado, mantido aqui como registro.
+
+#### T2 — Backend, segurança (serial: `app.py` é um write-lock único)
+
+| # | Lote | O que resolve | Defeito | Write-lock | Gate | Depende de |
+|---|---|---|---|---|---|---|
+| M4.1 | Neo4j indisponível devolve `503` com `Retry-After`, em vez de `[]` mudo / `500` genérico | `C-3c`, `B-9` | `services/neo4j_services.py`, `routers/{neo4j,cql,cql_batch}_router.py`, `tests/api/test_neo4j_resiliencia.py` (novo) | `pytest tests/api/test_neo4j_resiliencia.py -q` — 4 rotas em 503 com Neo4j fora | — |
+| M4.2 | Log estruturado; zero `str(e)` vazando ao cliente (hoje 19 ocorrências) | `S-4` | `logging_conf.py` (novo), `app.py`, `tests/api/test_vazamento_de_erro.py` (novo) | teste AST: 0 ocorrências | — |
+| M4.3 | Mesmo tratamento nos routers e no serviço de lote | `S-4` | `routers/*.py`, `cql_batch_service.py` | mesmo teste AST, agora cobrindo esses arquivos | M4.1, M4.2 |
+| M4.4 | `ADMIN_TOKEN` em `/api/ncbi/set-email` e `/neo4j/connect` | `S-5`/DEC-004 | `seguranca.py` (novo), `app.py`, `neo4j_router.py`, `tests/api/test_admin_token.py` (novo) | sem header → `401`; token correto → passa | M4.2 |
+| M4.5 | `Origin` dos dois WebSockets contra `ALLOWED_ORIGINS` | `S-5` | `app.py`, `tests/api/test_ws_origin.py` (novo) | origem fora da allowlist → fecha `1008` | M4.4 |
+| M4.6 | Limites rígidos: bytes/nº de arquivos em `/upload-data`, razão de expansão do ZIP, teto de `retmax` | `S-5` | `app.py`, `tests/api/test_limites_entrada.py` (novo) | acima do teto → `413`/`400`/`422` | M4.5 |
+| M4.7 | Rate limiting anônimo nas rotas de escrita | `S-5`/DEC-004 | `seguranca.py`, `app.py`, `tests/api/test_rate_limit.py` (novo) | N+1 requisições na janela → `429` | M4.6 |
+
+⛔ **Fora do fatiamento, decisão do usuário:** `ADMIN_TOKEN` em `DELETE /projects/{nome}` colide com o propósito de demo público (DEC-004) — token anônimo permitiria apagar o projeto de outro avaliador. Precisa de decisão: token, confirmação por nome, ou lixeira com TTL.
+
+#### T2 — Backend, desempenho (medição antes/depois obrigatória em cada lote)
+
+| # | Lote | O que resolve | Defeito | Write-lock | Gate | Depende de |
+|---|---|---|---|---|---|---|
+| M4.8 | `psutil.cpu_percent(interval=1)` sai do event loop — bloqueia 1s inteiro por ciclo, com todo cliente WS conectado | perf | `app.py`, `tests/api/test_event_loop.py` (novo) | latência de `GET /` com watcher ativo, antes/depois | M4.7 |
+| M4.9 | 3 rotas NCBI síncronas passam por `asyncio.to_thread` | `B-4` | `app.py`, `ncbi_router.py` | 2ª requisição responde durante download em curso | M4.8 |
+| M4.10 | `compare_trees`/`pattern-analysis`/`gen_plot`/`build_metadata_index` saem do loop | `B-5` | `app.py` | refatoração pura: golden idêntico; latência de `GET /` durante `POST /api/tree/compare` | M4.9 |
+| M4.11 | `stream_workflow_output` reescrito com duas tasks + leitura até EOF (hoje descarta o fim do buffer e faz busy-poll a 10 Hz) | perf | `app.py`, `tests/unit/test_stream_workflow.py` (novo) | processo falso emite N linhas → as N chegam ao broadcast | M4.10 |
+| M4.12 | **Bug real, não só performance**: `render_annotated_tree` recebe `dict` do índice e itera como lista → `TypeError` | perf + bug | `utils/treePlot.py`, `tests/unit/test_tree_plot.py` (novo) | dict de 3 acessos gera PNG sem `TypeError` | — · paralelo a toda a cadeia acima |
+
+#### T5 — Grafo
+
+| # | Lote | O que resolve | Write-lock | Gate | Depende de |
+|---|---|---|---|---|---|
+| M4.13 | Gerador de CQL emite `$user_id` em vez do literal `<<USER_UID>>` | `BioComp_UFF/workflow/utils/neo4jProcessing.py` ⚠️ submódulo, lock próprio | `python -m unittest workflow.tests.test_neo4j_processing`; 0 ocorrências do placeholder | — |
+| M4.14 | Backend para de fazer `.replace()` textual do UID — vira parâmetro do driver | `cql_router.py`, `cql_batch_service.py`, `tests/api/test_cql_parametrizado.py` (novo) | UID malicioso não altera o plano da consulta | M4.13, M4.3 |
+| M4.15 | `.cql` legado com `<<USER_UID>>` é recusado nomeando o arquivo, não executado às cegas | `cql_batch_service.py`, `tests/api/test_cql_legado.py` (novo) | bloco legado → erro nomeando arquivo/linha; nada persiste | M4.14 |
+| M4.16 | Credencial de leitura e de escrita separadas | `neo4j_services.py`, `.env.example`, `tests/api/test_credenciais_grafo.py` (novo) | `CREATE` via sessão de leitura é recusado; ingest legítimo continua | M4.1, M4.14 |
+| M4.17 | Allowlist de procedures — APOC fora do alcance da credencial de leitura | `docker-compose.yml` | credencial de leitura + `CALL apoc.*` → recusado | M4.16 |
+| M4.18 | `LIMIT` obrigatório no servidor (hoje só se aplica quando o cliente não manda consulta própria) | `neo4j_services.py`, `neo4j_router.py`, `tests/api/test_limite_linhas.py` (novo) | consulta sem `LIMIT` do cliente devolve no máximo o teto, com `truncated: true` | M4.16 |
+| M4.19 | Índices em `uid`/`name`/`key`, criados de forma idempotente e justificados por `PROFILE` | `scripts/neo4j_indices.py` (novo) | db hits antes/depois, ≥3 repetições; rodar 2x não duplica índice | M4.18 |
+| M4.20 | `P-3` — ingest em transação por lote (hoje um bloco que falha deixa o grafo meio ingerido) | `cql_batch_service.py`, `tests/api/test_ingest_transacional.py` (novo) | bloco inválido na posição 5 de 10 → nenhum dos 10 persiste | M4.15, M4.16 |
+
+#### T4 — Frontend
+
+| # | Lote | O que resolve | Write-lock | Gate | Depende de |
+|---|---|---|---|---|---|
+| M4.21 | Leak de zoom D3 — `svg.on(".zoom", null)` no cleanup do efeito | `PhylogeneticTreeViewer.jsx`, `__tests__/zoomCleanup.test.jsx` (novo) | `getEventListeners(svg)` estável em 10 trocas de layout | — |
+| M4.22 | vis-network atualiza `DataSet` em vez de `destroy()`+`new Network()` a cada mudança de dado | `GraphVisualization.jsx`, `__tests__/graphIncremental.test.jsx` (novo) | 2 mudanças de dado → `new Network` chamado 1 vez | — |
+| M4.23 | UI trata `503` com banner, não tela em branco | `GraphVisualization.jsx`, `CQLExecutor.jsx`, `__tests__/erro503.test.jsx` (novo) | `fetch` mockado com 503 renderiza o banner | M4.1, M4.22 |
+| M4.24 | Cliente envia `X-Admin-Token` nas rotas de reconfiguração | `CQLExecutor.jsx`, `pipelineConfigurator.jsx`, `__tests__/adminToken.test.jsx` (novo) | chamada a `/neo4j/connect` inclui o header | M4.4 |
+
+**Ordem de despacho** — três frentes paralelas desde o dia 1, mais um lote solto:
+
+```
+T2 (app.py, serial)   M4.2 → M4.4 → M4.5 → M4.6 → M4.7 → M4.8 → M4.9 → M4.10 → M4.11
+T2 (routers)          M4.1 → M4.3 ──────────────────────────────────────────┐
+T2 (isolado)          M4.12                                (sem dependência) │
+T5 (grafo)            M4.13 → M4.14 → M4.15 ─────────────────────────────────┴→ M4.16 → M4.17
+                                                                                M4.16 → M4.18 → M4.19
+                                                                                M4.15+M4.16 → M4.20
+T4 (frontend)         M4.21 ‖ M4.22 → M4.23 (após M4.1)
+                                       M4.24 (após M4.4)
+```
+
+**Primeira onda, despachável imediatamente, 5 write-locks disjuntos, nenhum em `app.py`:** M4.1, M4.12, M4.13, M4.21, M4.22.
+
+> **`app.py` é o gargalo real de M4:** 9 dos 20 lotes travam o mesmo arquivo (hoje 2 597 linhas, não as 2 122 registradas na ficha de fatos). A trilha T2 vai levar tanto tempo quanto as outras três somadas — antecipar Arq-B (M5) para depois de M4.7 libera M4.8–M4.11 para rodar em paralelo.
 
 **Gate de M4:** bateria [`security-probe`](../skills/security-probe/SKILL.md) verde; Cypher destrutivo recusado na rota de consulta; ingest legítimo continua funcionando; rota administrativa rejeita requisição sem token; **medição antes/depois anexada a cada item de performance** (≥3 repetições, mediana e dispersão, ambiente reportado); `getEventListeners(svg)` estável entre cliques; **nenhum golden snapshot de M0 mudou**; `make reference-check` verde.
 
@@ -276,7 +334,7 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 
 **Gate de M5:** golden snapshots **idênticos byte a byte** (é refatoração, não mudança de comportamento); `docker compose up` sobe tudo; `grep -rl "localhost:8000" Frontend/` vazio; `make reference-check` verde.
 
-> **Arq-B tem valor de processo além do técnico:** enquanto `app.py` for um monólito de 2 122 linhas, a trilha T2 é **serial** e é o gargalo de paralelismo do projeto inteiro ([§7 da arquitetura](09-arquitetura-de-agentes.md#7-paralelismo--seis-trilhas)). Quebrá-lo multiplica a vazão de todos os marcos seguintes.
+> **Arq-B tem valor de processo além do técnico:** enquanto `app.py` for um monólito de 2 597 linhas (medido em 2026-09-01; ver M4), a trilha T2 é **serial** e é o gargalo de paralelismo do projeto inteiro ([§7 da arquitetura](09-arquitetura-de-agentes.md#7-paralelismo--seis-trilhas)). Quebrá-lo multiplica a vazão de todos os marcos seguintes.
 
 ---
 
