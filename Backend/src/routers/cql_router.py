@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from src.services.neo4j_services import neo4j_service, Neo4jUnavailableError
+from src.logging_conf import obter_logger
 import re
 
 router = APIRouter()
+logger = obter_logger(__name__)
 
 NEO4J_RETRY_AFTER_SECONDS = "30"
 
@@ -48,8 +50,9 @@ async def execute_cql(query_data: dict):
         raise _neo4j_indisponivel()
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na execução: {str(e)}")
+    except Exception:
+        logger.exception("Erro na execução de CQL")
+        raise HTTPException(status_code=500, detail="Erro na execução da query.")
     
 @router.post("/execute-batch")
 async def execute_batch_cql(query_data: dict):
@@ -88,5 +91,6 @@ async def execute_batch_cql(query_data: dict):
         raise _neo4j_indisponivel()
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na execução do batch: {str(e)}")
+    except Exception:
+        logger.exception("Erro na execução de CQL em lote")
+        raise HTTPException(status_code=500, detail="Erro na execução da query em lote.")

@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Response, UploadFile, File, Form, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Response, UploadFile, File, Form, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
@@ -26,6 +26,11 @@ from src.services.ncbi_acquisition import NCBIAcquisition
 from src.services.genericOWIDAnalyzer import GenericOWIDAnalyzer
 from src.services.cql_batch_service import init_cql_batch_service
 from src.utils.treePlot import render_annotated_tree, map_country_to_region
+from src.logging_conf import configurar_logging, obter_logger
+from src.seguranca import exigir_admin, limitar_taxa
+
+configurar_logging()
+logger = obter_logger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PATH_BASE_WORKFLOW = os.path.abspath(os.path.join(BASE_DIR, "../../BioComp_UFF"))
@@ -95,6 +100,20 @@ app.add_middleware(
 )
 
 
+async def _fechar_se_origem_nao_permitida(websocket: WebSocket) -> bool:
+    """M4.5: reaproveita a allowlist de CORS para o handshake de WebSocket.
+
+    `CORSMiddleware` não se aplica a WebSocket; sem esta checagem, qualquer
+    origem se conecta. Fecha com 1008 (policy violation) antes de aceitar.
+    Devolve True se a conexão foi fechada.
+    """
+    origin = websocket.headers.get("origin")
+    if origin not in ALLOWED_ORIGINS:
+        await websocket.close(code=1008)
+        return True
+    return False
+
+
 
 app.include_router(
     neo4j_router,
@@ -148,10 +167,12 @@ class WorkflowConfig(BaseModel):
     """Modelo para as configurações do workflow enviadas pelo frontend."""
     configs: Dict[str, Any] = Field(..., description="Dicionário de configurações para o workflow.")
 
+NCBI_RETMAX_MAXIMO = 500  # M4.6: teto contra busca desproporcional ao NCBI.
+
 class NCBIDownloadRequest(BaseModel):
     query: str = Field(..., description="Query de busca no NCBI")
     species_name: Optional[str] = Field(None, description="Nome personalizado para a espécie (opcional)")
-    retmax: int = Field(100, description="Número máximo de sequências para download")
+    retmax: int = Field(100, le=NCBI_RETMAX_MAXIMO, description="Número máximo de sequências para download")
     initial_min_length: Optional[int] = Field(None, description="Comprimento mínimo inicial (bp)")
     refined_min_length: Optional[int] = Field(None, description="Comprimento mínimo refinado (bp)")
     utr5_end: Optional[int] = Field(None, description="Posição final do UTR 5'")
@@ -169,7 +190,7 @@ class NCBIAccessionRequest(BaseModel):
 
 class NCBISearchRequest(BaseModel):
     query: str = Field(..., description="Termo para busca de espécies")
-    retmax: int = Field(10, description="Número máximo de resultados")
+    retmax: int = Field(10, le=NCBI_RETMAX_MAXIMO, description="Número máximo de resultados")
 
 
 #  WebSocket para Monitoramento de Progresso 
@@ -183,14 +204,14 @@ class ProgressConnectionManager:
         if project_name not in self.active_connections:
             self.active_connections[project_name] = []
         self.active_connections[project_name].append(websocket)
-        print(f"Cliente conectado ao projeto: {project_name}")
+        logger.info("Cliente conectado ao projeto: %s", project_name)
 
     def disconnect(self, project_name: str, websocket: WebSocket):
         if project_name in self.active_connections:
             self.active_connections[project_name].remove(websocket)
             if not self.active_connections[project_name]:
                 del self.active_connections[project_name]
-        print(f"Cliente desconectado do projeto: {project_name}")
+        logger.info("Cliente desconectado do projeto: %s", project_name)
 
     async def broadcast(self, project_name: str, message: dict):
         """Envia uma mensagem JSON para todos os clientes de um projeto."""
@@ -222,93 +243,92 @@ async def stream_workflow_output(project_name: str, process: asyncio.subprocess.
     """
     Lê stdout/stderr de um processo e analisa o progresso real
     """
-    print(f"Iniciando streaming de saída para o projeto: {project_name}")
+    logger.info("Iniciando streaming de saída para o projeto: %s", project_name)
     
     tqdm_regex = re.compile(r"(\d+)\s*%\s*\|")
     step_regex = re.compile(r"STEP:\s*(.*)")
     progress_regex = re.compile(r"Progress:\s*(\d+)%")
     
-    current_step = "Starting..."
-    last_percentage = 0
+    async def consumir_stdout():
+        # `readline()` até `b''` (EOF de verdade) — sem timeout, sem poll. O
+        # laço só termina quando o pipe fecha, então nada do que o processo
+        # ainda tinha para escrever fica preso no buffer (M4.11).
+        while True:
+            stdout_line = await process.stdout.readline()
+            if not stdout_line:
+                break
 
-    while True:
-        if process.returncode is not None:
-            break
-        
-        try:
-            stdout_line = await asyncio.wait_for(process.stdout.readline(), timeout=0.1)
-            if stdout_line:
-                line_str = stdout_line.decode('utf-8', errors='ignore').strip()
-                
-                tqdm_match = tqdm_regex.search(line_str)
-                if tqdm_match:
-                    percentage = int(tqdm_match.group(1))
-                    last_percentage = percentage
-                    
-                    await manager.broadcast(project_name, {
-                        "type": "tqdm_update",
-                        "payload": {"percentage": percentage, "details": line_str}
-                    })
-                
-                step_match = step_regex.search(line_str)
-                if step_match:
-                    current_step = step_match.group(1).strip()
-                    await manager.broadcast(project_name, {
-                        "type": "step_update",
-                        "payload": {"step": current_step}
-                    })
-                
-                progress_match = progress_regex.search(line_str)
-                if progress_match:
-                    percentage = int(progress_match.group(1))
-                    last_percentage = percentage
-                    
-                    await manager.broadcast(project_name, {
-                        "type": "tqdm_update",
-                        "payload": {"percentage": percentage, "details": line_str}
-                    })
-                
-                else:
-                    parsed_line = parse_log_line(line_str)
-                    await manager.broadcast(project_name, {
-                        "type": "progress_update", 
-                        "payload": parsed_line
-                    })
+            line_str = stdout_line.decode('utf-8', errors='ignore').strip()
 
-        except asyncio.TimeoutError:
-            pass 
+            tqdm_match = tqdm_regex.search(line_str)
+            if tqdm_match:
+                percentage = int(tqdm_match.group(1))
 
-        try:
-            stderr_line = await asyncio.wait_for(process.stderr.readline(), timeout=0.1)
-            if stderr_line:
-                line_str = stderr_line.decode('utf-8', errors='ignore').strip()
+                await manager.broadcast(project_name, {
+                    "type": "tqdm_update",
+                    "payload": {"percentage": percentage, "details": line_str}
+                })
 
-                # D22 — stderr NÃO é sinônimo de erro. O `tqdm` escreve a barra
-                # de progresso ali, e rotular tudo como ERROR fazia uma execução
-                # saudável chegar ao usuário como enxurrada de erros. A barra
-                # vira progresso; o resto vira aviso, não erro.
-                tqdm_match = tqdm_regex.search(line_str)
-                if tqdm_match:
-                    last_percentage = int(tqdm_match.group(1))
-                    await manager.broadcast(project_name, {
-                        "type": "tqdm_update",
-                        "payload": {"percentage": last_percentage, "details": line_str}
-                    })
-                else:
-                    await manager.broadcast(project_name, {
-                        "type": "progress_update",
-                        "payload": {
-                            "level": "ERROR" if _NIVEL_ERRO_STDERR.search(line_str) else "WARNING",
-                            "message": line_str,
-                            "timestamp": datetime.datetime.now().isoformat()
-                        }
-                    })
-        except asyncio.TimeoutError:
-            pass
+            step_match = step_regex.search(line_str)
+            if step_match:
+                current_step = step_match.group(1).strip()
+                await manager.broadcast(project_name, {
+                    "type": "step_update",
+                    "payload": {"step": current_step}
+                })
 
+            progress_match = progress_regex.search(line_str)
+            if progress_match:
+                percentage = int(progress_match.group(1))
+
+                await manager.broadcast(project_name, {
+                    "type": "tqdm_update",
+                    "payload": {"percentage": percentage, "details": line_str}
+                })
+
+            else:
+                parsed_line = parse_log_line(line_str)
+                await manager.broadcast(project_name, {
+                    "type": "progress_update",
+                    "payload": parsed_line
+                })
+
+    async def consumir_stderr():
+        while True:
+            stderr_line = await process.stderr.readline()
+            if not stderr_line:
+                break
+
+            line_str = stderr_line.decode('utf-8', errors='ignore').strip()
+
+            # D22 — stderr NÃO é sinônimo de erro. O `tqdm` escreve a barra
+            # de progresso ali, e rotular tudo como ERROR fazia uma execução
+            # saudável chegar ao usuário como enxurrada de erros. A barra
+            # vira progresso; o resto vira aviso, não erro.
+            tqdm_match = tqdm_regex.search(line_str)
+            if tqdm_match:
+                percentage = int(tqdm_match.group(1))
+                await manager.broadcast(project_name, {
+                    "type": "tqdm_update",
+                    "payload": {"percentage": percentage, "details": line_str}
+                })
+            else:
+                await manager.broadcast(project_name, {
+                    "type": "progress_update",
+                    "payload": {
+                        "level": "ERROR" if _NIVEL_ERRO_STDERR.search(line_str) else "WARNING",
+                        "message": line_str,
+                        "timestamp": datetime.datetime.now().isoformat()
+                    }
+                })
+
+    # Uma task por stream, e uma terceira aguardando o processo terminar — as
+    # duas primeiras drenam stdout/stderr até EOF antes que a terceira feche
+    # o ciclo com o código de saída.
+    await asyncio.gather(consumir_stdout(), consumir_stderr())
     return_code = await process.wait()
     
-    print(f"Workflow do projeto {project_name} concluído com código de saída: {return_code}")
+    logger.info("Workflow do projeto %s concluído com código de saída: %s", project_name, return_code)
 
     final_message = {
         "timestamp": datetime.datetime.now().isoformat()
@@ -326,7 +346,7 @@ async def stream_workflow_output(project_name: str, process: asyncio.subprocess.
     if project_name in running_workflows:
         del running_workflows[project_name]
 
-@app.post("/projects/{project_name}/run", status_code=202)
+@app.post("/projects/{project_name}/run", status_code=202, dependencies=[Depends(limitar_taxa("projects-run"))])
 async def run_workflow(project_name: str, workflow_config: WorkflowConfig):
     """
     Inicia a execução do workflow de análise para um projeto específico.
@@ -374,7 +394,7 @@ async def run_workflow(project_name: str, workflow_config: WorkflowConfig):
         config_str
     ]
 
-    print(f"Executando comando para o projeto '{project_name}': {' '.join(command)}")
+    logger.info("Executando comando para o projeto '%s': %s", project_name, ' '.join(command))
     
     
     try:
@@ -392,10 +412,11 @@ async def run_workflow(project_name: str, workflow_config: WorkflowConfig):
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Falha ao iniciar o workflow: {e}")
+    except Exception:
+        logger.exception("Falha ao iniciar o workflow do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Falha ao iniciar o workflow.")
 
-@app.post("/projects/{project_name}/rerun", status_code=202)
+@app.post("/projects/{project_name}/rerun", status_code=202, dependencies=[Depends(limitar_taxa("projects-rerun"))])
 async def rerun_workflow(project_name: str):
     """
     Re-executa um workflow existente usando as configurações salvas.
@@ -425,7 +446,7 @@ async def rerun_workflow(project_name: str):
             json.dumps(saved_config)
         ]
 
-        print(f"Reexecutando projeto '{project_name}': {' '.join(command)}")
+        logger.info("Reexecutando projeto '%s': %s", project_name, ' '.join(command))
         
         process = await asyncio.create_subprocess_exec(
             *command,
@@ -441,8 +462,9 @@ async def rerun_workflow(project_name: str):
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Falha ao reexecutar o workflow: {e}")
+    except Exception:
+        logger.exception("Falha ao reexecutar o workflow do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Falha ao reexecutar o workflow.")
 
 @app.get("/projects/{project_name}/can-rerun")
 async def can_rerun_project(project_name: str):
@@ -495,8 +517,9 @@ async def delete_project(project_name: str):
 
     try:
         shutil.rmtree(project_path)
-    except OSError as e:
-        raise HTTPException(status_code=500, detail=f"Falha ao excluir o projeto: {e}")
+    except OSError:
+        logger.exception("Falha ao excluir o projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Falha ao excluir o projeto.")
 
     return {"message": f"Projeto '{project_name}' excluído com sucesso."}
 
@@ -547,8 +570,9 @@ async def get_owid_metadata(request: Request):
         return JSONResponse(content=report)
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Erro ao processar JSON: {str(e)}")
+    except Exception:
+        logger.exception("Erro ao processar JSON em /api/owid/metadata/")
+        raise HTTPException(status_code=400, detail="Erro ao processar o JSON enviado.")
 
 def build_metadata_index(metadata_path):
 
@@ -622,7 +646,7 @@ def get_metadata_cache(metadata_path: str):
         if cache_entry and cache_entry["mtime"] == file_mtime:
             return cache_entry["data"]
 
-        print(" Building metadata cache...")
+        logger.info("Construindo cache de metadata...")
 
         data = build_metadata_index(
             metadata_path
@@ -801,15 +825,16 @@ async def search_tree_nodes(
         raise HTTPException(status_code=404, detail="Metadata not found")
 
     try:
-        cache = get_metadata_cache(metadata_path)
+        cache = await asyncio.to_thread(get_metadata_cache, metadata_path)
         nodes = cache["nodes"]
 
         return nodes
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Erro ao buscar nós do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Erro ao buscar nós da árvore.")
 
 
 @app.get("/api/tree/{project_name}/node/{node_id}")
@@ -821,7 +846,7 @@ async def get_node_details(project_name: str, node_id: str):
 
     try:
 
-        cache = get_metadata_cache(metadata_path)
+        cache = await asyncio.to_thread(get_metadata_cache, metadata_path)
 
         node = cache["node_index"].get(node_id)
 
@@ -831,8 +856,9 @@ async def get_node_details(project_name: str, node_id: str):
         return node
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Erro ao buscar detalhes do nó '%s' no projeto '%s'", node_id, project_name)
+        raise HTTPException(status_code=500, detail="Erro ao buscar detalhes do nó.")
 
 
 @app.get("/api/tree/{project_name}/insights")
@@ -844,13 +870,14 @@ async def get_tree_insights(project_name: str):
 
     try:
 
-        cache = get_metadata_cache(metadata_path)
+        cache = await asyncio.to_thread(get_metadata_cache, metadata_path)
 
         return cache["insights"]
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Erro ao gerar insights do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Erro ao gerar insights da árvore.")
 
 @app.get("/api/tree/metadata/{project_name}", status_code=202)
 async def get_tree_metadata(project_name: str):
@@ -874,8 +901,9 @@ async def get_tree_metadata(project_name: str):
             
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading metadata: {e}")
+    except Exception:
+        logger.exception("Erro ao ler metadata do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Erro ao ler metadata.")
 
 @app.get("/api/gen_plot/{project_name}", status_code=200)
 async def generate_tree_plot(project_name: str):
@@ -895,40 +923,50 @@ async def generate_tree_plot(project_name: str):
     if not os.path.exists(tree_path):
         if os.path.exists(nexus_path):
             try:
-                print("Convertendo arquivo NEXUS para Newick...")
-                Phylo.convert(nexus_path, 'nexus', tree_path, 'newick')
+                logger.info("Convertendo arquivo NEXUS para Newick (projeto '%s')...", project_name)
+                # M4.10: conversão de árvore é CPU-bound; roda numa thread.
+                await asyncio.to_thread(Phylo.convert, nexus_path, 'nexus', tree_path, 'newick')
             except HTTPException:
                 raise
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Erro ao converter NEXUS para Newick: {str(e)}")
+            except Exception:
+                logger.exception("Erro ao converter NEXUS para Newick (projeto '%s')", project_name)
+                raise HTTPException(status_code=500, detail="Erro ao converter árvore de NEXUS para Newick.")
         else:
             raise HTTPException(status_code=404, detail="Tree files (.nwk or .nexus) not found")
-        
-    try:
-        # Garante que o diretório de output do plot exista
-        os.makedirs(plot_dir, exist_ok=True)
-        
-        # Puxa os dados cacheados/indexados
-        cache = get_metadata_cache(metadata_path)
-        node_index = cache["node_index"] # Utiliza o dicionário indexado pela chave para acesso O(1) no ETE3 (M4.12: era cache["nodes"], uma lista)
 
-        # Otimização: Só gera a imagem se ela não existir ou se a árvore/metadados forem mais recentes
-        # Para forçar a geração sempre, remova este if.
-        if not os.path.exists(plot_path):
-            # Chamada da função ETE3 desenvolvida anteriormente
-            render_annotated_tree(
-                tree_file=tree_path, 
-                metadata_dict=node_index, 
-                output_file=plot_path
-            )
+    try:
+        # M4.10: cache de metadata + render ETE3 é CPU-bound; roda numa thread.
+        # Refatoração pura — mesma lógica, só mudou de função.
+        await asyncio.to_thread(_gerar_plot_sync, tree_path, metadata_path, plot_dir, plot_path)
 
         # Retorna o arquivo binário da imagem gerada
         return FileResponse(plot_path, media_type="image/png")
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao gerar a visualização: {str(e)}")
+    except Exception:
+        logger.exception("Erro ao gerar a visualização do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Erro ao gerar a visualização.")
+
+
+def _gerar_plot_sync(tree_path: str, metadata_path: str, plot_dir: str, plot_path: str) -> None:
+    """Corpo síncrono de `generate_tree_plot` (M4.10) — roda em thread própria."""
+    # Garante que o diretório de output do plot exista
+    os.makedirs(plot_dir, exist_ok=True)
+
+    # Puxa os dados cacheados/indexados
+    cache = get_metadata_cache(metadata_path)
+    node_index = cache["node_index"]  # Utiliza o dicionário indexado pela chave para acesso O(1) no ETE3 (M4.12: era cache["nodes"], uma lista)
+
+    # Otimização: Só gera a imagem se ela não existir ou se a árvore/metadados forem mais recentes
+    # Para forçar a geração sempre, remova este if.
+    if not os.path.exists(plot_path):
+        # Chamada da função ETE3 desenvolvida anteriormente
+        render_annotated_tree(
+            tree_file=tree_path,
+            metadata_dict=node_index,
+            output_file=plot_path
+        )
 
 @app.get("/dataFolders", response_model=List[Project])
 async def get_data_folders():
@@ -1150,19 +1188,21 @@ async def get_paginated_json(
             try:
                 with open(full_path, 'r', encoding='utf-8') as f:
                     conteudo = json.load(f)
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError:
                 # Arquivo corrompido é 400, não 500: o problema está no arquivo,
                 # e o explorador precisa poder dizer isso a quem clicou nele.
+                logger.warning("JSON inválido em '%s'", full_path, exc_info=True)
                 raise HTTPException(status_code=400,
-                                    detail=f"O arquivo não contém JSON válido: {e}")
+                                    detail="O arquivo não contém JSON válido.")
             return {"content": conteudo, "currentIndex": 0, "totalItems": 1, "kind": kind}
 
         prefixo = "item.item" if kind == "array_of_arrays" else "item"
         try:
             total_items = get_json_total_items(full_path, prefixo)
-        except ijson.JSONError as e:
+        except ijson.JSONError:
+            logger.warning("JSON inválido em '%s'", full_path, exc_info=True)
             raise HTTPException(status_code=400,
-                                detail=f"O arquivo não contém JSON válido: {e}")
+                                detail="O arquivo não contém JSON válido.")
 
         if total_items == 0:
             raise HTTPException(status_code=404, detail="O arquivo JSON está vazio.")
@@ -1189,8 +1229,9 @@ async def get_paginated_json(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao ler JSON de forma paginada: {e}")
+    except Exception:
+        logger.exception("Erro ao ler JSON de forma paginada em '%s'", full_path)
+        raise HTTPException(status_code=500, detail="Erro ao ler JSON de forma paginada.")
 
 @app.get("/file")
 async def get_file_content(path: str = Query(..., description="Caminho relativo do arquivo.")):
@@ -1311,8 +1352,9 @@ async def get_file_content(path: str = Query(..., description="Caminho relativo 
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao ler arquivo: {e}")
+    except Exception:
+        logger.exception("Erro ao ler arquivo '%s'", full_path)
+        raise HTTPException(status_code=500, detail="Erro ao ler arquivo.")
 
     raise HTTPException(status_code=415, detail="Tipo de arquivo não suportado para pré-visualização.")
 
@@ -1774,88 +1816,96 @@ async def compare_trees(tree_data: dict):
     Compara duas árvores filogenéticas no formato Nexus
     """
     try:
-        tree1_nexus = tree_data.get('tree1')
-        tree2_nexus = tree_data.get('tree2')
-        
-        if not tree1_nexus or not tree2_nexus:
-            raise HTTPException(status_code=400, detail="Both tree1 and tree2 content are required")
-        
-        trees1 = extract_trees_from_nexus(tree1_nexus)
-        if len(trees1) == 0:
-            raise HTTPException(status_code=400, detail="No trees found in tree1 Nexus content")
-
-        # Cada árvore é lida no próprio namespace. Impor o da primeira à
-        # segunda fazia o dendropy abortar sempre que os rótulos divergiam,
-        # e é assim que D13 derrubava metade das comparações de VARV-6.
-        trees2 = extract_trees_from_nexus(tree2_nexus)
-        if len(trees2) == 0:
-            raise HTTPException(status_code=400, detail="No trees found in tree2 Nexus content")
-
-        tree1 = trees1[0]
-        tree2 = trees2[0]
-
-        tree1.is_rooted = False
-        tree2.is_rooted = False
-
-        tree1, tree2 = align_taxon_namespaces(tree1, tree2, canonical_label_map(tree1, tree2))
-
-        rotulos1, rotulos2 = leaf_labels(tree1), leaf_labels(tree2)
-        if rotulos1 != rotulos2:
-            somente1 = sorted(rotulos1 - rotulos2)
-            somente2 = sorted(rotulos2 - rotulos1)
-            raise HTTPException(
-                status_code=400,
-                detail=("Trees do not share the same taxon set; RF and quartet "
-                        f"distances are undefined. Only in tree1: {somente1}. "
-                        f"Only in tree2: {somente2}."))
-
-        rf_distance = calculate_rf_distance(tree1, tree2)
-        quartet_distance, quartet_motivo = calculate_quartet_distance(tree1, tree2)
-        common_clades, common_clade_descriptions = find_common_clades(tree1, tree2)
-        conflicting_clades, conflicting_descriptions = find_conflicting_clades(tree1, tree2)
-        
-        tree1_stats = get_tree_statistics(tree1)
-        tree2_stats = get_tree_statistics(tree2)
-        
-        similarity_score = calculate_similarity(tree1, tree2, common_clades)
-        
-        n_taxa = len(tree1.taxon_namespace)
-        max_rf = rf_maximo(n_taxa)
-        max_quartet = quartet_maximo(n_taxa)
-
-        return {
-            'rf_distance': rf_distance,
-            # O máximo e o normalizado saem daqui prontos. A interface os
-            # recalculava por conta própria, e duas fórmulas para a mesma
-            # grandeza divergem na primeira mudança — é D5 noutro assunto.
-            'rf_max': max_rf,
-            'rf_normalized': round(rf_distance / max_rf, 4) if max_rf else None,
-            # `null` quando indefinida, **com o motivo ao lado** (regra 5).
-            'quartet_distance': quartet_distance,
-            'quartet_max': max_quartet or None,
-            'quartet_normalized': (round(quartet_distance / max_quartet, 4)
-                                   if quartet_distance is not None and max_quartet else None),
-            'quartet_note': quartet_motivo,
-            'common_clades': common_clades,
-            'conflicting_clades': conflicting_clades,
-            'similarity_score': round(similarity_score, 2),
-            'tree1_stats': tree1_stats,
-            'tree2_stats': tree2_stats,
-            'taxon_count': n_taxa,
-            'comparison_notes': {
-                'consistency': check_consistency(rf_distance, quartet_distance, n_taxa),
-                'rf_interpretation': interpret_rf_distance(rf_distance, tree1_stats['leaf_nodes']),
-                'quartet_interpretation': interpret_quartet_distance(quartet_distance, tree1_stats['leaf_nodes']),
-                'similarity_interpretation': interpret_similarity(similarity_score)
-            }
-        }
-        
+        # M4.10: dendropy/RF é CPU-bound; roda numa thread para não travar o
+        # loop. Refatoração pura — a lógica abaixo não mudou de lugar nenhum.
+        return await asyncio.to_thread(_comparar_arvores_sync, tree_data)
     except HTTPException:
         raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error comparing trees: {str(e)}")
+    except ValueError:
+        logger.warning("Entrada inválida em /api/tree/compare", exc_info=True)
+        raise HTTPException(status_code=400, detail="Entrada inválida para comparação de árvores.")
+    except Exception:
+        logger.exception("Erro ao comparar árvores")
+        raise HTTPException(status_code=500, detail="Erro ao comparar árvores.")
+
+
+def _comparar_arvores_sync(tree_data: dict) -> dict:
+    """Corpo síncrono de `compare_trees` (M4.10) — roda em thread própria."""
+    tree1_nexus = tree_data.get('tree1')
+    tree2_nexus = tree_data.get('tree2')
+
+    if not tree1_nexus or not tree2_nexus:
+        raise HTTPException(status_code=400, detail="Both tree1 and tree2 content are required")
+
+    trees1 = extract_trees_from_nexus(tree1_nexus)
+    if len(trees1) == 0:
+        raise HTTPException(status_code=400, detail="No trees found in tree1 Nexus content")
+
+    # Cada árvore é lida no próprio namespace. Impor o da primeira à
+    # segunda fazia o dendropy abortar sempre que os rótulos divergiam,
+    # e é assim que D13 derrubava metade das comparações de VARV-6.
+    trees2 = extract_trees_from_nexus(tree2_nexus)
+    if len(trees2) == 0:
+        raise HTTPException(status_code=400, detail="No trees found in tree2 Nexus content")
+
+    tree1 = trees1[0]
+    tree2 = trees2[0]
+
+    tree1.is_rooted = False
+    tree2.is_rooted = False
+
+    tree1, tree2 = align_taxon_namespaces(tree1, tree2, canonical_label_map(tree1, tree2))
+
+    rotulos1, rotulos2 = leaf_labels(tree1), leaf_labels(tree2)
+    if rotulos1 != rotulos2:
+        somente1 = sorted(rotulos1 - rotulos2)
+        somente2 = sorted(rotulos2 - rotulos1)
+        raise HTTPException(
+            status_code=400,
+            detail=("Trees do not share the same taxon set; RF and quartet "
+                    f"distances are undefined. Only in tree1: {somente1}. "
+                    f"Only in tree2: {somente2}."))
+
+    rf_distance = calculate_rf_distance(tree1, tree2)
+    quartet_distance, quartet_motivo = calculate_quartet_distance(tree1, tree2)
+    common_clades, common_clade_descriptions = find_common_clades(tree1, tree2)
+    conflicting_clades, conflicting_descriptions = find_conflicting_clades(tree1, tree2)
+
+    tree1_stats = get_tree_statistics(tree1)
+    tree2_stats = get_tree_statistics(tree2)
+
+    similarity_score = calculate_similarity(tree1, tree2, common_clades)
+
+    n_taxa = len(tree1.taxon_namespace)
+    max_rf = rf_maximo(n_taxa)
+    max_quartet = quartet_maximo(n_taxa)
+
+    return {
+        'rf_distance': rf_distance,
+        # O máximo e o normalizado saem daqui prontos. A interface os
+        # recalculava por conta própria, e duas fórmulas para a mesma
+        # grandeza divergem na primeira mudança — é D5 noutro assunto.
+        'rf_max': max_rf,
+        'rf_normalized': round(rf_distance / max_rf, 4) if max_rf else None,
+        # `null` quando indefinida, **com o motivo ao lado** (regra 5).
+        'quartet_distance': quartet_distance,
+        'quartet_max': max_quartet or None,
+        'quartet_normalized': (round(quartet_distance / max_quartet, 4)
+                               if quartet_distance is not None and max_quartet else None),
+        'quartet_note': quartet_motivo,
+        'common_clades': common_clades,
+        'conflicting_clades': conflicting_clades,
+        'similarity_score': round(similarity_score, 2),
+        'tree1_stats': tree1_stats,
+        'tree2_stats': tree2_stats,
+        'taxon_count': n_taxa,
+        'comparison_notes': {
+            'consistency': check_consistency(rf_distance, quartet_distance, n_taxa),
+            'rf_interpretation': interpret_rf_distance(rf_distance, tree1_stats['leaf_nodes']),
+            'quartet_interpretation': interpret_quartet_distance(quartet_distance, tree1_stats['leaf_nodes']),
+            'similarity_interpretation': interpret_similarity(similarity_score)
+        }
+    }
 
 
 def interpret_rf_distance(rf_distance: int, num_taxa: int) -> str:
@@ -1920,39 +1970,52 @@ async def analyze_tree_patterns(
     Analisa padrões de assinatura única e padrões quase-invariantes em todas as árvores de um projeto.
     """
     try:
-        project_path = os.path.join(PROJECTS_ROOT, project_name)
-        
-        fpmax_path = os.path.join(project_path, "out", "outputs", "all_results_fpmax.csv")
-        metadata_path = os.path.join(project_path, "out", "outputs", "metadata.json")
-        
-        if not os.path.exists(fpmax_path):
-            raise HTTPException(status_code=404, detail="Arquivo FPMax não encontrado")
-        if not os.path.exists(metadata_path):
-            raise HTTPException(status_code=404, detail="Arquivo de metadados não encontrado")
-        
-        fpmax_df = pd.read_csv(fpmax_path)
-               
-        hash_subtrees_infos = dict()
-        analysis_result = dict()
-        
-        for metadata in iter_metadata_nodes(metadata_path, iter_tree=True):
-            merge_hash_to_subtree(hash_subtrees_infos, get_hash_to_subtree(metadata))
-        
-        analysis_result = analyze_patterns(
-            fpmax_df=fpmax_df, 
-            rare_threshold=rare_threshold, 
-            robust_threshold=robust_threshold, 
-            min_size=min_pattern_size, 
-            max_size=max_pattern_size, 
-            hash_to_subtree_info=hash_subtrees_infos
+        # M4.10: FPMax/hash de subárvore é CPU-bound; roda numa thread para não
+        # travar o loop. Refatoração pura — mesma lógica, só mudou de função.
+        return await asyncio.to_thread(
+            _analisar_padroes_sync,
+            project_name, rare_threshold, robust_threshold, min_pattern_size, max_pattern_size,
         )
-        
-        return analysis_result
-        
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)}")
+    except Exception:
+        logger.exception("Erro na análise de padrões do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Erro na análise de padrões.")
+
+
+def _analisar_padroes_sync(
+    project_name: str,
+    rare_threshold: float,
+    robust_threshold: float,
+    min_pattern_size: int,
+    max_pattern_size: int,
+) -> dict:
+    """Corpo síncrono de `analyze_tree_patterns` (M4.10) — roda em thread própria."""
+    project_path = os.path.join(PROJECTS_ROOT, project_name)
+
+    fpmax_path = os.path.join(project_path, "out", "outputs", "all_results_fpmax.csv")
+    metadata_path = os.path.join(project_path, "out", "outputs", "metadata.json")
+
+    if not os.path.exists(fpmax_path):
+        raise HTTPException(status_code=404, detail="Arquivo FPMax não encontrado")
+    if not os.path.exists(metadata_path):
+        raise HTTPException(status_code=404, detail="Arquivo de metadados não encontrado")
+
+    fpmax_df = pd.read_csv(fpmax_path)
+
+    hash_subtrees_infos = dict()
+
+    for metadata in iter_metadata_nodes(metadata_path, iter_tree=True):
+        merge_hash_to_subtree(hash_subtrees_infos, get_hash_to_subtree(metadata))
+
+    return analyze_patterns(
+        fpmax_df=fpmax_df,
+        rare_threshold=rare_threshold,
+        robust_threshold=robust_threshold,
+        min_size=min_pattern_size,
+        max_size=max_pattern_size,
+        hash_to_subtree_info=hash_subtrees_infos
+    )
 
 def get_hash_to_subtree(metadata):
     """Mapeia hash de clado -> informação da subárvore.
@@ -2156,7 +2219,7 @@ def analyze_tree_coverage(patterns, hash_to_subtree_info):
 
 async def log_watcher(project_name: str):
     """Observa um arquivo de log e transmite novas linhas via WebSocket. (Para logs antigos)"""
-    print(f"Iniciando observador para o projeto: {project_name}")
+    logger.info("Iniciando observador para o projeto: %s", project_name)
     
     project_path = os.path.join(PROJECTS_ROOT, project_name)
     outputs_dir = os.path.join(project_path, "out", "outputs")
@@ -2178,7 +2241,7 @@ async def log_watcher(project_name: str):
 
     try:
         with open(log_path, "r", encoding='utf-8', errors='ignore') as f:
-            print(f"Lendo histórico do log: {log_path}")
+            logger.info("Lendo histórico do log: %s", log_path)
             for line in f:
                 parsed_line = parse_log_line(line)
                 await manager.broadcast(project_name, {
@@ -2192,7 +2255,7 @@ async def log_watcher(project_name: str):
     except Exception as e:
         await manager.broadcast(project_name, {"type": "error", "message": f"Erro no observador de log: {e}"})
     finally:
-        print(f"Observador de histórico para o projeto {project_name} concluído.")
+        logger.info("Observador de histórico para o projeto %s concluído.", project_name)
         if project_name in active_watchers:
             del active_watchers[project_name]
             
@@ -2200,9 +2263,10 @@ async def log_watcher(project_name: str):
 @app.post("/api/ncbi/download")
 async def ncbi_download_sequences(request: NCBIDownloadRequest):
     try:
-        result = ncbi_service.download_sequences(
+        result = await asyncio.to_thread(
+            ncbi_service.download_sequences,
             query=request.query,
-            species_name=request.species_name,  
+            species_name=request.species_name,
             retmax=request.retmax,
             initial_min_length=request.initial_min_length,
             refined_min_length=request.refined_min_length,
@@ -2210,7 +2274,7 @@ async def ncbi_download_sequences(request: NCBIDownloadRequest):
             utr3_start=request.utr3_start,
             similarity_threshold=request.similarity_threshold
         )
-        
+
         if result["success"]:
             return {
                 "success": True,
@@ -2219,11 +2283,12 @@ async def ncbi_download_sequences(request: NCBIDownloadRequest):
             }
         else:
             raise HTTPException(status_code=400, detail=result["message"])
-            
+
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro no download: {str(e)}")
+    except Exception:
+        logger.exception("Erro no download NCBI por busca (query='%s')", request.query)
+        raise HTTPException(status_code=500, detail="Erro no download.")
     
 @app.post("/api/ncbi/download-accessions")
 async def ncbi_download_by_accessions(request: NCBIAccessionRequest):
@@ -2231,7 +2296,8 @@ async def ncbi_download_by_accessions(request: NCBIAccessionRequest):
     Baixa sequências do NCBI baseado em números de acesso.
     """
     try:
-        result = ncbi_service.download_from_accessions(
+        result = await asyncio.to_thread(
+            ncbi_service.download_from_accessions,
             accessions=request.accessions,
             species_name=request.species_name,
             initial_min_length=request.initial_min_length,
@@ -2252,8 +2318,9 @@ async def ncbi_download_by_accessions(request: NCBIAccessionRequest):
             
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro no download: {str(e)}")
+    except Exception:
+        logger.exception("Erro no download NCBI por acessos %s", request.accessions)
+        raise HTTPException(status_code=500, detail="Erro no download.")
     
 @app.post("/api/ncbi/search-species")
 async def ncbi_search_species(request: NCBISearchRequest):
@@ -2261,7 +2328,8 @@ async def ncbi_search_species(request: NCBISearchRequest):
     Busca espécies no NCBI para autocompletar.
     """
     try:
-        species_list = ncbi_service.search_species(
+        species_list = await asyncio.to_thread(
+            ncbi_service.search_species,
             query=request.query,
             retmax=request.retmax
         )
@@ -2274,8 +2342,9 @@ async def ncbi_search_species(request: NCBISearchRequest):
         
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na busca: {str(e)}")
+    except Exception:
+        logger.exception("Erro na busca de espécies no NCBI (query='%s')", request.query)
+        raise HTTPException(status_code=500, detail="Erro na busca.")
 
 @app.get("/api/ncbi/email")
 async def get_ncbi_email():
@@ -2284,7 +2353,7 @@ async def get_ncbi_email():
     """
     return {"email": Entrez.email}
 
-@app.post("/api/ncbi/set-email")
+@app.post("/api/ncbi/set-email", dependencies=[Depends(exigir_admin)])
 async def set_ncbi_email(email: str = Form(...)):
     """
     Define o email para consultas ao NCBI.
@@ -2294,48 +2363,78 @@ async def set_ncbi_email(email: str = Form(...)):
 
     Entrez.email = email
     return {"success": True, "message": f"Email configurado: {email}"}
-    
-@app.post("/upload-data")
+
+#: M4.6 — teto de bytes por upload (soma de todos os arquivos) e de arquivos por
+#: requisição. Sem eles, `/upload-data` lê o corpo inteiro em memória sem limite.
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+MAX_UPLOAD_FILES = 50
+#: Razão descomprimido/comprimido acima da qual um ZIP é recusado como zip bomb.
+MAX_ZIP_EXPANSION_RATIO = 100
+
+@app.post("/upload-data", dependencies=[Depends(limitar_taxa("upload-data"))])
 async def upload_data(
     name: str = Form(..., description="Nome da pasta onde os dados serão salvos"),
     files: List[UploadFile] = File(..., description="Arquivos para upload (FASTA, ZIP)")
 ):
     """
     Faz upload de arquivos para análise, concatenando sequências em um único arquivo FASTA.
-    
+
     Args:
         name (str): Nome da pasta onde os dados serão salvos
         files (List[UploadFile]): Arquivos para upload (FASTA ou ZIP com FASTA)
-    
+
     Returns:
         dict: Mensagem de sucesso com informações do upload
     """
     try:
         if not name or not re.match(r'^[a-zA-Z0-9_-]+$', name):
             raise HTTPException(status_code=400, detail="Nome inválido. Use apenas letras, números, hífens e underscores.")
-        
+
+        if len(files) > MAX_UPLOAD_FILES:
+            raise HTTPException(status_code=413, detail=f"Máximo de {MAX_UPLOAD_FILES} arquivos por upload.")
+
         target_dir = os.path.join(DATA_ROOT, name)
         os.makedirs(target_dir, exist_ok=True)
-        
+
         final_fasta_path = os.path.join(target_dir, "concatenated_sequences.fasta")
         all_sequences = []
         processed_files = []
-        
+        total_bytes = 0
+
         for uploaded_file in files:
             file_content = await uploaded_file.read()
-            
+            total_bytes += len(file_content)
+            if total_bytes > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Upload excede o limite de {MAX_UPLOAD_BYTES / 1e6:.0f} MB.",
+                )
+
             if uploaded_file.filename.endswith('.zip'):
                 with zipfile.ZipFile(BytesIO(file_content), 'r') as zip_ref:
+                    descomprimido = sum(info.file_size for info in zip_ref.infolist())
+                    comprimido = max(len(file_content), 1)
+                    if descomprimido / comprimido > MAX_ZIP_EXPANSION_RATIO:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Razão de descompressão do ZIP suspeita demais para processar.",
+                        )
+                    if descomprimido > MAX_UPLOAD_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"Conteúdo descomprimido do ZIP excede {MAX_UPLOAD_BYTES / 1e6:.0f} MB.",
+                        )
+
                     zip_files = zip_ref.namelist()
                     fasta_files = [f for f in zip_files if f.lower().endswith(('.fasta', '.fa', '.fas', '.faa'))]
-                    
+
                     for fasta_file in fasta_files:
                         with zip_ref.open(fasta_file) as f:
                             content = f.read().decode('utf-8', errors='ignore')
                             sequences = list(SeqIO.parse(StringIO(content), "fasta"))
                             all_sequences.extend(sequences)
                             processed_files.append(fasta_file)
-            
+
             elif uploaded_file.filename.lower().endswith(('.fasta', '.fa', '.fas', '.faa')):
                 content = file_content.decode('utf-8', errors='ignore')
                 sequences = list(SeqIO.parse(StringIO(content), "fasta"))
@@ -2365,8 +2464,9 @@ async def upload_data(
         
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro durante o upload: {str(e)}")
+    except Exception:
+        logger.exception("Erro durante o upload para o projeto '%s'", name)
+        raise HTTPException(status_code=500, detail="Erro durante o upload.")
 
 @app.get("/uploaded-data", response_model=List[Project])
 async def get_uploaded_data():
@@ -2404,6 +2504,9 @@ async def websocket_progress_endpoint(websocket: WebSocket, project_name: str):
     Args:
         project_name (str): Nome do projeto.
     """
+    if await _fechar_se_origem_nao_permitida(websocket):
+        return
+
     await manager.connect(project_name, websocket)
     
     if project_name not in running_workflows and project_name not in active_watchers:
@@ -2428,25 +2531,30 @@ async def performance_watcher():
         if not performance_clients:
             break
 
-        cpu_usage = psutil.cpu_percent(interval=1)
+        # `interval=1` bloqueava o event loop inteiro por 1s a cada ciclo, com
+        # todo cliente WS conectado (M4.8). `interval=None` não bloqueia — só
+        # compara contra a chamada anterior — e o `sleep` abaixo mantém o ritmo.
+        cpu_usage = psutil.cpu_percent(interval=None)
         memory_info = psutil.virtual_memory()
         disk_info = psutil.disk_usage('/')
-        
+
         message = {
             "cpu": cpu_usage,
             "memory": memory_info.percent,
             "disk": disk_info.percent,
         }
-        
+
         for client in performance_clients[:]:
             try:
                 await client.send_json(message)
             except Exception:
                 performance_clients.remove(client)
 
+        await asyncio.sleep(1)
+
     global performance_watcher_task
     performance_watcher_task = None
-    print("Observador de performance encerrado.")
+    logger.info("Observador de performance encerrado.")
 
 @app.websocket("/ws/system-performance")
 async def websocket_performance_endpoint(websocket: WebSocket):
@@ -2459,11 +2567,14 @@ async def websocket_performance_endpoint(websocket: WebSocket):
         - **disk**: Uso de disco em porcentagem
     """
     global performance_watcher_task
+    if await _fechar_se_origem_nao_permitida(websocket):
+        return
+
     await websocket.accept()
     performance_clients.append(websocket)
 
     if performance_watcher_task is None or performance_watcher_task.done():
-        print("Iniciando observador de performance.")
+        logger.info("Iniciando observador de performance.")
         performance_watcher_task = asyncio.create_task(performance_watcher())
     
     try:
@@ -2471,7 +2582,7 @@ async def websocket_performance_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         performance_clients.remove(websocket)
-        print("Cliente de performance desconectado.")
+        logger.info("Cliente de performance desconectado.")
 
 def _dimensoes_do_fasta(caminho: str):
     """Número de sequências e comprimento da MAIOR delas, sem carregar o arquivo.

@@ -5,9 +5,12 @@ from pydantic import BaseModel
 from Bio import Entrez, SeqIO
 from Bio.Blast import NCBIWWW
 
+from src.logging_conf import obter_logger
+
 Entrez.email = "seu.email@exemplo.com"
 
 router = APIRouter()
+logger = obter_logger(__name__)
 
 class NCBIInfoRequest(BaseModel):
     identifier: str
@@ -40,7 +43,8 @@ def fetch_ncbi_info_sync(genbank_id: str):
             'length': len(record.seq)
         }
     except Exception as e:
-        raise RuntimeError(f"Erro ao contatar NCBI: {e}")
+        logger.exception("Erro ao contatar NCBI (id='%s')", genbank_id)
+        raise RuntimeError("Erro ao contatar NCBI.") from e
 
 @router.post("/info")
 async def get_ncbi_info(request_data: NCBIInfoRequest):
@@ -53,24 +57,24 @@ async def get_ncbi_info(request_data: NCBIInfoRequest):
         if "error" in info:
             raise HTTPException(status_code=404, detail=info["error"])
         return info
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Erro ao buscar informações NCBI (id='%s')", request_data.identifier)
+        raise HTTPException(status_code=500, detail="Erro ao buscar informações no NCBI.")
 
 def run_blast_task(project_name: str, sequence: str, database: str, program: str):
     """
     Função síncrona que executa o BLAST e envia o resultado via WebSocket.
     ATENÇÃO: Isso pode ser MUITO LENTO.
     """
-    print(f"Iniciando BLAST para o projeto {project_name}...")
+    logger.info("Iniciando BLAST para o projeto %s...", project_name)
     try:
         result_handle = NCBIWWW.qblast(program, database, sequence)
         blast_result = result_handle.read()
-        
-        print(f"BLAST para {project_name} concluído.")
-        
 
-    except Exception as e:
-        print(f"Erro no BLAST para {project_name}: {e}")
+        logger.info("BLAST para %s concluído.", project_name)
+
+    except Exception:
+        logger.exception("Erro no BLAST para %s", project_name)
 
 @router.post("/blast/{project_name}")
 async def run_blast(project_name: str, request_data: BLASTRequest, background_tasks: BackgroundTasks):

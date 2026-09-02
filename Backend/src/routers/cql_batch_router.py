@@ -1,13 +1,14 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from src.services.cql_batch_service import CQLBatchRequest, get_cql_batch_service
 from src.services.neo4j_services import neo4j_service
+from src.seguranca import limitar_taxa
 
 router = APIRouter()
 
 NEO4J_RETRY_AFTER_SECONDS = "30"
 
 
-@router.post("/execute-batch")
+@router.post("/execute-batch", dependencies=[Depends(limitar_taxa("cql-batch"))])
 async def execute_cql_batch(
     background_tasks: BackgroundTasks,
     request: CQLBatchRequest,

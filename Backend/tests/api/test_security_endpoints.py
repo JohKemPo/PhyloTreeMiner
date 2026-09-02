@@ -48,9 +48,18 @@ async def test_run_recusa_nome_de_projeto_invalido(client, nome):
 
 
 @pytest.mark.security
-async def test_set_email_invalido_devolve_400_e_nao_500(client):
-    """C-2: o try/except que envolve a validação converte o 400 em 500."""
-    r = await client.post("/api/ncbi/set-email", data={"email": "nao-e-email"})
+async def test_set_email_invalido_devolve_400_e_nao_500(client, monkeypatch):
+    """C-2: o try/except que envolve a validação converte o 400 em 500.
+
+    Desde M4.4 a rota exige X-Admin-Token; o teste autentica para exercitar a
+    validação em si, não o gate de admin (coberto por test_admin_token.py).
+    """
+    monkeypatch.setenv("ADMIN_TOKEN", "segredo-de-teste")
+    r = await client.post(
+        "/api/ncbi/set-email",
+        headers={"X-Admin-Token": "segredo-de-teste"},
+        data={"email": "nao-e-email"},
+    )
     assert r.status_code == 400, (
         f"esperado 400, veio {r.status_code}. Um HTTPException levantado dentro de "
         f"try/except Exception vira 500 sem o padrão `except HTTPException: raise`."
@@ -58,8 +67,13 @@ async def test_set_email_invalido_devolve_400_e_nao_500(client):
 
 
 @pytest.mark.security
-async def test_set_email_nao_vaza_excecao_interna(client):
-    r = await client.post("/api/ncbi/set-email", data={"email": "x"})
+async def test_set_email_nao_vaza_excecao_interna(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "segredo-de-teste")
+    r = await client.post(
+        "/api/ncbi/set-email",
+        headers={"X-Admin-Token": "segredo-de-teste"},
+        data={"email": "x"},
+    )
     corpo = r.text.lower()
     for vazamento in ("traceback", "file \"/", "/home/"):
         assert vazamento not in corpo, f"resposta vaza interno: {vazamento!r}"

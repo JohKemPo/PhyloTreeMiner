@@ -8,6 +8,10 @@ import re
 import glob
 import tempfile
 
+from src.logging_conf import obter_logger
+
+logger = obter_logger(__name__)
+
 class CQLBatchRequest(BaseModel):
     project_name: str
     cql_content: str = Field(..., description="Conteúdo CQL completo para execução")
@@ -75,8 +79,9 @@ class CQLBatchService:
             
         except HTTPException:
             raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Erro ao iniciar execução em lote: {str(e)}")
+        except Exception:
+            logger.exception("Erro ao iniciar execução em lote (projeto '%s')", request.project_name)
+            raise HTTPException(status_code=500, detail="Erro ao iniciar execução em lote.")
 
     async def process_cql_batch(
         self,
@@ -105,9 +110,9 @@ class CQLBatchService:
                         else:
                             cql_batch_status[project_name]["failed_blocks"] += 1
                             
-                    except Exception as e:
+                    except Exception:
                         cql_batch_status[project_name]["failed_blocks"] += 1
-                        print(f"Erro no bloco {index}: {str(e)}")
+                        logger.exception("Erro no bloco %s (projeto '%s')", index, project_name)
                     
                     total_processed = (
                         cql_batch_status[project_name]["processed_blocks"] + 
@@ -136,9 +141,9 @@ class CQLBatchService:
             
             cql_batch_status[project_name]["status"] = "completed"
             
-        except Exception as e:
-            cql_batch_status[project_name]["status"] = f"failed: {str(e)}"
-            print(f"Erro no processamento em lote: {str(e)}")
+        except Exception:
+            cql_batch_status[project_name]["status"] = "failed"
+            logger.exception("Erro no processamento em lote (projeto '%s')", project_name)
 
     async def execute_single_block(self, block: str, parameters: dict, index: int):
         """
@@ -158,8 +163,9 @@ class CQLBatchService:
                 "result": result
             }
             
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        except Exception:
+            logger.exception("Erro ao executar bloco %s", index)
+            return {"success": False, "error": "Erro ao executar o bloco CQL."}
 
     def parse_cql_blocks(self, content: str) -> List[str]:
         """
