@@ -66,6 +66,9 @@ const CQLExecutor = ({
   });
   const [cqlBlocks, setCqlBlocks] = useState([]);
   const [executionDetails, setExecutionDetails] = useState([]);
+  // M4.23: banner de "Neo4j fora do ar" — distinto do erro genérico de comando,
+  // preenchido a partir do corpo 503 devolvido por /api/cql/execute[-batch].
+  const [neo4jUnavailable, setNeo4jUnavailable] = useState(null);
   const { userId } = useUser();
   const navigate = useNavigate();
   const abortControllerRef = useRef(null);
@@ -176,10 +179,18 @@ const CQLExecutor = ({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 503) {
+          const err = new Error(
+            errorData.message || "Neo4j indisponível no momento.",
+          );
+          err.isNeo4jUnavailable = true;
+          throw err;
+        }
         throw new Error(errorData.detail || `HTTP ${response.status}`);
       }
 
+      setNeo4jUnavailable(null);
       const result = await response.json();
 
       setCqlBlocks((prev) => {
@@ -217,6 +228,10 @@ const CQLExecutor = ({
       message.success(`Command ${commandIndex + 1} executed successfully`);
     } catch (error) {
       console.error(`Retry failed for command ${commandIndex + 1}:`, error);
+
+      if (error.isNeo4jUnavailable) {
+        setNeo4jUnavailable({ message: error.message });
+      }
 
       setExecutionDetails((prev) =>
         prev.map((detail, idx) =>
@@ -505,10 +520,18 @@ const CQLExecutor = ({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 503) {
+          const err = new Error(
+            errorData.message || "Neo4j indisponível no momento.",
+          );
+          err.isNeo4jUnavailable = true;
+          throw err;
+        }
         throw new Error(errorData.detail || `HTTP ${response.status}`);
       }
 
+      setNeo4jUnavailable(null);
       const result = await response.json();
 
       // setExecutionDetails((prev) =>
@@ -599,6 +622,10 @@ const CQLExecutor = ({
         `Command batch starting at ${blockIndex} failed:`,
         error.message,
       );
+
+      if (error.isNeo4jUnavailable) {
+        setNeo4jUnavailable({ message: error.message });
+      }
 
       // setExecutionDetails((prev) =>
       //   prev.map((detail, idx) =>
@@ -930,6 +957,16 @@ const CQLExecutor = ({
       }
     >
       <Space direction="vertical" style={{ width: "100%" }} size="middle">
+        {neo4jUnavailable && (
+          <Alert
+            message="Neo4j indisponível"
+            description={`${neo4jUnavailable.message} Tente novamente em instantes.`}
+            type="warning"
+            showIcon
+            closable
+            onClose={() => setNeo4jUnavailable(null)}
+          />
+        )}
         {/* Upload Section */}
         <div>
           {!fileName ? (

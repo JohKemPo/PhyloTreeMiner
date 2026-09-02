@@ -58,6 +58,9 @@ const GraphVisualization = () => {
   const [predefinedQueries, setPredefinedQueries] = useState({});
   const [selectedNode, setSelectedNode] = useState(null);
   const [viewMode, setViewMode] = useState("initial");
+  // M4.23: banner de "Neo4j fora do ar" — distinto de "consulta sem resultado",
+  // preenchido a partir do corpo 503 devolvido por /api/neo4j/{graph,query}.
+  const [serviceUnavailable, setServiceUnavailable] = useState(null);
   const { userId } = useUser();
   const { addNotification } = useNotification();
 
@@ -438,6 +441,7 @@ const GraphVisualization = () => {
     setIsLoading(true);
     setQueryResults(null);
     setSelectedNode(null);
+    setServiceUnavailable(null);
     
     const finalQuery = injectUidFilter(query, userId);
     // Não zera `graphData` aqui: fazia o efeito de render destruir a
@@ -453,7 +457,16 @@ const GraphVisualization = () => {
         headers: { "Content-Type": "application/json", "X-User-ID": userId },
         body: JSON.stringify({ query: finalQuery }),
       });
-      if (!response.ok) throw new Error(`Erro na API: ${response.statusText}`);
+      if (!response.ok) {
+        if (response.status === 503) {
+          const errorData = await response.json().catch(() => ({}));
+          setServiceUnavailable({
+            message: errorData.message || "Neo4j indisponível no momento.",
+          });
+          return;
+        }
+        throw new Error(`Erro na API: ${response.statusText}`);
+      }
       const data = await response.json();
       if (data.success) {
         if (isGraphQuery) {
@@ -628,7 +641,28 @@ const GraphVisualization = () => {
         </Col>
 
         <Col xs={24} lg={16}>
-          {viewMode === "initial" && (
+          {!isLoading && serviceUnavailable && (
+            <Card style={{ height: "725px" }}>
+              <div
+                style={{
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Alert
+                  message="Neo4j indisponível"
+                  description={`${serviceUnavailable.message} Tente novamente em instantes.`}
+                  type="warning"
+                  showIcon
+                  style={{ maxWidth: "500px" }}
+                />
+              </div>
+            </Card>
+          )}
+
+          {!serviceUnavailable && viewMode === "initial" && (
             <Card style={{ height: "725px" }}>
               <div
                 style={{
@@ -658,7 +692,7 @@ const GraphVisualization = () => {
             </Card>
           )}
 
-          {!isLoading && viewMode === "graph" && (
+          {!isLoading && !serviceUnavailable && viewMode === "graph" && (
             <Card
               title="Graph Viewer"
               extra={
@@ -721,7 +755,7 @@ const GraphVisualization = () => {
             </Card>
           )}
 
-          {!isLoading && viewMode === "table" && (
+          {!isLoading && !serviceUnavailable && viewMode === "table" && (
             <Card title="Query Results" style={{ height: "100%" }}>
               {queryResults && queryResults.length > 0 ? (
                 <QueryResultTable results={queryResults} />
