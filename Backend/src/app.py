@@ -935,9 +935,24 @@ async def generate_tree_plot(project_name: str):
             raise HTTPException(status_code=404, detail="Tree files (.nwk or .nexus) not found")
 
     try:
-        # M4.10: cache de metadata + render ETE3 é CPU-bound; roda numa thread.
-        # Refatoração pura — mesma lógica, só mudou de função.
-        await asyncio.to_thread(_gerar_plot_sync, tree_path, metadata_path, plot_dir, plot_path)
+        os.makedirs(plot_dir, exist_ok=True)
+
+        # M4.10: a leitura/indexação do metadata é CPU-bound e thread-safe;
+        # roda numa thread (cache protegido por cache_lock).
+        cache = await asyncio.to_thread(get_metadata_cache, metadata_path)
+        node_index = cache["node_index"]  # dict indexado pela chave, acesso O(1) no ETE3 (M4.12: era cache["nodes"], uma lista)
+
+        # B4 (revisão de M4.10): render_annotated_tree usa ete3/PyQt, que
+        # exige rodar na main thread — chamá-la via asyncio.to_thread causa
+        # SIGSEGV ("QApplication was not created in the main() thread"),
+        # confirmado por execução real. Fica síncrona no event loop, como
+        # antes de M4.10; só a parte que é de fato thread-safe foi movida.
+        if not os.path.exists(plot_path):
+            render_annotated_tree(
+                tree_file=tree_path,
+                metadata_dict=node_index,
+                output_file=plot_path
+            )
 
         # Retorna o arquivo binário da imagem gerada
         return FileResponse(plot_path, media_type="image/png")
@@ -947,26 +962,6 @@ async def generate_tree_plot(project_name: str):
     except Exception:
         logger.exception("Erro ao gerar a visualização do projeto '%s'", project_name)
         raise HTTPException(status_code=500, detail="Erro ao gerar a visualização.")
-
-
-def _gerar_plot_sync(tree_path: str, metadata_path: str, plot_dir: str, plot_path: str) -> None:
-    """Corpo síncrono de `generate_tree_plot` (M4.10) — roda em thread própria."""
-    # Garante que o diretório de output do plot exista
-    os.makedirs(plot_dir, exist_ok=True)
-
-    # Puxa os dados cacheados/indexados
-    cache = get_metadata_cache(metadata_path)
-    node_index = cache["node_index"]  # Utiliza o dicionário indexado pela chave para acesso O(1) no ETE3 (M4.12: era cache["nodes"], uma lista)
-
-    # Otimização: Só gera a imagem se ela não existir ou se a árvore/metadados forem mais recentes
-    # Para forçar a geração sempre, remova este if.
-    if not os.path.exists(plot_path):
-        # Chamada da função ETE3 desenvolvida anteriormente
-        render_annotated_tree(
-            tree_file=tree_path,
-            metadata_dict=node_index,
-            output_file=plot_path
-        )
 
 @app.get("/dataFolders", response_model=List[Project])
 async def get_data_folders():
@@ -2369,7 +2364,65 @@ async def set_ncbi_email(email: str = Form(...)):
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 MAX_UPLOAD_FILES = 50
 #: Razão descomprimido/comprimido acima da qual um ZIP é recusado como zip bomb.
+#: Triagem barata pelo cabeçalho do ZIP — não é a defesa real (ver
+#: `_extrair_membro_com_teto`, que limita pelo byte de fato descomprimido).
 MAX_ZIP_EXPANSION_RATIO = 100
+#: Tamanho do bloco de leitura ao aplicar os tetos acima (B1/B2 da revisão de
+#: M4.6): ler em blocos e abortar assim que ultrapassa o teto evita
+#: materializar em memória um arquivo maior do que o próprio teto permite.
+TAMANHO_BLOCO_LEITURA_LIMITADA = 1024 * 1024
+
+
+async def _ler_upload_ate_o_teto(uploaded_file: UploadFile, bytes_restantes: int) -> bytes:
+    """Lê `uploaded_file` em blocos, abortando assim que passa de `bytes_restantes`.
+
+    B1 da revisão de M4.6: `await uploaded_file.read()` sem argumento
+    materializa o corpo inteiro em memória antes de qualquer checagem de
+    teto — um upload de alguns GB é lido por completo só para ser recusado
+    depois. Aqui o teto é aplicado durante a leitura, não depois dela.
+    """
+    partes = []
+    lido = 0
+    while True:
+        bloco = await uploaded_file.read(TAMANHO_BLOCO_LEITURA_LIMITADA)
+        if not bloco:
+            break
+        lido += len(bloco)
+        if lido > bytes_restantes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Upload excede o limite de {MAX_UPLOAD_BYTES / 1e6:.0f} MB.",
+            )
+        partes.append(bloco)
+    return b"".join(partes)
+
+
+def _extrair_membro_com_teto(zip_ref: "zipfile.ZipFile", nome_membro: str, bytes_restantes: int) -> bytes:
+    """Descomprime um membro do ZIP em blocos, com teto no byte real produzido.
+
+    B2 da revisão de M4.6: `ZipInfo.file_size` vem do cabeçalho do ZIP e é
+    escrito pelo próprio autor do arquivo — um ZIP forjado pode declarar um
+    tamanho pequeno e entregar muito mais bytes na descompressão real, o que
+    contornaria a checagem por `infolist()` feita antes (mantida como
+    triagem barata do caso honesto, não como a defesa). Aqui o teto é
+    aplicado sobre o que a descompressão de fato produz, byte a byte.
+    """
+    partes = []
+    lido = 0
+    with zip_ref.open(nome_membro) as membro:
+        while True:
+            bloco = membro.read(TAMANHO_BLOCO_LEITURA_LIMITADA)
+            if not bloco:
+                break
+            lido += len(bloco)
+            if lido > bytes_restantes:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Conteúdo descomprimido do ZIP excede o limite permitido.",
+                )
+            partes.append(bloco)
+    return b"".join(partes)
+
 
 @app.post("/upload-data", dependencies=[Depends(limitar_taxa("upload-data"))])
 async def upload_data(
@@ -2402,24 +2455,21 @@ async def upload_data(
         total_bytes = 0
 
         for uploaded_file in files:
-            file_content = await uploaded_file.read()
+            file_content = await _ler_upload_ate_o_teto(uploaded_file, MAX_UPLOAD_BYTES - total_bytes)
             total_bytes += len(file_content)
-            if total_bytes > MAX_UPLOAD_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"Upload excede o limite de {MAX_UPLOAD_BYTES / 1e6:.0f} MB.",
-                )
 
             if uploaded_file.filename.endswith('.zip'):
                 with zipfile.ZipFile(BytesIO(file_content), 'r') as zip_ref:
-                    descomprimido = sum(info.file_size for info in zip_ref.infolist())
+                    # Triagem barata pelo cabeçalho do ZIP (spoofável, ver B2):
+                    # rejeita o caso honesto sem gastar CPU descomprimindo.
+                    descomprimido_declarado = sum(info.file_size for info in zip_ref.infolist())
                     comprimido = max(len(file_content), 1)
-                    if descomprimido / comprimido > MAX_ZIP_EXPANSION_RATIO:
+                    if descomprimido_declarado / comprimido > MAX_ZIP_EXPANSION_RATIO:
                         raise HTTPException(
                             status_code=400,
                             detail="Razão de descompressão do ZIP suspeita demais para processar.",
                         )
-                    if descomprimido > MAX_UPLOAD_BYTES:
+                    if descomprimido_declarado > MAX_UPLOAD_BYTES:
                         raise HTTPException(
                             status_code=413,
                             detail=f"Conteúdo descomprimido do ZIP excede {MAX_UPLOAD_BYTES / 1e6:.0f} MB.",
@@ -2428,12 +2478,18 @@ async def upload_data(
                     zip_files = zip_ref.namelist()
                     fasta_files = [f for f in zip_files if f.lower().endswith(('.fasta', '.fa', '.fas', '.faa'))]
 
+                    # Defesa real (B2): teto sobre o byte de fato
+                    # descomprimido, indiferente ao que o cabeçalho declara.
+                    bytes_descomprimidos_reais = 0
                     for fasta_file in fasta_files:
-                        with zip_ref.open(fasta_file) as f:
-                            content = f.read().decode('utf-8', errors='ignore')
-                            sequences = list(SeqIO.parse(StringIO(content), "fasta"))
-                            all_sequences.extend(sequences)
-                            processed_files.append(fasta_file)
+                        raw = _extrair_membro_com_teto(
+                            zip_ref, fasta_file, MAX_UPLOAD_BYTES - bytes_descomprimidos_reais
+                        )
+                        bytes_descomprimidos_reais += len(raw)
+                        content = raw.decode('utf-8', errors='ignore')
+                        sequences = list(SeqIO.parse(StringIO(content), "fasta"))
+                        all_sequences.extend(sequences)
+                        processed_files.append(fasta_file)
 
             elif uploaded_file.filename.lower().endswith(('.fasta', '.fa', '.fas', '.faa')):
                 content = file_content.decode('utf-8', errors='ignore')

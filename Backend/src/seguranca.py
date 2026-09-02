@@ -4,6 +4,7 @@
 `limitar_taxa` (M4.7) limita anônimos nas rotas de escrita (S-5/DEC-004).
 """
 import os
+import secrets
 import time
 from typing import Dict, Optional, Tuple
 
@@ -14,10 +15,13 @@ async def exigir_admin(x_admin_token: Optional[str] = Header(default=None)):
     """Compara `X-Admin-Token` contra a variável de ambiente `ADMIN_TOKEN`.
 
     Sem `ADMIN_TOKEN` configurado no ambiente, a rota é recusada — nunca fica
-    aberta por omissão de configuração.
+    aberta por omissão de configuração. `secrets.compare_digest` (B3 da
+    revisão de M4.4) em vez de `!=`: comparação de string curto-circuita no
+    primeiro byte divergente, o que vaza o tamanho do prefixo certo por
+    tempo de resposta — pouco prático aqui, mas é o padrão para segredo.
     """
     admin_token = os.getenv("ADMIN_TOKEN")
-    if not admin_token or x_admin_token != admin_token:
+    if not admin_token or not x_admin_token or not secrets.compare_digest(x_admin_token, admin_token):
         raise HTTPException(status_code=401, detail="Token de administrador ausente ou inválido.")
 
 

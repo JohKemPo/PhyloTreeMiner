@@ -48,7 +48,16 @@ async def test_pattern_analysis_nao_bloqueia_o_loop(client, app_module, monkeypa
     assert duracao < 0.4, f"GET / levou {duracao:.2f}s durante pattern-analysis — event loop bloqueado"
 
 
-async def test_gen_plot_nao_bloqueia_o_loop(client, app_module, monkeypatch, tmp_path):
+async def test_gen_plot_metadata_cache_nao_bloqueia_o_loop(client, app_module, monkeypatch, tmp_path):
+    """`get_metadata_cache` de `gen_plot` roda em thread (M4.10).
+
+    O render ETE3/PyQt do mesmo endpoint **não** roda em thread — B4 da
+    revisão de M4.10 achou `SIGSEGV` real ao mover `render_annotated_tree`
+    para fora da main thread (Qt não tolera). Por isso o PNG já existe neste
+    teste: só o caminho da leitura de metadata está sob teste aqui; o render
+    seguir bloqueando o loop quando de fato precisa rodar é o preço aceito
+    por não travar o processo inteiro.
+    """
     projeto = "projeto-qualquer"
     trees_dir = tmp_path / projeto / "out" / "Trees"
     outputs_dir = tmp_path / projeto / "out" / "outputs" / "plot"
@@ -59,13 +68,13 @@ async def test_gen_plot_nao_bloqueia_o_loop(client, app_module, monkeypatch, tmp
     (outputs_dir / "arvore_anotada_final.png").write_bytes(b"\x89PNG\r\n")
 
     monkeypatch.setattr(app_module, "PROJECTS_ROOT", str(tmp_path))
-    monkeypatch.setattr(app_module, "_gerar_plot_sync", _bloqueia_por(0.5))
+    monkeypatch.setattr(app_module, "get_metadata_cache", _bloqueia_por(0.5, {"node_index": {}}))
 
     async def chamada():
         return await client.get(f"/api/gen_plot/{projeto}")
 
     duracao = await _mede_latencia_concorrente(client, chamada())
-    assert duracao < 0.4, f"GET / levou {duracao:.2f}s durante gen_plot — event loop bloqueado"
+    assert duracao < 0.4, f"GET / levou {duracao:.2f}s durante a leitura de metadata do gen_plot — event loop bloqueado"
 
 
 async def test_build_metadata_index_nao_bloqueia_o_loop(client, app_module, monkeypatch, tmp_path):
@@ -86,3 +95,40 @@ async def test_build_metadata_index_nao_bloqueia_o_loop(client, app_module, monk
 
     duracao = await _mede_latencia_concorrente(client, chamada())
     assert duracao < 0.4, f"GET / levou {duracao:.2f}s durante /insights — event loop bloqueado"
+
+
+def test_render_annotated_tree_nao_e_chamado_via_to_thread():
+    """B4 (revisão de M4.10) — guarda de regressão, não repete a reprodução do crash.
+
+    `render_annotated_tree` usa ete3/PyQt e crasha (`SIGSEGV`, "QApplication
+    was not created in the main() thread") se rodar fora da main thread —
+    reproduzido uma vez ao investigar B4. Recriar o crash a cada `pytest`
+    seria caro e instável entre ambientes; em vez disso, esta varredura AST
+    garante que ninguém reembrulhe a chamada em `asyncio.to_thread`/
+    `run_in_executor` sem repetir essa investigação.
+    """
+    import ast
+    import pathlib
+
+    caminho = pathlib.Path(__file__).resolve().parents[2] / "src" / "app.py"
+    tree = ast.parse(caminho.read_text(encoding="utf-8"), filename=str(caminho))
+
+    ofensores = []
+    for node in ast.walk(tree):
+        alvo_thread = (
+            isinstance(node, ast.Call)
+            and (
+                getattr(node.func, "attr", "") in {"to_thread", "run_in_executor"}
+                or getattr(node.func, "id", "") == "to_thread"
+            )
+        )
+        if not alvo_thread:
+            continue
+        for arg in node.args:
+            if isinstance(arg, ast.Name) and arg.id == "render_annotated_tree":
+                ofensores.append(node.lineno)
+
+    assert ofensores == [], (
+        f"render_annotated_tree passado a to_thread/run_in_executor em app.py:{ofensores} "
+        "— Qt crasha fora da main thread (B4, ver docstring deste teste)"
+    )
