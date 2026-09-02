@@ -41,7 +41,16 @@ const { TextArea } = Input;
 const GraphVisualization = () => {
   const networkRef = useRef(null);
   const networkInstance = useRef(null);
+  // Os DataSets vivem entre mudanças de `graphData` (M4.22): a instância do
+  // Network é criada uma única vez e passa a ser atualizada in-place.
+  const nodesDataSetRef = useRef(null);
+  const edgesDataSetRef = useRef(null);
   const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
+  // O handler de clique é anexado uma única vez (quando a instância é
+  // criada); lê o `graphData` mais recente por aqui em vez de fechar sobre o
+  // valor da renderização em que foi criado.
+  const graphDataRef = useRef(graphData);
+  graphDataRef.current = graphData;
   const [queryResults, setQueryResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(false);
@@ -202,18 +211,14 @@ const GraphVisualization = () => {
       if (networkInstance.current) {
         networkInstance.current.destroy();
         networkInstance.current = null;
+        nodesDataSetRef.current = null;
+        edgesDataSetRef.current = null;
       }
       return;
     }
 
     if (networkRef.current) {
-      if (networkInstance.current) {
-        networkInstance.current.destroy();
-        networkInstance.current = null;
-      }
-
-      const nodes = new DataSet(
-        graphData.nodes.map((node) => {
+      const nodesArray = graphData.nodes.map((node) => {
           let label = node.label;
           let titleContent = `<b>${node.label}</b>`;
 
@@ -262,53 +267,73 @@ const GraphVisualization = () => {
             properties: node.properties,
             originalLabel: node.label,
           };
-        })
-      );
+        });
 
-      const edges = new DataSet(
-        graphData.edges.map((edge) => ({
-          id: edge.id,
-          from: edge.from,
-          to: edge.to,
-          label: edge.label,
-          title: `<b>${edge.label}</b> relationship`,
-        }))
-      );
+      const edgesArray = graphData.edges.map((edge) => ({
+        id: edge.id,
+        from: edge.from,
+        to: edge.to,
+        label: edge.label,
+        title: `<b>${edge.label}</b> relationship`,
+      }));
 
-      networkInstance.current = new Network(
-        networkRef.current,
-        { nodes, edges },
-        networkOptions
-      );
+      if (!networkInstance.current) {
+        // Primeira renderização: cria os DataSets e a instância do Network.
+        const nodes = new DataSet(nodesArray);
+        const edges = new DataSet(edgesArray);
+        nodesDataSetRef.current = nodes;
+        edgesDataSetRef.current = edges;
 
-      networkInstance.current.on("click", (params) => {
-        if (params.nodes.length > 0) {
-          const nodeId = params.nodes[0];
-          const nodeData = graphData.nodes.find((n) => n.id === nodeId);
-          if (nodeData) {
-            setSelectedNode({
-              ...nodeData,
-              properties: nodeData.properties || {},
-            });
+        networkInstance.current = new Network(
+          networkRef.current,
+          { nodes, edges },
+          networkOptions
+        );
+
+        networkInstance.current.on("click", (params) => {
+          if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            const nodeData = graphDataRef.current.nodes.find(
+              (n) => n.id === nodeId
+            );
+            if (nodeData) {
+              setSelectedNode({
+                ...nodeData,
+                properties: nodeData.properties || {},
+              });
+            }
+          } else {
+            setSelectedNode(null);
           }
-        } else {
-          setSelectedNode(null);
-        }
-      });
+        });
 
-      setTimeout(() => {
-        if (networkInstance.current) {
-          networkInstance.current.fit();
-        }
-      }, 100);
-    }
+        setTimeout(() => {
+          if (networkInstance.current) {
+            networkInstance.current.fit();
+          }
+        }, 100);
+      } else {
+        // Mudança de dado com a instância já viva: atualiza os DataSets em
+        // vez de destruir e recriar o Network — preserva a física da
+        // simulação e a posição que o usuário já tiver ajustado (M4.22).
+        const nodes = nodesDataSetRef.current;
+        const edges = edgesDataSetRef.current;
 
-    return () => {
-      if (networkInstance.current) {
-        networkInstance.current.destroy();
-        networkInstance.current = null;
+        const idsNovosNodes = new Set(nodesArray.map((n) => n.id));
+        const idsRemovidosNodes = nodes
+          .getIds()
+          .filter((id) => !idsNovosNodes.has(id));
+        if (idsRemovidosNodes.length > 0) nodes.remove(idsRemovidosNodes);
+        nodes.update(nodesArray);
+
+        const idsNovosEdges = new Set(edgesArray.map((e) => e.id));
+        const idsRemovidosEdges = edges
+          .getIds()
+          .filter((id) => !idsNovosEdges.has(id));
+        if (idsRemovidosEdges.length > 0) edges.remove(idsRemovidosEdges);
+        edges.update(edgesArray);
       }
-    };
+    }
   }, [graphData]);
 
   const handleConnectionUpdate = async (values) => {
@@ -415,8 +440,10 @@ const GraphVisualization = () => {
     setSelectedNode(null);
     
     const finalQuery = injectUidFilter(query, userId);
-    if (isGraphQuery) setGraphData({ nodes: [], edges: [] });
-
+    // Não zera `graphData` aqui: fazia o efeito de render destruir a
+    // instância de Network a cada nova consulta, antes mesmo da resposta
+    // chegar — exatamente o padrão que o M4.22 elimina. `isLoading` já
+    // esconde o card do grafo enquanto a consulta está em voo.
     setViewMode(isGraphQuery ? "graph" : "table");
 
     try {
