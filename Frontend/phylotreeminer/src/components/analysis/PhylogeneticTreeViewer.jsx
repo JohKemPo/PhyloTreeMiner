@@ -478,6 +478,13 @@ const PhylogeneticTreeViewer = ({
     renderTree();
 
     return () => {
+      // `svg.selectAll("*").remove()` no próximo render limpa os filhos, mas
+      // o listener de zoom fica anexado ao próprio <svg>, que sobrevive entre
+      // renders — sem isto, cada execução deste efeito empilha mais um
+      // listener no mesmo elemento (M4.21).
+      if (svgRef.current) {
+        d3.select(svgRef.current).on(".zoom", null);
+      }
       setIsRendering(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
