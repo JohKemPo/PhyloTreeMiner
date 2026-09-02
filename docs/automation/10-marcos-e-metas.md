@@ -275,7 +275,7 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 |---|---|---|---|---|---|
 | M4.21 | ✅ Leak de zoom D3 — `svg.on(".zoom", null)` no cleanup do efeito ([DEC-061](07-log-de-execucao.md)) | `PhylogeneticTreeViewer.jsx`, `__tests__/zoomCleanup.test.jsx` (novo) | `getEventListeners(svg)` estável em 10 trocas de layout | — |
 | M4.22 | ✅ vis-network atualiza `DataSet` em vez de `destroy()`+`new Network()` a cada mudança de dado ([DEC-061](07-log-de-execucao.md)). Risco registrado, não corrigido: o container do vis-network é desmontado/remontado por `isLoading`/`viewMode` — preservar a instância não impede a troca do elemento DOM que a contém | `GraphVisualization.jsx`, `__tests__/graphIncremental.test.jsx` (novo) | 2 mudanças de dado → `new Network` chamado 1 vez | — |
-| M4.23 | UI trata `503` com banner, não tela em branco | `GraphVisualization.jsx`, `CQLExecutor.jsx`, `__tests__/erro503.test.jsx` (novo) | `fetch` mockado com 503 renderiza o banner | M4.1, M4.22 |
+| M4.23 | ✅ UI trata `503` com banner, não tela em branco | `GraphVisualization.jsx`, `CQLExecutor.jsx`, `__tests__/erro503.test.jsx` (novo) | `fetch` mockado com 503 renderiza o banner | M4.1, M4.22 |
 | M4.24 | Cliente envia `X-Admin-Token` nas rotas de reconfiguração | `CQLExecutor.jsx`, `pipelineConfigurator.jsx`, `__tests__/adminToken.test.jsx` (novo) | chamada a `/neo4j/connect` inclui o header | M4.4 |
 
 **Ordem de despacho** — três frentes paralelas desde o dia 1, mais um lote solto:
