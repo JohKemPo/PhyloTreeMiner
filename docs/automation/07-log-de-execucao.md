@@ -2078,6 +2078,43 @@ oráculo dendropy + ete3, 5 pares mafft × mafft_iterative (VARV-49):
 
 **Write-lock:** `docs/science/08-ficha-de-chamada-por-metodo.md` (novo), `docs/science/02-defeitos-que-alteram-resultado.md` (D26 novo, nota em D10), `docs/science/04-agenda-de-pesquisa.md` (E4 expandido). Nenhum código de produção tocado. **Reversível:** sim.
 
+### DEC-061 · 2026-09-01 · M4, primeira onda — 4 de 5 lotes fecham; M4.13 implementado e revertido
+
+**Gatilho:** pedido do usuário — atacar M4 em paralelo à reexecução do VARV-121, via `ptm-desenvolvedor` implementando os 5 lotes já sem dependência (M4.1, M4.12, M4.13, M4.21, M4.22), esta sessão como Gerente + Revisor + Validador. Nenhum lote tocou o diretório do VARV-121 nem rodou pipeline pesado.
+
+#### M4.1, M4.12, M4.21, M4.22 — fecham, verificados de ponta a ponta
+
+Descrição de cada um nas tabelas de `10-marcos-e-metas.md §6`. Achado de revisão que merece registro: **M4.12, como entregue, não corrigia o defeito em produção.** O lote corrigiu `treePlot.py` para tratar `metadata_dict` como dict (`.get()` em vez de iterar), mas `Backend/src/app.py:913` chamava essa função passando `cache["nodes"]` — uma **lista** — em vez de `cache["node_index"]`, o dict de fato indexado (o próprio comentário na linha já dizia "usa o dicionário", só o código não usava). Sem esse ajuste, o fix trocaria `TypeError` por `AttributeError` em produção, sem consertar nada de ponta a ponta. Corrigido eu mesmo (fora do write-lock original de M4.12, mas é a linha que fecha o lote) e confirmado: `GET /api/gen_plot/Zika_21seq_validacao` → PNG real de 57 976 bytes, onde antes da correção a rota quebrava.
+
+#### M4.13 — implementado, testado, e revertido antes do commit
+
+O lote trocou `<<USER_UID>>` (literal textual) por `$user_id` (parâmetro nomeado) no gerador de CQL do submódulo, exatamente como especificado, com teste unitário verde. Revisão encontrou um problema de integração que a especificação do lote não previa: `Backend/src/routers/cql_router.py:38` (`/execute`) e `Backend/src/services/cql_batch_service.py:153` chamam `neo4j_service.execute_query(query, parameters)` **sem** passar `user_id`; `Backend/src/services/neo4j_services.py:53` faz `parameters['user_id'] = user_id` **incondicionalmente**, sobrescrevendo com `None` mesmo quando `parameters` já contivesse o valor certo. Antes de M4.13, isso era inofensivo — o `$user_id` nunca existia no Cypher gerado, tudo ia por substituição textual de `<<USER_UID>>`, que roda independente de `parameters`. Depois de M4.13 sozinho, qualquer CQL novo usando `$user_id` se resolveria para `None` na execução real — uma regressão funcional (e potencialmente de integridade de dado, se algum padrão usar `MERGE (u:User {uid: $user_id})`) para o próprio path de ingestão que este mesmo lote pretendia tornar mais seguro.
+
+A dependência declarada no fatiamento original (`10-marcos-e-metas.md`) já previa "M4.14 depende de M4.13" — a revisão mostra que a ordem certa é a **inversa**: M4.14 (backend para de fazer `.replace()` e passa a tratar `user_id` como parâmetro de verdade em toda chamada a `execute_query`) precisa existir **antes ou junto** de M4.13, não depois. Decisão: revertida a mudança no submódulo (`git checkout -- workflow/utils/neo4jProcessing.py`, teste novo removido) antes de qualquer commit — nada do M4.13 chegou a ser publicado. Tabela de M4 atualizada com a dependência corrigida e o achado documentado na própria linha de M4.14, para quem pegar o lote depois não precisar redescobrir.
+
+#### Δ em métrica publicada: nenhum
+
+Segurança/resiliência de API e correção de bug de renderização de imagem — não toca distância, clado, metadado extraído nem padrão FPMax.
+
+**Evidência de execução:**
+```
+cd Backend && python -m pytest tests -q          → 257 passed, 1 xfailed (era 250; +7: 5 de M4.1, 2 de M4.12)
+Frontend: pnpm run build → ok; pnpm run test → 21 passed (21; era 18; +3: M4.21, M4.22 e o pré-existente)
+Frontend: lint:ratchet → débito reduzido (não cresceu)
+
+curl -o /tmp/plot_test.png "localhost:8000/api/gen_plot/Zika_21seq_validacao"
+  → HTTP 200, PNG 1280x720, 57976 bytes (antes: quebrava com TypeError/AttributeError)
+
+grep -n "TreeBuilder(" BioComp_UFF/workflow/controller/treeBuilderController.py   [confirmação do achado M4.13/M4.14]
+python3 -c "import json; m=json.load(open('BioComp_UFF/projects/Variola_VARV49_reexec_20260901/out/outputs/manifest.json')); print(m['reproducibility'])"
+  → {'iqtree_threads': 16, 'random_seed': 12345, 'raxml_threads': 8}  (mesmo achado de D26/DEC-060, reconfirmado aqui)
+
+BioComp_UFF: git status --porcelain (após reverter M4.13) → só os arquivos alheios
+  do VARV-121 (data/*/dataset_final_NoPipe), nada do lote revertido restando
+```
+
+**Write-lock:** `Backend/src/services/neo4j_services.py`, `Backend/src/routers/{neo4j_router,cql_router,cql_batch_router}.py`, `Backend/src/utils/treePlot.py`, `Backend/src/app.py` (linha 913), `Backend/tests/{api/test_neo4j_resiliencia.py,unit/test_tree_plot.py}` (novos), `Frontend/phylotreeminer/src/components/analysis/{PhylogeneticTreeViewer,GraphVisualization}.jsx`, `Frontend/phylotreeminer/src/__tests__/{zoomCleanup,graphIncremental}.test.jsx` (novos). `BioComp_UFF/` revertido, nada commitado lá. **Reversível:** sim (cada lote em commit próprio).
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**

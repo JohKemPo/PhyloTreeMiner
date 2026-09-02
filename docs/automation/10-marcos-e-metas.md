@@ -236,7 +236,7 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 
 | # | Lote | O que resolve | Defeito | Write-lock | Gate | Depende de |
 |---|---|---|---|---|---|---|
-| M4.1 | Neo4j indisponível devolve `503` com `Retry-After`, em vez de `[]` mudo / `500` genérico | `C-3c`, `B-9` | `services/neo4j_services.py`, `routers/{neo4j,cql,cql_batch}_router.py`, `tests/api/test_neo4j_resiliencia.py` (novo) | `pytest tests/api/test_neo4j_resiliencia.py -q` — 4 rotas em 503 com Neo4j fora | — |
+| M4.1 | ✅ Neo4j indisponível devolve `503` com `Retry-After`, em vez de `[]` mudo / `500` genérico ([DEC-061](07-log-de-execucao.md)) | `C-3c`, `B-9` | `services/neo4j_services.py`, `routers/{neo4j,cql,cql_batch}_router.py`, `tests/api/test_neo4j_resiliencia.py` (novo) | `pytest tests/api/test_neo4j_resiliencia.py -q` — 4 rotas em 503 com Neo4j fora | — |
 | M4.2 | Log estruturado; zero `str(e)` vazando ao cliente (hoje 19 ocorrências) | `S-4` | `logging_conf.py` (novo), `app.py`, `tests/api/test_vazamento_de_erro.py` (novo) | teste AST: 0 ocorrências | — |
 | M4.3 | Mesmo tratamento nos routers e no serviço de lote | `S-4` | `routers/*.py`, `cql_batch_service.py` | mesmo teste AST, agora cobrindo esses arquivos | M4.1, M4.2 |
 | M4.4 | `ADMIN_TOKEN` em `/api/ncbi/set-email` e `/neo4j/connect` | `S-5`/DEC-004 | `seguranca.py` (novo), `app.py`, `neo4j_router.py`, `tests/api/test_admin_token.py` (novo) | sem header → `401`; token correto → passa | M4.2 |
@@ -254,14 +254,14 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 | M4.9 | 3 rotas NCBI síncronas passam por `asyncio.to_thread` | `B-4` | `app.py`, `ncbi_router.py` | 2ª requisição responde durante download em curso | M4.8 |
 | M4.10 | `compare_trees`/`pattern-analysis`/`gen_plot`/`build_metadata_index` saem do loop | `B-5` | `app.py` | refatoração pura: golden idêntico; latência de `GET /` durante `POST /api/tree/compare` | M4.9 |
 | M4.11 | `stream_workflow_output` reescrito com duas tasks + leitura até EOF (hoje descarta o fim do buffer e faz busy-poll a 10 Hz) | perf | `app.py`, `tests/unit/test_stream_workflow.py` (novo) | processo falso emite N linhas → as N chegam ao broadcast | M4.10 |
-| M4.12 | **Bug real, não só performance**: `render_annotated_tree` recebe `dict` do índice e itera como lista → `TypeError` | perf + bug | `utils/treePlot.py`, `tests/unit/test_tree_plot.py` (novo) | dict de 3 acessos gera PNG sem `TypeError` | — · paralelo a toda a cadeia acima |
+| M4.12 | ✅ **Bug real, não só performance**: `render_annotated_tree` recebia `dict` do índice e iterava como lista → `TypeError` ([DEC-061](07-log-de-execucao.md)) | perf + bug | `utils/treePlot.py`, `tests/unit/test_tree_plot.py` (novo) | dict de 3 acessos gera PNG sem `TypeError` | — · paralelo a toda a cadeia acima |
 
 #### T5 — Grafo
 
 | # | Lote | O que resolve | Write-lock | Gate | Depende de |
 |---|---|---|---|---|---|
-| M4.13 | Gerador de CQL emite `$user_id` em vez do literal `<<USER_UID>>` | `BioComp_UFF/workflow/utils/neo4jProcessing.py` ⚠️ submódulo, lock próprio | `python -m unittest workflow.tests.test_neo4j_processing`; 0 ocorrências do placeholder | — |
-| M4.14 | Backend para de fazer `.replace()` textual do UID — vira parâmetro do driver | `cql_router.py`, `cql_batch_service.py`, `tests/api/test_cql_parametrizado.py` (novo) | UID malicioso não altera o plano da consulta | M4.13, M4.3 |
+| M4.13 | ⏸️ Gerador de CQL emite `$user_id` em vez do literal `<<USER_UID>>` — **implementado e revertido** em 2026-09-01 ([DEC-061](07-log-de-execucao.md)): sozinho quebra a execução de CQL novo, porque `cql_router.py:38`/`cql_batch_service.py:153` chamam `execute_query()` sem `user_id`, e `neo4j_services.py:53` sobrescreve `parameters['user_id'] = None` incondicionalmente — o `$user_id` do Cypher gerado nunca se resolveria. **Precisa entrar junto com M4.14**, não sozinho | `BioComp_UFF/workflow/utils/neo4jProcessing.py` ⚠️ submódulo, lock próprio | `python -m unittest workflow.tests.test_neo4j_processing`; 0 ocorrências do placeholder | M4.14 (**revisado**: a ordem era o inverso do que a dependência declarada supunha) |
+| M4.14 | Backend para de fazer `.replace()` textual do UID — vira parâmetro do driver. **Achado de 2026-09-01**: `execute_query(query, parameters)` é chamado em `cql_router.py:38` e `cql_batch_service.py:153` sem o argumento `user_id` — `neo4j_services.py:53` faz `parameters['user_id'] = user_id` incondicionalmente, sobrescrevendo com `None` mesmo quando `parameters` já traz o valor certo. Corrigir isso é pré-requisito para M4.13 ser segura | `cql_router.py`, `cql_batch_service.py`, `neo4j_services.py`, `tests/api/test_cql_parametrizado.py` (novo) | UID malicioso não altera o plano da consulta; `$user_id` resolve para o valor real, não `None`, nos dois caminhos (`/execute` e o ingest em lote) | M4.3 |
 | M4.15 | `.cql` legado com `<<USER_UID>>` é recusado nomeando o arquivo, não executado às cegas | `cql_batch_service.py`, `tests/api/test_cql_legado.py` (novo) | bloco legado → erro nomeando arquivo/linha; nada persiste | M4.14 |
 | M4.16 | Credencial de leitura e de escrita separadas | `neo4j_services.py`, `.env.example`, `tests/api/test_credenciais_grafo.py` (novo) | `CREATE` via sessão de leitura é recusado; ingest legítimo continua | M4.1, M4.14 |
 | M4.17 | Allowlist de procedures — APOC fora do alcance da credencial de leitura | `docker-compose.yml` | credencial de leitura + `CALL apoc.*` → recusado | M4.16 |
@@ -273,8 +273,8 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 
 | # | Lote | O que resolve | Write-lock | Gate | Depende de |
 |---|---|---|---|---|---|
-| M4.21 | Leak de zoom D3 — `svg.on(".zoom", null)` no cleanup do efeito | `PhylogeneticTreeViewer.jsx`, `__tests__/zoomCleanup.test.jsx` (novo) | `getEventListeners(svg)` estável em 10 trocas de layout | — |
-| M4.22 | vis-network atualiza `DataSet` em vez de `destroy()`+`new Network()` a cada mudança de dado | `GraphVisualization.jsx`, `__tests__/graphIncremental.test.jsx` (novo) | 2 mudanças de dado → `new Network` chamado 1 vez | — |
+| M4.21 | ✅ Leak de zoom D3 — `svg.on(".zoom", null)` no cleanup do efeito ([DEC-061](07-log-de-execucao.md)) | `PhylogeneticTreeViewer.jsx`, `__tests__/zoomCleanup.test.jsx` (novo) | `getEventListeners(svg)` estável em 10 trocas de layout | — |
+| M4.22 | ✅ vis-network atualiza `DataSet` em vez de `destroy()`+`new Network()` a cada mudança de dado ([DEC-061](07-log-de-execucao.md)). Risco registrado, não corrigido: o container do vis-network é desmontado/remontado por `isLoading`/`viewMode` — preservar a instância não impede a troca do elemento DOM que a contém | `GraphVisualization.jsx`, `__tests__/graphIncremental.test.jsx` (novo) | 2 mudanças de dado → `new Network` chamado 1 vez | — |
 | M4.23 | UI trata `503` com banner, não tela em branco | `GraphVisualization.jsx`, `CQLExecutor.jsx`, `__tests__/erro503.test.jsx` (novo) | `fetch` mockado com 503 renderiza o banner | M4.1, M4.22 |
 | M4.24 | Cliente envia `X-Admin-Token` nas rotas de reconfiguração | `CQLExecutor.jsx`, `pipelineConfigurator.jsx`, `__tests__/adminToken.test.jsx` (novo) | chamada a `/neo4j/connect` inclui o header | M4.4 |
 
