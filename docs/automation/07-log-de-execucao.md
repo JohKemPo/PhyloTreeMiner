@@ -2041,6 +2041,43 @@ Teste manual (Deep Analysis → File Explorer, Variola_VARV49_reexec_20260901):
 
 **Write-lock:** `Backend/src/app.py`, `Frontend/phylotreeminer/src/components/displayData/projectExplorer.jsx`. Não toca `BioComp_UFF/`. **Reversível:** sim.
 
+### DEC-060 · 2026-09-01 · M7.1 fecha (ficha de chamada por método, achado D26), e E4 ganha validação de oráculo
+
+**Gatilho:** pedido do usuário — atacar M7 em paralelo à reexecução do VARV-121, com um agente por frente (`ptm-bioinformatica-inferencia` para M7.1, `ptm-dominio-cientifico` para aprofundar E4), esta sessão gerenciando e validando. Nenhuma das duas frentes executou pipeline pesado nem tocou o diretório do VARV-121.
+
+#### M7.1 — ficha de chamada por método
+
+Novo `docs/science/08-ficha-de-chamada-por-metodo.md`: linha de comando efetiva, parâmetros fixos vs. parametrizáveis, e suporte de ramo produzido/preservado, para FastTree, IQ-TREE, RAxML-NG e MrBayes — só leitura de código e de artefatos já em disco (`Zika_21seq_validacao`, fora do write-lock de qualquer execução em andamento).
+
+**Achado principal — [D26](../science/02-defeitos-que-alteram-resultado.md#d26)**: `random_seed`/`raxml_threads`/`iqtree_threads` parecem vir do `tree_config` do usuário, mas `TreeBuilderController` nunca repassa esse config ao `TreeBuilder` que de fato roda a inferência — só o manifesto (`workflow.py:100`) lê o `tree_config` real. Confirmado eu mesmo lendo `treeBuilderController.py:803-849` e o `manifest.json` de `Variola_VARV49_reexec_20260901` (`reproducibility: {iqtree_threads: 16, raxml_threads: 8, random_seed: 12345}` — pedido; a chamada real usou os defaults 4/4/12345). Não muda nenhuma árvore já produzida (`--workers 1`/`-nt 1` já fixam o que decide topologia, D17/D21), mas o manifesto declara paralelização que não rodou — quebra a garantia central de DEC-027/037 ("proveniência honesta") para esses três campos especificamente.
+
+**Achado secundário, não fechado**: suporte de UFBoot do IQ-TREE **sobrevive** ao `Phylo.write` para Nexus no artefato atual (IQ-TREE 3.1.3) — contradiz parcialmente a premissa de [D10](../science/02-defeitos-que-alteram-resultado.md#d10) (escrita sobre IQ-TREE 2.2.2.6). Nota adicionada a D10 sem fechá-lo — falta confirmar se `.confidence` chega a `metadata.json`/grafo/UI.
+
+Achados menores registrados no documento, não corrigidos aqui: hipótese fundamentada (não confirmada) de que `_clean_mrbayes_tree` descarta probabilidade posterior do MrBayes; divergência entre `06-decisoes-metodologicas.md` (DM-2) e o código atual sobre o IQ-TREE rodar ModelFinder; `generations` do MrBayes nunca alcançado pelo chamador.
+
+#### E4 — validação de oráculo do achado exploratório
+
+A leitura exploratória que eu tinha feito (`workflow.stability.case_study` sobre `Variola_VARV49_reexec_20260901`: RF médio trocando alinhador 0,052 vs. trocando inferência 0,385; NJ o método mais sensível à troca de alinhador, 0,152 — inverso do padrão de Zika) foi confrontada por `ptm-dominio-cientifico` contra dois oráculos independentes (dendropy 4.6.1, ete3 3.1.3) nos 5 pares mafft × mafft_iterative: **Δ = 0** nos cinco. A hipótese "NJ tem poucas bipartições e por isso é instável" foi testada e refutada — as 10 árvores são todas estritamente binárias, 46/46 bipartições. Mecanismo mais provável (hipótese, não prova): `DistanceCalculator('identity')` sem correção de modelo, comum a NJ e UPGMA, combinado com o critério de agrupamento do NJ (matriz-Q), amplifica a diferença de ~429 colunas entre as duas estratégias do MAFFT onde UPGMA (mesma distância, outro critério) não amplifica. E4 continua ◐ — falta VARV-121 como segunda réplica antes de qualquer conclusão.
+
+#### Δ em métrica publicada: nenhum
+
+M7.1 é documentação sobre código existente (nenhuma árvore recalculada). O achado D26 não muda nenhum resultado já publicado (Δ=0 na topologia, confirmado pelo próprio raciocínio de D17/D21). A validação de E4 confirma que o número exploratório já registrado estava certo (Δ=0 contra dois oráculos) — não é uma correção, é uma confirmação.
+
+**Evidência de execução:**
+```
+grep -n "TreeBuilder(" BioComp_UFF/workflow/controller/treeBuilderController.py
+#  6 ocorrências; as 4 dos métodos avançados não passam tree_config
+
+python3 -c "import json; m=json.load(open('BioComp_UFF/projects/Variola_VARV49_reexec_20260901/out/outputs/manifest.json')); print(m['reproducibility'])"
+#  {'iqtree_threads': 16, 'random_seed': 12345, 'raxml_threads': 8}  (pedido, não executado)
+
+oráculo dendropy + ete3, 5 pares mafft × mafft_iterative (VARV-49):
+  fasttree 0.0217 · iqtree 0.0217 · raxml 0.0435 · nj_distance 0.1522 · upgma_distance 0.0217
+  idêntico em produção (rf_matrix.csv), dendropy e ete3 — Δ = 0 nos cinco
+```
+
+**Write-lock:** `docs/science/08-ficha-de-chamada-por-metodo.md` (novo), `docs/science/02-defeitos-que-alteram-resultado.md` (D26 novo, nota em D10), `docs/science/04-agenda-de-pesquisa.md` (E4 expandido). Nenhum código de produção tocado. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -2084,6 +2121,8 @@ Toda mudança na zona sagrada ([04-rigor-cientifico §1](04-rigor-cientifico.md)
 | M2.5 — DEC-046, instrumentação do manifesto | 2026-08-26 | **Não pelo lote; sim pelo que ele revelou** | [DEC-046](#dec-046--2026-08-26--tools_invoked-deixa-de-sair-vazio--o-manifesto-passa-a-registrar-o-que-rodou). A mudança é de registro, não de cálculo: **12 dos 14 pipelines saem idênticos** à execução anterior e o oráculo dendropy devolve **91 pares, 0 divergências**. Os 2 divergentes são os de IQ-TREE e a causa é [D21](../science/02-defeitos-que-alteram-resultado.md#d21), anterior a este lote: com `-nt 4` a ferramenta devolve **3 topologias em 3 repetições** da mesma semente. Por arrasto, itemsets do FPMax, clados canônicos e bipartições universais **variam entre execuções idênticas** (38/47/6 contra 34/43/7). Corrige a atribuição de causa de [DEC-045](#dec-045--2026-08-25--pré-voo-40-na-máquina-de-validação--o-que-muda-entre-máquinas-é-a-versão-e-só-ela) para o braço do IQ-TREE. | **Pendente** — D21 oferece três saídas (`-nt 1`, declarar não reprodutível, ou repetições com consenso) e **bloqueia §4.1** até ser decidida |
 | C-5e — `parse_cql_blocks` corta em `;` dentro de dado | 2026-09-01 | **Não** — parser de ingestão do grafo Neo4j de visualização, não recalcula distância/clado/FPMax | [DEC-052](#dec-052--2026-09-01--pente-fino-nos-cql-dos-projetos-zika--c-5e-fechado-4-artefatos-legados-reparados). Sem oráculo de domínio aplicável (é sintaxe de texto); cross-check contra a segunda implementação independente (`CQLExecutor.jsx`) e contra a contagem de `;` de fechamento no texto bruto — os três concordam após o reparo. Δ medido: −30/−58/−38 blocos fantasma em `Medium_11seq`/`Advanced_21seq`/`Large_21seq` (eram instruções fundidas ou fatiadas por `;` embutido em descrição do GenBank). 4 artefatos legados com aspa simples não escapada também reparados (dado, não código) | Não se aplica — nenhum número publicado envolvido; fila de triagem original (`docs/audit/06-eixo-bugs.md`) marcada resolvida |
 | D25 — `mafft_iterative` colidia com `mafft` em `stability.py`, M1.3 crashava | 2026-09-01 | **Não pelo lote; sim pelo que ele desbloqueou** | [DEC-057](#dec-057--2026-09-01--d25--mafft_iterative-colidia-com-mafft-em-stabilitypy-e-m13-crashava-nas-três-reexecuções). Oráculo dendropy: **0 divergências em 91+91+45 pares** (Zika-21, VARV-6, VARV-49) — a checagem M1.3, antes bloqueada por `ValueError`, passa a existir e bate com o oráculo independente nas três reexecuções da máquina de validação. Não há valor aceito sendo substituído: a medição nunca havia completado sob essas condições | **Aprovada** — coberta pelo pedido explícito "abra o lote e corrija o Achado 1" |
+| E4 — leitura exploratória do fator alinhador em `Variola_VARV49_reexec_20260901` (NJ inverte o padrão de ZIKV-478) | 2026-09-01 | **Não** — nenhum número de E4 saiu em artigo ainda; é a primeira leitura, e nenhuma linha de código mudou nesta revisão | [`science/04-agenda-de-pesquisa.md#e4`](../science/04-agenda-de-pesquisa.md#e4--◐--o-fator-alinhador-medido-onde-ele-existe). Os 5 pares mafft×mafft_iterative do `rf_matrix.csv` conferem exatamente (**Δ = 0**) contra dois oráculos independentes (dendropy 4.6.1 e ete3 3.1.3, `taxon_namespace` compartilhado, `force-unrooted`, denominador 2(n−3)=92) — a inversão de padrão (NJ o mais sensível à troca de alinhador aqui, o mais imune em Zika) não é bug de cálculo. Hipótese de politomia/baixo poder do NJ **refutada**: as 10 árvores (5 métodos × 2 alinhadores) são todas estritamente binárias, 46/46 bipartições. O que distingue os métodos: dos ramos internos curtos (≤1e-4), os de caráter (FastTree/IQ-TREE/RAxML) trocam só 1–2 de ~25 entre alinhadores; o NJ troca 7 de 7 (100%); o UPGMA (mesma distância de entrada que o NJ) troca só 1 de ~5, no mesmo patamar dos métodos de caráter. Mecanismo mais provável, não provado: `builder.py:107-115` usa `DistanceCalculator('identity')` sem correção de modelo como entrada única de NJ/UPGMA; com alinhamento de ~236 mil colunas e um deslocamento de 429 colunas entre as duas estratégias do MAFFT, o critério de agrupamento do NJ (matriz-Q) amplifica essa diferença pequena onde UPGMA e os métodos de caráter não amplificam. | **Pendente** — segue ◐; falta VARV-121 como segunda réplica antes de tratar como resultado. Nenhuma correção de código é proposta (nenhum defeito de cálculo encontrado); recomendação de teste de robustez adicional (rodar NJ/UPGMA com modelo de distância corrigido) registrada no documento, não executada |
+| D26 — `tree_config` não alcança o `TreeBuilder`; manifesto declara semente/threads pedidos, não executados | 2026-09-01 | **Não na topologia** — `--workers 1`/`-nt 1` (D17/D21) já fixam o que decide a árvore; o `N` de threads e a semente nunca divergiram na prática (todo experimento até hoje pediu o valor-padrão) | [DEC-060](#dec-060--2026-09-01--m71-fecha-ficha-de-chamada-por-método-achado-d26-e-e4-ganha-validação-de-oráculo). Confirmado lendo `treeBuilderController.py:803-849` (nenhuma das 4 chamadas avançadas repassa `tree_config`) e o `manifest.json` real de VARV-49 (`reproducibility` declara `raxml_threads:8, iqtree_threads:16`; a chamada usou os defaults 4/4). Achado de auditoria de código (M7.1), não de execução — nenhuma árvore recalculada | Não se aplica — nenhum número publicado envolvido; correção fica para lote futuro de M7 (fora do escopo de M7.1, que é só a ficha) |
 
 ## Handoffs e relatórios
 

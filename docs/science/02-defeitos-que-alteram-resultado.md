@@ -268,6 +268,8 @@ for metadata in iter_metadata_nodes(metadata_path, iter_tree=True):
 
 **Correção.** Propagar `confidence` ao Nexus, ao `metadata.json`, ao grafo (nó `Support` já existe, hoje usado para o limiar do FPMax) e à UI. Isto é o principal item de valor científico da lista.
 
+> **Nota (M7.1, 2026-09-01)** — [`08-ficha-de-chamada-por-metodo.md §2`](08-ficha-de-chamada-por-metodo.md#2-iq-tree) achou, em artefato já em disco (`Zika_21seq_validacao`, IQ-TREE 3.1.3), o suporte UFBoot **sobrevivendo** ao `Phylo.write` para Nexus — contradizendo a premissa "o `.nexus` gravado em `out/Trees/` não os tem" acima, que foi escrita olhando IQ-TREE 2.2.2.6. Não fecha D10: não ficou confirmado se a mudança é de versão da ferramenta, e principalmente **não foi verificado se o `.confidence` chega a `metadata.json`/grafo/UI** — que é a parte do defeito que de fato importa para a mineração. Precisa de confirmação do dono de D10 antes de qualquer parecer de "fechado".
+
 ---
 
 <a id="d11"></a>
@@ -1032,4 +1034,45 @@ cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects
 #  91 pares, 0 divergências
 cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Variola_VARV49_reexec_20260901
 #  45 pares, 0 divergências
+```
+
+---
+
+## D26 · Média · Semente e paralelização da inferência (`random_seed`/`raxml_threads`/`iqtree_threads`) não são alcançáveis pelo `tree_config` — o manifesto declara o pedido, não o executado
+
+> **Estado:** aberto — achado do lote M7.1 ([`08-ficha-de-chamada-por-metodo.md §0`](08-ficha-de-chamada-por-metodo.md#0-achado-transversal--semente-e-paralelização-parecem-parametrizáveis-e-não-são)), 2026-09-01. Correção não implementada.
+
+**Onde.** `BioComp_UFF/workflow/tree_construction/builder.py:17-28`, `reproducibility_settings(config)` resolve `random_seed`/`raxml_threads`/`iqtree_threads` a partir de um dict de configuração, com defaults `12345`/`4`/`4`. `TreeBuilder.__init__` (`builder.py:71-94`) chama `reproducibility_settings(kwargs)` sobre o que a própria instância recebeu. Até aqui, correto: a leitura natural é "o `tree_config` do experimento decide, e cai no default quando omisso".
+
+**O que quebra.** `TreeBuilderController` (`treeBuilderController.py:803-849`) instancia um `TreeBuilder` novo para cada um dos quatro métodos avançados, e nenhuma das quatro chamadas repassa o `tree_config`:
+
+```python
+builder = TreeBuilder(fasta_path=fasta_path, output_path_tree=output_path_tree)
+```
+
+`kwargs` dentro do `TreeBuilder` nunca contém `random_seed`, `raxml_threads` nem `iqtree_threads` — `reproducibility_settings` cai sempre no default do dicionário, não importa o que o `tree_config` do experimento declare. Enquanto isso, `BioComp_UFF/workflow.py:100` grava no manifesto `reproducibility_settings(params.get('tree_config', {}))` — chamada com o `tree_config` **de fato enviado pelo usuário**. São duas chamadas da mesma função, uma delas cega ao que a outra vê.
+
+**Consequência medida.** Confirmado em `Variola_VARV49_reexec_20260901/out/outputs/manifest.json`, cujo `tree_config` declarava `raxml_threads: 8, iqtree_threads: 16`:
+
+```json
+{"iqtree_threads": 16, "random_seed": 12345, "raxml_threads": 8}
+```
+
+Mas a chamada real ao RAxML-NG/IQ-TREE, pelo rastro de código acima, usou `raxml_threads=4, iqtree_threads=4` (os defaults) — nunca `8`/`16`. `random_seed` só coincide (12345 em ambos os lados) porque todo `tree_config` usado até agora já pedia exatamente o valor-padrão; não há nenhuma reexecução deste projeto em que a semente pedida e a semente usada tenham de fato divergido.
+
+**Por que Δ na topologia é zero, mas o defeito é real.** `--workers 1` (RAxML-NG, D17) e `-nt 1` (IQ-TREE, D21) já fixam a paralelização que decide a *topologia*; o valor de `N` em `--threads N`/`iqtree_threads` não muda a árvore, só o tempo de execução e, no caso do `iqtree_threads`, nem isso — o comentário do próprio código (`builder.py:203-205`) diz que essa chave governaria o bootstrap, mas a chamada atual nunca a usa (`-nt 1` cobre a busca inteira). Por isso nenhuma árvore já produzida está errada. O que está errado é a **alegação do manifesto**: se um `random_seed` diferente de `12345` alguma vez for pedido, o manifesto vai declarar o valor pedido e a árvore vai ter sido gerada com `12345` — exatamente o cenário que o docstring de `ExecutionManifest.register_reproducibility` (`manifest.py:324-332`) foi escrito para impedir.
+
+**Número afetado.** Nenhum agora — nenhum experimento já rodado pediu semente diferente do default. Afeta em potencial: qualquer afirmação futura sobre paralelização (`raxml_threads`/`iqtree_threads`) citada do manifesto como evidência de curva de custo (E8, M7.7, M7.8) — o valor citado seria o pedido, não o executado.
+
+**Correção sugerida (não implementada — código do submódulo, fora do escopo de M7.1).** Ou (a) `TreeBuilderController` repassa o `tree_config` recebido para cada `TreeBuilder`, fechando o caminho que hoje só chega ao manifesto; ou (b), mais barato enquanto a UI não expõe esses campos, `reproducibility_settings` deixa de fingir que lê uma configuração que ninguém alcança, e os três valores viram constantes documentadas como tais.
+
+**Evidência de execução:**
+```
+grep -n "TreeBuilder(" BioComp_UFF/workflow/controller/treeBuilderController.py
+#  6 ocorrências; as 4 dos métodos avançados (:808 iqtree, :820 fasttree,
+#  :832 raxml, :844 mrbayes) não passam tree_config nenhum
+
+python3 -c "import json; m=json.load(open('BioComp_UFF/projects/Variola_VARV49_reexec_20260901/out/outputs/manifest.json')); print(m['reproducibility'])"
+#  {'iqtree_threads': 16, 'random_seed': 12345, 'raxml_threads': 8}
+#  — pedido no tree_config; a chamada real usou 4/4/12345 (defaults), não 16/8/12345
 ```

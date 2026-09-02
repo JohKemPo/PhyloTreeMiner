@@ -385,7 +385,7 @@ Cada um foi achado por acaso, ao investigar outra coisa. **Nenhum método foi au
 
 | # | Lote | O que resolve | Origem |
 |---|---|---|---|
-| M7.1 | **Ficha de chamada por método**: para cada um, documentar linha de comando efetiva, o que cada parâmetro faz, o que é fixo, o que é parametrizável e o que deveria ser | dá a linha de base — hoje não existe  — |
+| M7.1 | ✅ **Ficha de chamada por método** ([DEC-060](07-log-de-execucao.md#dec-060--2026-09-01--m71-fecha-ficha-de-chamada-por-método-achado-d26-e-e4-ganha-validação-de-oráculo)): [`docs/science/08-ficha-de-chamada-por-metodo.md`](../science/08-ficha-de-chamada-por-metodo.md) documenta FastTree/IQ-TREE/RAxML-NG/MrBayes. Achou [D26](../science/02-defeitos-que-alteram-resultado.md#d26) (semente/threads pedidos ≠ executados) e atualização parcial não fechada de [D10](../science/02-defeitos-que-alteram-resultado.md#d10) | dá a linha de base — hoje não existe  — |
 | M7.2 | **Suporte de ramo simétrico**: UFBoot no IQ-TREE já existe; habilitar `--bs-trees` no RAxML-NG e `-boot` no FastTree, com o mesmo número de réplicas declarado | [D10](../science/02-defeitos-que-alteram-resultado.md#d10), e é o M3.2  — |
 | M7.3 | **Modelo de substituição declarado e coerente**: hoje o IQ-TREE recebe `GTR+G` fixo (sem ModelFinder), o RAxML `GTR+G`, o FastTree usa o padrão e o MrBayes `nst=6 rates=gamma`. São quatro decisões separadas que ninguém comparou | `DM-2`  — |
 | M7.4 | **MrBayes correto**: caminho absoluto, semente, `ngen`/`burnin`/`nruns`/`nchains` por configuração, e **recusar a árvore se o ASDSF não indicar convergência** | [D20](../science/02-defeitos-que-alteram-resultado.md#d20)  — |

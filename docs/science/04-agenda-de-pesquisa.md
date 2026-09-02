@@ -99,7 +99,66 @@ RF médio | trocando alinhador ........ 0.052 (n=5, máx 0.152)
 RF médio | trocando inferência ....... 0.385 (n=20, máx 0.587)
 ```
 
-Por par mafft × mafft_iterative, do mesmo método: fasttree 0,022 · iqtree 0,022 · raxml 0,044 · upgma 0,022 · **nj_distance 0,152**. Isto é **na direção oposta** ao padrão de ZIKV-478 na tabela acima, onde NJ era o método mais imune (0,0021) e os métodos de caráter os mais sensíveis: aqui NJ é o **mais** sensível à troca de alinhador entre os cinco. Duas leituras possíveis, nenhuma confirmada: (a) o efeito de E4 não generaliza entre um contraste MAFFT×Clustal (heurísticas independentes) e um contraste MAFFT×MAFFT-iterativo (mesma heurística, refinamento diferente); (b) há uma particularidade do NJ em *Variola* que não existe em Zika. **Não tratar como resultado antes de revisão do domínio científico** — falta ainda VARV-121 como segunda réplica (critério de sucesso de E4 pede "replicada em ao menos dois conjuntos") e uma leitura formal de `ptm-dominio-cientifico`.
+Por par mafft × mafft_iterative, do mesmo método: fasttree 0,022 · iqtree 0,022 · raxml 0,044 · upgma 0,022 · **nj_distance 0,152**. Isto é **na direção oposta** ao padrão de ZIKV-478 na tabela acima, onde NJ era o método mais imune (0,0021) e os métodos de caráter os mais sensíveis: aqui NJ é o **mais** sensível à troca de alinhador entre os cinco.
+
+**Revisão do domínio científico, 2026-09-01 (`ptm-dominio-cientifico`).** Leitura sobre artefatos já existentes de `Variola_VARV49_reexec_20260901` — nenhum pipeline foi executado nesta revisão (a máquina está ocupada com a reexecução de VARV-121; nada naquele diretório foi tocado).
+
+*Passo 1 — oráculo independente.* A RF de cada um dos 5 pares foi recomputada por fora do `stability.py`, direto sobre os Nexus em `out/Trees/`, com dois oráculos (`dendropy` 4.6.1 e `ete3` 3.1.3, `taxon_namespace`/leitura compartilhados por par, `rooting="force-unrooted"`, denominador `2(n-3)` com `n=49`):
+
+```
+$ python oracle_e4_check.py   # dendropy, sobre BioComp_UFF/projects/Variola_VARV49_reexec_20260901/out/Trees/
+método            RF bruta  n_taxa  denom 2(n-3)  RF normalizada
+fasttree                 2      49            92          0.0217
+iqtree                   2      49            92          0.0217
+raxml                    4      49            92          0.0435
+nj_distance             14      49            92          0.1522
+upgma_distance           2      49            92          0.0217
+
+Comparação com rf_matrix.csv (produção, workflow.stability.StabilityAnalyzer):
+método             oráculo  produção         Δ
+fasttree            0.0217    0.0217    0.0000
+iqtree              0.0217    0.0217    0.0000
+raxml               0.0435    0.0435   -0.0000
+nj_distance         0.1522    0.1522   -0.0000
+upgma_distance      0.0217    0.0217    0.0000
+```
+
+Confirmado por um segundo oráculo (ete3, `robinson_foulds(..., unrooted_trees=True)`, mesmos cinco pares): RF=2/2/4/14/2 sobre max=92, idêntico a dendropy e à produção. **Δ = 0 nos cinco pares, com dois oráculos independentes** — o número do `rf_matrix.csv` está certo; a inversão do padrão de NJ não é bug de cálculo.
+
+*Tabela por método (mafft × mafft_iterative, VARV-49, n=49 táxons, denominador 2(n-3)=92):*
+
+| Método | RF normalizada | RF bruta | Bipartições não triviais (mafft / iter) | Bipartições que trocam |
+|---|---|---|---|---|
+| NJ (distância) | **0,1522** | 14 | 46 / 46 (ambas totalmente binárias) | 7 de 46 (15%) |
+| UPGMA (distância) | 0,0217 | 2 | 46 / 46 | 1 de 46 (2%) |
+| RAxML (ML) | 0,0435 | 4 | 46 / 46 | 2 de 46 (4%) |
+| FastTree (ML) | 0,0217 | 2 | 46 / 46 | 1 de 46 (2%) |
+| IQ-TREE (ML) | 0,0217 | 2 | 46 / 46 | 1 de 46 (2%) |
+
+*Passo 2 — hipótese da politomia/baixo poder, testada e refutada.* `2n-3 = 46` é o máximo de bipartições não triviais possível para uma árvore não enraizada binária com 49 folhas — **as dez árvores (5 métodos × 2 alinhadores) são todas estritamente binárias**, sem politomia nenhuma. A hipótese "NJ tem poucas bipartições informativas e por isso a RF fica instável" está **refutada pelos dados**: NJ não tem menos bipartições que os outros métodos, tem exatamente as mesmas 46.
+
+O que de fato distingue os métodos é o comprimento dos ramos que trocam. Distribuição dos 46 ramos internos por árvore (`out/Trees/*.nexus`, mesmo par):
+
+| Método | ramos ≤ 1e-4 (de 46) | ramos ≤ 1e-6 (comprimento ~0) | fração dos ramos curtos que trocam de alinhador |
+|---|---|---|---|
+| FastTree | 24–25 | 5 | 1 de ~24 (~4%) |
+| IQ-TREE | 25 | 5 | 1 de 25 (~4%) |
+| RAxML | 25 | 5 | 2 de 25 (~8%) |
+| UPGMA | 4–5 | 0 | 1 de ~5 (~20%) |
+| NJ | 6–7 | 0 | **7 de 7 (100%)** |
+
+Achado chave: os métodos de caráter (FastTree/IQ-TREE/RAxML) têm **mais** ramos próximos de zero do que o NJ (24–25 contra 6–7) — não é o NJ que tem sinal mais pobre. A diferença é que, nos métodos de caráter, quase todos esses ramos curtos são **estáveis** entre as duas estratégias de alinhamento (1–2 de ~25 trocam); no NJ, **todos** os seus ramos curtos trocam.
+
+*Passo 3 — mecanismo mais provável (hipótese, não prova).* `BioComp_UFF/workflow/tree_construction/builder.py:107-115` usa `Bio.Phylo.TreeConstruction.DistanceCalculator('identity')` — p-distância bruta, sem correção de modelo de substituição — como única entrada tanto do NJ quanto do UPGMA (`distance_constructor`, linhas 117-141). Com alinhamento de `L ≈ 236 000` colunas (`AlignIO`: MAFFT = 235 955 colunas, MAFFT-iterativo = 235 526 — uma diferença de 429 colunas, ~0,18%, e frações de gap quase idênticas: 20,33% × 20,18%), cada coluna de diferença desloca uma distância par-a-par em apenas `1/L ≈ 4,2×10⁻⁶`. Os ramos que trocam no NJ têm comprimento entre `7×10⁻⁵` e `4,5×10⁻⁴` — de 17 a ~107 "colunas-equivalente" de sinal —, uma margem plausível de ser cruzada pelas ~429 colunas que só o comprimento total do alinhamento já garante que diferem, mais qualquer realocação interna de *gap* não capturada nessa contagem. O critério de agrupamento do NJ (a matriz-Q, que subtrai a soma das distâncias a todos os outros táxons a cada passo) é conhecidamente mais sensível a perturbações pequenas quando as distâncias já estão quase empatadas do que o encadeamento por média do UPGMA ou a superfície de verossimilhança dos métodos de caráter — o que é consistente com UPGMA (mesma distância de entrada, critério de agrupamento diferente) ficar no mesmo patamar de estabilidade dos métodos de ML, e não no do NJ. **Isto é a explicação mais provável, não uma prova**: confirmá-la exigiria recomputar as duas matrizes de identidade e rastrear especificamente quais comparações da matriz-Q trocam de sinal — não foi feito nesta revisão.
+
+*Parecer.* Duas leituras seguem em aberto, e nenhuma delas é decidível com `n=1` conjunto:
+
+- (a) o efeito de E4 pode de fato depender do **tipo de contraste de alinhador** — MAFFT×Clustal (dois programas, heurísticas independentes, ZIKV-478) versus MAFFT×MAFFT-iterativo (mesma heurística, refinamento diferente, aqui) — e não apenas do paradigma de inferência;
+- (b), refinada pelo mecanismo do Passo 3: não é "NJ tem baixo poder estatístico" de forma genérica (ele não tem menos bipartições resolvidas que ninguém) — é que a **distância de identidade não corrigida**, no regime de divergência quase clonal de *Variola*, produz sinais tão próximos do limiar de uma coluna de alinhamento que o critério de agrupamento do NJ especificamente amplifica o ruído introduzido por uma diferença pequena de alinhamento, enquanto UPGMA (mesma distância, outro critério) e os métodos de caráter (outra fonte de sinal) não amplificam da mesma forma neste conjunto.
+
+Essas duas leituras não são mutuamente exclusivas e ambas podem ser verdadeiras ao mesmo tempo. **O que está provado:** os números do `rf_matrix.csv` para os cinco pares estão corretos (dois oráculos, Δ=0) e a inversão de padrão em relação a Zika é real, não artefato de cálculo. **O que continua sendo hipótese:** a causa mecanística (Passo 3) e se o padrão generaliza. Isto **não muda o estado de E4**: continua ◐, e falta VARV-121 como segunda réplica — o critério de sucesso do experimento pede replicação em pelo menos dois conjuntos, e `n=1` não sustenta nem confirma nem descarta a hipótese original. **Recomendação para quando VARV-121 terminar:** (i) conferir se o NJ volta a ser o método mais sensível à troca de alinhador; (ii) se sim, recomputar as matrizes de identidade dos dois alinhadores e checar diretamente se as bipartições que trocam correspondem a pares de distância quase empatados que se invertem — isso confirmaria o mecanismo do Passo 3; (iii), independente de VARV-121, um teste de robustez de baixo custo é reexecutar NJ/UPGMA com um modelo de distância corrigido (ex.: Jukes-Cantor, outro `model=` do `DistanceCalculator`) sobre os mesmos dois alinhamentos já existentes, para separar "NJ é intrinsecamente mais sensível" de "a distância de identidade não corrigida usada aqui é o que é frágil" — isso é uma sugestão de próximo passo, não foi executado nesta revisão e não deve ser feito na máquina que está rodando VARV-121 agora.
+
+**Ambiente bioinformático:** esta revisão não executa nenhum pipeline pesado; roda apenas leitura de Nexus/FASTA já existentes e chamadas de `dendropy`/`ete3`/`Bio.AlignIO`. Qualquer reexecução de NJ/UPGMA com modelo de distância diferente (recomendação iii acima) é validação numérica que só o usuário deve rodar, em WSL, fora da janela em que VARV-121 está ocupando a máquina.
 
 ---
 
