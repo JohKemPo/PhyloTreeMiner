@@ -147,6 +147,48 @@ Os rótulos `46.00`, `75.00`, `72.00` (mesmo mecanismo do FastTree, §1: número
 
 **Onde.** `builder.py:287-341` (`TreeBuilder.raxml_ng_constructor`); `treeBuilderController.py:827-837` (`build_tree_raxml`).
 
+**Atualização 2026-09-02 (M3.2/M7.2) — bootstrap habilitado.** Tudo abaixo até
+"Suporte de ramo — ausente..." descreve o estado **antes** desta mudança e
+fica registrado como linha de base do achado (era exatamente o que M3.2
+pedia para fechar). A partir de agora o comando passa a ser `--all` em vez de
+sem comando declarado (que o RAxML-NG resolve como `--search`), com
+`--bs-trees 1000` acrescentado — mesma contagem do `-bb 1000` do IQ-TREE, mas
+**não a mesma métrica**: o `--all` calcula por padrão FBP (Felsenstein
+bootstrap proportion, bootstrap não-paramétrico clássico), enquanto o `-bb`
+do IQ-TREE é UFBoot (aproximado). Ambos em escala 0-100, mas não
+intercambiáveis no limiar de leitura.
+
+Confirmado com `raxml-ng --help` (v. 2.0.2, `--all` = "all-in-one (ML search +
+bootstrapping)") e com execução real numa entrada sintética de 6 táxons
+inventados (sem dado de projeto, sem rede): `--all ... --bs-trees N` grava um
+arquivo novo, `<prefix>.raxml.support`, com a árvore de ML e o suporte já
+mapeado nos nós internos — `<prefix>.raxml.bestTree` continua existindo, mas
+sem confidence, como antes. `builder.py` agora lê `.raxml.support`
+preferencialmente, com `.raxml.bestTree` como fallback caso o suporte não
+tenha sido gravado por algum motivo.
+
+O mesmo mecanismo genérico do Biopython (rótulo numérico de nó interno →
+`.confidence` na leitura do Newick, §1/§2) se aplica aqui: confirmado por
+teste automatizado (`workflow/tests/test_raxml_bootstrap.py`) que a árvore
+lida tem `.confidence` não-nulo em nós internos, e que esse valor sobrevive
+ao `Phylo.write` para Nexus — fechando, para RAxML-NG, a mesma pergunta que
+§1/§2 já haviam fechado para FastTree/IQ-TREE (a parte de propagação até
+`metadata.json`/grafo/UI continua fora do escopo de `BioComp_UFF`, e
+portanto fora desta atualização).
+
+`--threads`/`raxml_threads` continuam sujeitos ao §0 (nominalmente
+configurável, na prática sempre `4`) — **e há um limite não documentado até
+agora**: o RAxML-NG recusa rodar («ERROR: Too few patterns per thread!»)
+quando o número de padrões do alinhamento é pequeno demais para o número de
+threads pedido — medido com o default de 4 threads sobre um alinhamento de 6
+táxons/61 pb (12 padrões únicos). Isto é comportamento **anterior** a esta
+mudança (o mesmo acontece sem `--all`/`--bs-trees`) e não foi corrigido aqui
+— é um achado novo para a lista de escolhas silenciosas: `raxml_threads=4`
+fixo não é seguro para todo tamanho de entrada, e nada no pipeline hoje ajusta
+threads ao tamanho do alinhamento.
+
+---
+
 ### Linha de comando efetiva
 
 ```python
@@ -247,8 +289,8 @@ O formato de consenso do MrBayes (`sumt`) tradicionalmente anota a probabilidade
 | **Semente declarável na ferramenta?** | Não (a ferramenta não aceita, nesta chamada) | Sim (`-seed`) | Sim (`--seed`) | Sim (`set seed=`/`set swapseed=`), **não usada** |
 | **Semente efetivamente configurável pelo usuário?** | N/A | **Não** — sempre `12345` (§0) | **Não** — sempre `12345` (§0) | Não se aplica; não há semente nenhuma |
 | **Paralelização controlada?** | N/A | `-nt 1` fixo, por decisão medida (D21) | `--workers 1` fixo, por decisão medida (D17); `--threads` nominalmente configurável, na prática sempre `4` (§0) | Não declarada |
-| **Suporte de ramo produzido?** | Sim, local (SH-like, 0–1), por padrão | Sim, UFBoot (`-bb 1000`, escala 0–100) | Não (sem `--bs-trees`) | Sim em princípio (probabilidade posterior via `sumt`) |
-| **Suporte sobrevive ao artefato final?** | Sim — confirmado no Nexus em disco | Sim, no `.treefile` — confirmado no Nexus em disco (atualiza D10 parcialmente) | N/A (não há suporte a preservar) | **Hipótese de que não** — `_clean_mrbayes_tree` apaga colchetes antes de extrair; não confirmado sem rodar |
+| **Suporte de ramo produzido?** | Sim, local (SH-like, 0–1), por padrão | Sim, UFBoot (`-bb 1000`, escala 0–100) | **Sim, a partir de 2026-09-02 (M3.2)** — FBP (`--all --bs-trees 1000`, escala 0–100); antes desta data, não (sem `--bs-trees`) | Sim em princípio (probabilidade posterior via `sumt`) |
+| **Suporte sobrevive ao artefato final?** | Sim — confirmado no Nexus em disco | Sim, no `.treefile` — confirmado no Nexus em disco (atualiza D10 parcialmente) | **Sim** — confirmado no Nexus em disco (`.raxml.support`, mesmo mecanismo do FastTree/IQ-TREE) e por teste automatizado (`test_raxml_bootstrap.py`) | **Hipótese de que não** — `_clean_mrbayes_tree` apaga colchetes antes de extrair; não confirmado sem rodar |
 | **Convergência verificada?** | N/A (não é MCMC) | N/A | N/A | **Não** — ASDSF/ESS calculados pela ferramenta e nunca lidos (D20) |
 | **Contagem de réplicas/gerações parametrizável?** | N/A | Não (`-bb 1000` fixo) | N/A (sem bootstrap) | Não (`ngen`/`burnin`/`printfreq`/`samplefreq` fixos; `generations` é parâmetro de função nunca alcançado pelo chamador) |
 
