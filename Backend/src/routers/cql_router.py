@@ -1,8 +1,19 @@
 from fastapi import APIRouter, HTTPException
-from src.services.neo4j_services import neo4j_service
+from src.services.neo4j_services import neo4j_service, Neo4jUnavailableError
 import re
 
 router = APIRouter()
+
+NEO4J_RETRY_AFTER_SECONDS = "30"
+
+
+def _neo4j_indisponivel() -> HTTPException:
+    """503 uniforme para as rotas que dependem do Neo4j (M4.1)."""
+    return HTTPException(
+        status_code=503,
+        detail={"connected": False, "message": "Neo4j indisponível. Tente novamente em instantes."},
+        headers={"Retry-After": NEO4J_RETRY_AFTER_SECONDS},
+    )
 
 
 @router.post("/execute")
@@ -17,22 +28,26 @@ async def execute_cql(query_data: dict):
         
         if not query:
             raise HTTPException(status_code=400, detail="Query CQL é obrigatória")
-        
+
         if not neo4j_service.connected:
-            raise HTTPException(status_code=500, detail="Neo4j não conectado")
-        
+            raise _neo4j_indisponivel()
+
         if user_id_request and "<<USER_UID>>" in query:
             query = query.replace("<<USER_UID>>", user_id_request)
-            
+
         result = await neo4j_service.execute_query(query, parameters)
-        
+
         return {
             "success": True,
             "execution_type": "single",
             "result": result,
             "message": "Query executada com sucesso"
         }
-        
+
+    except Neo4jUnavailableError:
+        raise _neo4j_indisponivel()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na execução: {str(e)}")
     
@@ -47,10 +62,10 @@ async def execute_batch_cql(query_data: dict):
         
         if not queries or not isinstance(queries, list):
             raise HTTPException(status_code=400, detail="A lista de queries é obrigatória")
-        
+
         if not neo4j_service.connected:
-            raise HTTPException(status_code=500, detail="Neo4j não conectado")
-        
+            raise _neo4j_indisponivel()
+
         batch_payload = []
         for query in queries:
             if user_id_request and "<<USER_UID>>" in query:
@@ -68,6 +83,10 @@ async def execute_batch_cql(query_data: dict):
             "total": len(queries),
             "results": results
         }
-        
+
+    except Neo4jUnavailableError:
+        raise _neo4j_indisponivel()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na execução do batch: {str(e)}")

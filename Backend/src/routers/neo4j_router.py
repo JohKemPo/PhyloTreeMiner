@@ -1,9 +1,20 @@
 from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
-from ..services.neo4j_services import neo4j_service
+from ..services.neo4j_services import neo4j_service, Neo4jUnavailableError
 
 router = APIRouter()
+
+NEO4J_RETRY_AFTER_SECONDS = "30"
+
+
+def _neo4j_indisponivel() -> HTTPException:
+    """503 uniforme para as rotas que dependem do Neo4j (M4.1)."""
+    return HTTPException(
+        status_code=503,
+        detail={"connected": False, "message": "Neo4j indisponível. Tente novamente em instantes."},
+        headers={"Retry-After": NEO4J_RETRY_AFTER_SECONDS},
+    )
 
 class CypherQuery(BaseModel):
     query: str
@@ -59,6 +70,10 @@ async def execute_cypher_query(cypher_query: CypherQuery, user_id: str = Depends
     try:
         results = await neo4j_service.execute_query(cypher_query.query, cypher_query.parameters)
         return {'success': True, 'results': results}
+    except Neo4jUnavailableError:
+        raise _neo4j_indisponivel()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -69,6 +84,10 @@ async def get_graph_data(cypher_query: CypherQuery, user_id: str = Depends(get_u
         cypher_query.parameters['user_id'] = user_id
         graph_data = await neo4j_service.get_graph_data(cypher_query.query, parameters=cypher_query.parameters)
         return {'success': True, 'data': graph_data}
+    except Neo4jUnavailableError:
+        raise _neo4j_indisponivel()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     

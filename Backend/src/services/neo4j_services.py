@@ -8,6 +8,15 @@ from neo4j.graph import Node, Relationship, Path
 env_path = pathlib.Path(__file__).resolve().parents[3] / ".env"
 load_dotenv(dotenv_path=env_path)
 
+class Neo4jUnavailableError(Exception):
+    """Levantada quando uma operação é pedida com o driver desconectado.
+
+    Substitui o antigo retorno de lista/dict vazio (M4.1): vazio é
+    indistinguível de "consulta sem resultado", e o chamador precisa saber
+    que a causa foi a conexão, não a query.
+    """
+
+
 class Neo4jService:
     def __init__(self, uri: str = None, username: str = None, password: str = None):
         self.uri = uri or os.getenv('NEO4J_URI', 'bolt://localhost:7687')
@@ -38,8 +47,8 @@ class Neo4jService:
     async def execute_query(self, query: str, parameters: Dict = None, user_id: str = None) -> List[Dict[str, Any]]:
         """Executa uma consulta Cypher assincronamente."""
         if not self.connected:
-            return [] 
-        
+            raise Neo4jUnavailableError("Neo4j indisponível")
+
         if parameters is None: parameters = {}
         parameters['user_id'] = user_id
         
@@ -52,8 +61,8 @@ class Neo4jService:
         Executa múltiplas queries Cypher em lote
         """
         if not self.connected:
-            return []
-        
+            raise Neo4jUnavailableError("Neo4j indisponível")
+
         results = []
         async with self.driver.session() as session:
             for query, params in queries:
@@ -84,7 +93,7 @@ class Neo4jService:
             query = f"MATCH (n) RETURN n LIMIT {limit}"
         
         if not self.connected:
-            return {'nodes': [], 'edges': []}
+            raise Neo4jUnavailableError("Neo4j indisponível")
 
         nodes = {}
         edges = {}
