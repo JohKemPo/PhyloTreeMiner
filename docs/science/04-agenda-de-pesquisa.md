@@ -28,7 +28,7 @@ A agenda abaixo transforma o primeiro em resultado principal e fecha as lacunas 
 
 **Invalidaria a hipótese.** Se o contraste bootstrap × suporte metodológico desaparecesse sob a correção. Não desaparece — já verificado: as três tabelas de §4.4 já são pós-correção.
 
-**Estado.** Feito. `docs/science/scripts/audit_variola.py`. Falta portar as correções para o pipeline de produção, o que é [D3](02-defeitos-que-alteram-resultado.md#d3) + [D5](02-defeitos-que-alteram-resultado.md#d5).
+**Estado.** ✅ **Feito nos dois lados.** `docs/science/scripts/audit_variola.py` já fazia a análise correta; M1 (fechado em 2026-08-24, [D3](02-defeitos-que-alteram-resultado.md#d3) + [D5](02-defeitos-que-alteram-resultado.md#d5)) portou a correção para o pipeline de produção. E3 (abaixo) é o experimento que materializa isso numa reexecução limpa.
 
 ---
 
@@ -55,6 +55,8 @@ A agenda abaixo transforma o primeiro em resultado principal e fecha as lacunas 
 **Invalidaria a hipótese.** P-II caindo abaixo de 4/4, ou VARV deixando de ser monofilético.
 
 **Este é o conjunto de referência do artigo.** Deve virar `Backend/tests/data/reference/` conforme [`04-rigor-cientifico.md §2`](../automation/04-rigor-cientifico.md#2-dataset-de-referência-pré-requisito-de-w3).
+
+**Estado em 2026-09-01.** ◐→quase ●. `Variola_VARV49_reexec_20260901` já é essencialmente isto: filtro `txid10242` aplicado (M2.2, [DEC-035](../automation/07-log-de-execucao.md)), 49 sequências limpas (52 registros → 49 distintas, sem crocodilepox), M = 4 métodos × 2 alinhadores = 10 árvores, manifesto completo (DEC-027/046/050), enraizamento comum disponível (M2.3, [DEC-034](../automation/07-log-de-execucao.md)). `make reference-check` confirma monofilia de VARV e clado P-II **4/4** sobre os 4 pipelines presentes (código 2 — falta só `mafft_raxml` no fixture publicado, que já existe no artefato novo). **Falta apenas** rodar `make reference-dataset` com `expected.json` corrigido (`aligners: ["mafft", "mafft_iterative"]`) para fechar M2 e tornar este o dataset de referência oficial — ver `docs/automation/13-guia-reexecucao-m2.md §4`.
 
 ---
 
@@ -89,6 +91,15 @@ Evidência preliminar (ZIKV-478, onde os dois alinhadores realmente executaram):
 **Invalidaria a hipótese.** Efeito uniforme entre paradigmas, ou nulo em ambos.
 
 **Este é o segundo resultado do artigo**, e é original: a literatura discute sensibilidade ao alinhamento e sensibilidade ao método separadamente; a interação é raramente quantificada de forma sistemática.
+
+**Estado em 2026-09-01 — agora computável, e já computado uma vez (exploratório, não revisado).** A decisão 1 ([DEC-036](../automation/07-log-de-execucao.md)/[DEC-050](../automation/07-log-de-execucao.md)) definiu o segundo alinhador como a segunda estratégia do MAFFT — e as reexecuções desta rodada (`Variola_VARV49_reexec_20260901`) são a primeira vez que os dois braços rodam de verdade sobre *Variola* com o `stability.py` corrigido ([D25](02-defeitos-que-alteram-resultado.md#d25)). Primeira leitura, via `python -m workflow.stability.case_study --project projects/Variola_VARV49_reexec_20260901`:
+
+```
+RF médio | trocando alinhador ........ 0.052 (n=5, máx 0.152)
+RF médio | trocando inferência ....... 0.385 (n=20, máx 0.587)
+```
+
+Por par mafft × mafft_iterative, do mesmo método: fasttree 0,022 · iqtree 0,022 · raxml 0,044 · upgma 0,022 · **nj_distance 0,152**. Isto é **na direção oposta** ao padrão de ZIKV-478 na tabela acima, onde NJ era o método mais imune (0,0021) e os métodos de caráter os mais sensíveis: aqui NJ é o **mais** sensível à troca de alinhador entre os cinco. Duas leituras possíveis, nenhuma confirmada: (a) o efeito de E4 não generaliza entre um contraste MAFFT×Clustal (heurísticas independentes) e um contraste MAFFT×MAFFT-iterativo (mesma heurística, refinamento diferente); (b) há uma particularidade do NJ em *Variola* que não existe em Zika. **Não tratar como resultado antes de revisão do domínio científico** — falta ainda VARV-121 como segunda réplica (critério de sucesso de E4 pede "replicada em ao menos dois conjuntos") e uma leitura formal de `ptm-dominio-cientifico`.
 
 ---
 
