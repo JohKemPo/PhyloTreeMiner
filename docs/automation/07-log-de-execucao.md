@@ -2203,6 +2203,45 @@ cd Backend && python -m pytest tests -q   → 257 passed, 1 xfailed (sem regress
 
 **Write-lock:** `docs/science/scripts/gerar_dataset_referencia.py`, `Backend/tests/data/reference/{expected.json,README.md,MANIFEST.sha256,trees/*}`. Não toca código de produção. **Reversível:** sim (regenerável a qualquer momento pelo mesmo comando).
 
+### DEC-064 · 2026-09-02 · M3.2/M7.2 fecha — RAxML-NG passa a produzir suporte de ramo
+
+**Gatilho:** pedido do usuário — atacar M3 em paralelo a M2/M4, via `ptm-bioinformatica-inferencia` (trilha T1, só `BioComp_UFF/`), esta sessão gerenciando e validando.
+
+#### O que fechou
+
+`raxml_ng_constructor` (`BioComp_UFF/workflow/tree_construction/builder.py`) rodava só busca de ML — sem `--bootstrap`/`--all`, não calculava suporte nenhum, o único dos três métodos avançados sem essa informação ([`08-ficha-de-chamada-por-metodo.md §3`](../science/08-ficha-de-chamada-por-metodo.md#3-raxml-ng)). Corrigido: `--all --bs-trees 1000` combina busca de ML + bootstrap + mapeamento de suporte num só comando, mesma contagem de réplicas do `-bb 1000` do IQ-TREE. `--workers 1` (D17) e a semente seguem intocados. Leitura passa a tentar `<prefix>.raxml.support` primeiro (tem `.confidence`), com `.raxml.bestTree` como fallback.
+
+**Achado que fica registrado, não é regressão:** o suporte do RAxML-NG é **FBP** (Felsenstein bootstrap proportion, bootstrap não-paramétrico clássico) — **não é UFBoot**, a métrica aproximada do IQ-TREE. Ambos saem em escala 0-100, mas não são a mesma coisa e não devem ser lidos com o mesmo limiar de confiança. Isso é exatamente o tipo de heterogeneidade de suporte que M7.3 (modelo declarado e coerente) precisa endereçar mais tarde.
+
+#### M3.1 — metade fechada (só `BioComp_UFF/`)
+
+Confirmado que o suporte do RAxML-NG sobrevive ao `Phylo.write` para Nexus, mesmo mecanismo genérico já usado por FastTree e IQ-TREE (ficha §1/§2) — não precisou de código novo, só confirmação por teste. **A outra metade de M3.1** (propagar `confidence` a `metadata.json`/grafo/UI) é `Backend/`/`Frontend/`, fora do escopo deste lote pela regra 6 do CLAUDE.md — fica para um lote futuro.
+
+#### Δ em métrica publicada: nenhum
+
+Nenhum genoma real (Variola/Zika) foi processado neste lote — só um alinhamento sintético de 6 táxons, fixo no teste, sem rede. As árvores já publicadas (VARV-49, VARV-121, etc.) não mudam até serem reexecutadas com este código.
+
+**Evidência de execução:**
+```
+raxml-ng --all --msa test.fasta --model GTR+G --threads 1 --workers 1 --seed 12345 \
+  --tree rand{10} --bs-trees 1000 --prefix test1000b --redo
+  → "Best ML tree with Felsenstein bootstrap (FBP) support values saved to: test1000b.raxml.support"
+
+cd BioComp_UFF && python -m unittest workflow.tests.test_raxml_bootstrap -v
+  → 3 testes, OK (árvore com .confidence não-nulo; suporte sobrevive ao Nexus;
+    linha de comando trava --all/--bs-trees 1000/--workers 1, sem "auto")
+
+cd BioComp_UFF && python -m unittest workflow.tests.test_stability workflow.tests.test_subtree_mining \
+  workflow.tests.test_tree_identity workflow.tests.test_rf_bipartition workflow.tests.test_manifest \
+  workflow.tests.test_rooting workflow.tests.test_taxonomy workflow.tests.test_aligners \
+  workflow.tests.test_external_tools workflow.tests.test_raxml_bootstrap
+  → Ran 167 tests, OK (era 164; +3, sem regressão)
+```
+
+**Não verificado, registrado para depois:** determinismo do bootstrap entre execuções (mesma semente) não foi medido — só a busca de ML tinha essa medição (D17/D21); com `raxml_threads` no default (4), o RAxML-NG recusa alinhamentos pequenos ("Too few patterns per thread") — comportamento pré-existente, não causado por este lote, registrado na ficha como escolha silenciosa a revisitar.
+
+**Write-lock:** `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow/tests/test_raxml_bootstrap.py` (novo), `docs/science/08-ficha-de-chamada-por-metodo.md`. Não toca `Backend/` nem `Frontend/`. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**

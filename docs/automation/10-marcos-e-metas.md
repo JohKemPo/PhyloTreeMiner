@@ -202,8 +202,8 @@ make reference-check
 
 | # | Lote | Trilha |
 |---|---|---|
-| M3.1 | Propagar `confidence` do `.contree` ao Nexus, ao `metadata.json` e ao grafo | T1 |
-| M3.2 | Habilitar `-B 1000` no RAxML-NG e `-boot` no FastTree — simetria entre métodos ML | T1 |
+| M3.1 | ◐ Propagar `confidence` do `.contree` ao Nexus, ao `metadata.json` e ao grafo — **metade `BioComp_UFF/` fechada** ([DEC-064](07-log-de-execucao.md)): FastTree/IQ-TREE já propagavam (achado M7.1), RAxML-NG confirmado propagando ao Nexus depois de M3.2. Falta a metade `Backend/`/`Frontend/` (metadata.json/grafo/UI) | T1 (feito) + T2/T4 (aberto) |
+| M3.2 | ✅ Habilitado `--bs-trees 1000` no RAxML-NG ([DEC-064](07-log-de-execucao.md)) — é FBP, não UFBoot, ver nota em D10/ficha de método. FastTree já produzia suporte local por padrão, sem precisar de mudança | T1 |
 | M3.3 | UI exibe, por clado, **bootstrap e suporte metodológico lado a lado** | T4 |
 | M3.4 | Regenerar as três tabelas cruzadas (VARV-49, VARV-52, VARV-121) por um comando | T3 |
 
@@ -386,7 +386,7 @@ Cada um foi achado por acaso, ao investigar outra coisa. **Nenhum método foi au
 | # | Lote | O que resolve | Origem |
 |---|---|---|---|
 | M7.1 | ✅ **Ficha de chamada por método** ([DEC-060](07-log-de-execucao.md#dec-060--2026-09-01--m71-fecha-ficha-de-chamada-por-método-achado-d26-e-e4-ganha-validação-de-oráculo)): [`docs/science/08-ficha-de-chamada-por-metodo.md`](../science/08-ficha-de-chamada-por-metodo.md) documenta FastTree/IQ-TREE/RAxML-NG/MrBayes. Achou [D26](../science/02-defeitos-que-alteram-resultado.md#d26) (semente/threads pedidos ≠ executados) e atualização parcial não fechada de [D10](../science/02-defeitos-que-alteram-resultado.md#d10) | dá a linha de base — hoje não existe  — |
-| M7.2 | **Suporte de ramo simétrico**: UFBoot no IQ-TREE já existe; habilitar `--bs-trees` no RAxML-NG e `-boot` no FastTree, com o mesmo número de réplicas declarado | [D10](../science/02-defeitos-que-alteram-resultado.md#d10), e é o M3.2  — |
+| M7.2 | ✅ **Suporte de ramo simétrico** ([DEC-064](07-log-de-execucao.md)): UFBoot no IQ-TREE já existia; `--bs-trees 1000` habilitado no RAxML-NG (é FBP, não UFBoot — escalas não comparáveis pelo mesmo limiar); FastTree já produzia suporte local por padrão | [D10](../science/02-defeitos-que-alteram-resultado.md#d10), e é o M3.2  — |
 | M7.3 | **Modelo de substituição declarado e coerente**: hoje o IQ-TREE recebe `GTR+G` fixo (sem ModelFinder), o RAxML `GTR+G`, o FastTree usa o padrão e o MrBayes `nst=6 rates=gamma`. São quatro decisões separadas que ninguém comparou | `DM-2`  — |
 | M7.4 | **MrBayes correto**: caminho absoluto, semente, `ngen`/`burnin`/`nruns`/`nchains` por configuração, e **recusar a árvore se o ASDSF não indicar convergência** | [D20](../science/02-defeitos-que-alteram-resultado.md#d20)  — |
 | M7.5 | **Parcimônia viável ou declarada inviável**: o construtor do Biopython é Python puro e custa 25× um método de ML. Ou se troca por uma implementação em C (TNT, PAUP\*), ou se declara que a parcimônia só entra em conjuntos pequenos — **com o limite medido, não estimado** | [E7](../science/04-agenda-de-pesquisa.md), `DM-11`  — |
