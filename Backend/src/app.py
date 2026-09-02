@@ -910,7 +910,7 @@ async def generate_tree_plot(project_name: str):
         
         # Puxa os dados cacheados/indexados
         cache = get_metadata_cache(metadata_path)
-        node_index = cache["nodes"] # Utiliza o dicionário indexado pela chave para acesso O(1) no ETE3
+        node_index = cache["node_index"] # Utiliza o dicionário indexado pela chave para acesso O(1) no ETE3 (M4.12: era cache["nodes"], uma lista)
 
         # Otimização: Só gera a imagem se ela não existir ou se a árvore/metadados forem mais recentes
         # Para forçar a geração sempre, remova este if.

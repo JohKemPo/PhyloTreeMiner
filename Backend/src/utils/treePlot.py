@@ -95,15 +95,24 @@ def render_annotated_tree(tree_file, metadata_dict, output_file="tree_plot.png")
     # 4. Iterar sobre os nós para aplicar estilos e faces
     for node in t.traverse():
         if node.is_leaf():
-            resultado = next((item for item in metadata_dict if item["accessionId"] == node.name.split('.')[0]), None)
-            # Buscar os metadados do nó atual
-            # Presume-se que node.name corresponde ao accessionId do seu script
-            meta = {
-                "accessionId": resultado['accessionId'],
-                "region": resultado['region'],
-                "year": resultado['year'],
-                "country": resultado['country']
-            }
+            # metadata_dict é indexado por accessionId (M4.12): iterá-lo como
+            # lista devolvia as chaves (strings) e `item["accessionId"]`
+            # levantava TypeError. Busca por chave é O(1) e é o que o
+            # docstring da função sempre descreveu.
+            accession = node.name.split('.')[0]
+            resultado = metadata_dict.get(accession)
+            if resultado is None:
+                # Acesso sem entrada no índice (ex.: D13 truncou o rótulo
+                # além do esperado): anota com "Unknown" em vez de quebrar
+                # o render inteiro por um único nó.
+                meta = {"accessionId": accession, "region": "Unknown", "year": "Unknown", "country": "Unknown"}
+            else:
+                meta = {
+                    "accessionId": resultado.get("accessionId", accession),
+                    "region": resultado.get("region", "Unknown"),
+                    "year": resultado.get("year", "Unknown"),
+                    "country": resultado.get("country", "Unknown"),
+                }
             
             # --- Adicionar o círculo colorido (Cluster) ---
             node_color = color_map.get(meta["region"], color_map["Unknown"])
