@@ -31,7 +31,11 @@ sys.path.insert(0, os.path.abspath("."))
 from workflow.stability.case_study import build_classifier
 from workflow.stability.stability import StabilityAnalyzer, TreeSet
 
-PROJETO = "projects/Variola_Yu_li_2007"
+#: Reexecução limpa de 2026-09-01, com D25 corrigido (stability.py reconhece
+#: mafft_iterative) e M1.3 confirmado contra o oráculo dendropy (45 pares, 0
+#: divergências). Antes de DEC-062 este apontava para o artefato anterior à
+#: reexecução (Variola_Yu_li_2007), que nunca teve os dois braços do MAFFT.
+PROJETO = "projects/Variola_VARV49_reexec_20260901"
 DESTINO = "../Backend/tests/data/reference"
 
 #: Os seis táxons do clado P-II — África Ocidental mais o isolado brasileiro de
@@ -114,6 +118,11 @@ def main():
     ext = frozenset(externo)
     aninhada = p2 | ext
 
+    # Limpa antes de copiar: sem isto, árvores de uma fonte anterior (ex.: o
+    # braço clustalo do artefato contaminado que precedeu D6/M2.2) sobrevivem
+    # indefinidamente em `trees/`, mesmo quando `present_pipelines` já não as
+    # lista — silenciosamente ignoradas pelo portão, mas nunca removidas.
+    shutil.rmtree(os.path.join(DESTINO, "trees"), ignore_errors=True)
     os.makedirs(os.path.join(DESTINO, "trees"), exist_ok=True)
 
     # ------------------------------------------------------------------ #
@@ -253,16 +262,18 @@ mediu RF = 8 entre execuções com a mesma semente variando só a paralelizaçã
 
 ## O que ainda falta
 
-As árvores aqui vêm do artefato **anterior à reexecução** e têm **{len(tree_set.trees)}
-pipelines efetivos**. O M alvo declarado é de {len(M_ALVO["aligners"])} alinhadores ×
-{len(M_ALVO["inference"])} métodos, alcançável só depois de reexecutar na máquina de
-validação com a biblioteca completa.
+As árvores aqui vêm da reexecução de 2026-09-01 (`Variola_VARV49_reexec_20260901`,
+com [D25](../../../../docs/science/02-defeitos-que-alteram-resultado.md#d25) corrigido)
+e têm **{len(tree_set.trees)} pipelines efetivos**. O M alvo declarado é de
+{len(M_ALVO["aligners"])} alinhadores × {len(M_ALVO["inference"])} métodos — falta só
+o braço `raxml` de `mafft_iterative` completar a biblioteca (`mafft_raxml` já presente).
 
 Até lá, `make reference-check` devolve **código 2**: invariante válido, M incompleto.
 
-⚠️ **Divergência de versão a resolver antes da reexecução:** os logs destas
-árvores registram FastTree 2.2.0 e RAxML-NG 1.2.2; a máquina de desenvolvimento
-tem 2.1.11 e 1.1.0.
+As divergências de versão entre máquina de desenvolvimento e de validação (FastTree,
+RAxML-NG) foram investigadas e resolvidas — ver [DEC-043](../../../../docs/automation/07-log-de-execucao.md)
+e [DEC-044](../../../../docs/automation/07-log-de-execucao.md). As versões usadas nesta
+reexecução são as pinadas em `environment.yml`.
 
 ## Conferir
 

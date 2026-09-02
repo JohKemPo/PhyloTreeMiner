@@ -143,7 +143,7 @@ Mais: cada lote com sua **tabela de diff** (métrica · antes · depois · Δ ·
 
 ---
 
-## 4. M2 — Baseline replicado · `VARV-49-clean`
+## 4. M2 — Baseline replicado · `VARV-49-clean` ✅ FECHADO em 2026-09-02
 
 **Meta.** Transformar a replicação de Li *et al.* (2007) — hoje parcial, contaminada e sem manifesto — no **dataset de referência versionado** do projeto, e com ele instituir o gate científico.
 
@@ -157,7 +157,7 @@ Mais: cada lote com sua **tabela de diff** (métrica · antes · depois · Δ ·
 | M2.4 | ✅ Proveniência honesta: o padrão é **abortar** com o motivo; a substituição só ocorre se autorizada, e `resolve_aligner` devolve o nome do alinhador que rodou ([DEC-037](07-log-de-execucao.md)). Reexecutar para que os artefatos deixem de mentir é da máquina de validação | [D1](../science/02-defeitos-que-alteram-resultado.md#d1) parte 1 | T1 |
 | M2.5 | ✅ **Manifesto de execução**: `run_id`, UTC, `git_commit` dos dois repositórios, versão de **toda** ferramenta, sementes e paralelização fixas, SHA-256 de entradas e saídas ([DEC-027](07-log-de-execucao.md)). Completado em [DEC-046](07-log-de-execucao.md): `tools_invoked` deixa de sair vazio e passa a registrar **a linha de comando de cada chamada** — era o campo que separava *disponível* de *executado* | [D11](../science/02-defeitos-que-alteram-resultado.md#d11), [D17](../science/02-defeitos-que-alteram-resultado.md#d17) | T1 |
 | M2.6 | ✅ Publicado em `Backend/tests/data/reference/` — VARV-49, o único limpo e com delineamento defensável. `make reference-dataset` regenera ([DEC-042](07-log-de-execucao.md)) | [`04-rigor §2`](04-rigor-cientifico.md#2-dataset-de-referência-pré-requisito-de-w3) | T3 |
-| M2.7 | ✅ `make reference-check` (rápido, qualquer máquina) e `make reference-check-full` (reexecuta). Três códigos: 0 satisfeito, 2 M incompleto, 1 invariante violado. **Hoje devolve 2** — invariante 3/3, falta `mafft_raxml` ([DEC-042](07-log-de-execucao.md)) | institui o gate | T3 |
+| M2.7 | ✅ `make reference-check` (rápido, qualquer máquina) e `make reference-check-full` (reexecuta). Três códigos: 0 satisfeito, 2 M incompleto, 1 invariante violado. **Código 0 desde 2026-09-02** — invariante 3/3, `M` completo (10 de 10 pipelines) ([DEC-063](07-log-de-execucao.md)) | institui o gate | T3 |
 
 **Composição alvo:** 45 VARV + CMLV/CPXV/TATV como grupo externo declarado. M = 4 métodos de inferência sobre um alinhamento (não 8 — ver [D2](../science/02-defeitos-que-alteram-resultado.md#d2): o denominador 8 conta cópias byte a byte).
 
@@ -190,7 +190,7 @@ make reference-check
 
 ➕ **M2.5 ganha um segundo requisito**, de [D21](../science/02-defeitos-que-alteram-resultado.md#d21): o IQ-TREE roda com **`-nt 1`**. Medido: com `-nt N`, três repetições da mesma semente devolvem três topologias, e a ferramenta não tem equivalente ao `--workers 1` do RAxML-NG. Decidido pelo usuário em 2026-08-26.
 
-⚠️ **O que ainda separa M2 do código 0.** Os sete lotes estão entregues, e o portão continua em **código 2** — invariante 3/3, falta `mafft_raxml`. O que falta não é código: é a **reexecução** de [`§4.1`](11-handoff-maquina-de-validacao.md), agora destravada por D21 e por D1. Ela materializa, de uma vez: o RAxML de volta (`M` 4 → 5), o fator alinhador genuíno, o IQ-TREE reprodutível e o `n` efetivo declarado por [D23](../science/02-defeitos-que-alteram-resultado.md#d23).
+✅ **M2 fechado em 2026-09-02** ([DEC-063](07-log-de-execucao.md)). A reexecução de [`§4.1`](11-handoff-maquina-de-validacao.md) materializou tudo que faltava: o RAxML de volta (`M` 4 → 5, confirmado rodando nas quatro reexecuções — D17), o fator alinhador genuíno (`mafft` × `mafft_iterative`, D25 corrigido no caminho), o IQ-TREE reprodutível (D21) e o `n` efetivo de 49 (D23, declarado e não corrigido, mas o dedup é o esperado). `docs/science/scripts/gerar_dataset_referencia.py` foi apontado para `Variola_VARV49_reexec_20260901` e regenerou `expected.json` com `target_M_size: 10`; `make reference-check` devolve **código 0** — 10 de 10 pipelines, 3 de 3 invariantes de Li *et al.* (2007).
 
 ---
 
@@ -351,15 +351,15 @@ T4 (frontend)         M4.21 ‖ M4.22 → M4.23 (após M4.1)
 
 **Gate de M6:** o checklist completo de [`04-rigor-cientifico §6`](04-rigor-cientifico.md#6-checklist-de-artefato-para-submissão-gate-de-w7); e **nenhuma afirmação do manuscrito sem evidência rastreável no ledger**.
 
-**Definição de sucesso do [plano mestre §2](01-plano-mestre.md), hoje 0 de 5:**
+**Definição de sucesso do [plano mestre §2](01-plano-mestre.md), hoje 2 de 5** (atualizado em 2026-09-02, com o fechamento de M2 — condições 4 e 5 exigem M6, ainda não iniciado):
 
-| # | Condição | Fecha em |
-|---|---|---|
-| 1 | `git clone --recursive` + um comando → stack de pé | M5 |
-| 2 | `pytest` + testes do front verdes, cobrindo endpoints e núcleo científico | M0 |
-| 3 | Dataset de referência versionado reproduz os números publicados | **M2** |
-| 4 | Está escrito que dados a ferramenta trata, com que base legal e por quanto tempo | M0.7 + M6 |
-| 5 | Cada figura reproduzível por script + hash + commit | M2.5 + M6 |
+| # | Condição | Fecha em | Estado |
+|---|---|---|---|
+| 1 | `git clone --recursive` + um comando → stack de pé | M5 | aberto |
+| 2 | `pytest` + testes do front verdes, cobrindo endpoints e núcleo científico | M0 | ✅ satisfeita |
+| 3 | Dataset de referência versionado reproduz os números publicados | **M2** | ✅ satisfeita ([DEC-063](07-log-de-execucao.md)) |
+| 4 | Está escrito que dados a ferramenta trata, com que base legal e por quanto tempo | M0.7 + M6 | aberto (falta M6) |
+| 5 | Cada figura reproduzível por script + hash + commit | M2.5 + M6 | aberto (falta M6) |
 
 ---
 

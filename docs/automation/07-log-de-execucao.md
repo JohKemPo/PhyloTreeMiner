@@ -2151,6 +2151,58 @@ Validação de reexecução (mesmo protocolo já usado 3 vezes nesta rodada) e l
 
 **Write-lock:** `docs/automation/13-guia-reexecucao-m2.md` (estado da rodada), `docs/science/04-agenda-de-pesquisa.md` (E4, segunda réplica). Nenhum código tocado. **Reversível:** sim.
 
+### DEC-063 · 2026-09-02 · M2 fecha — `expected.json` regenerado a partir da reexecução limpa, portão em código 0
+
+**Gatilho:** pedido do usuário — fechar M2 (ajuste dos alinhadores no fixture). Zona sagrada: muda o invariante que passa a gatear toda refatoração futura ([`04-rigor-cientifico §3`](04-rigor-cientifico.md#3-protocolo-de-mudança-na-zona-sagrada)).
+
+#### Caracterizar
+
+`docs/science/scripts/gerar_dataset_referencia.py` já tinha `M_ALVO["aligners"] = ["mafft", "mafft_iterative"]` desde DEC-050 (2026-08-27) — o gerador estava certo. O que estava desatualizado era `PROJETO = "projects/Variola_Yu_li_2007"`: apontava para o artefato **anterior** à reexecução, que nunca teve o braço `mafft_iterative`. `Backend/tests/data/reference/expected.json`, nunca regravado desde então, carregava `aligners: ["mafft"]`, `target_M_size: 5` e a nota antiga (D1, já retratada) atribuindo a exclusão de Clustal/MUSCLE a OOM. `make reference-check` devolvia código 2 — "4 de 5 pipelines, falta mafft_raxml".
+
+#### Formalizar
+
+O dataset de referência deve vir da reexecução mais recente e taxonomicamente limpa de VARV-49 que já passou pelo M1.3 corrigido (D25) — hoje `Variola_VARV49_reexec_20260901`, não o artefato pré-M1.
+
+#### Correção
+
+`PROJETO` passa a apontar para `projects/Variola_VARV49_reexec_20260901`. Achado no caminho: o gerador nunca limpava `Backend/tests/data/reference/trees/` antes de copiar — os 4 `.nexus` do braço `clustalo` do artefato contaminado original (pré D6/M2.2) sobreviviam indefinidamente, ignorados pelo portão mas nunca removidos. Adicionado `shutil.rmtree` antes de recriar o diretório. Texto do `README.md` gerado também atualizado (removida a advertência de divergência de versão FastTree/RAxML-NG, resolvida desde DEC-043/044).
+
+#### Oráculo independente
+
+Nenhum recálculo de RF nesta mudança — os números já vêm oráculo-confirmados: `Variola_VARV49_reexec_20260901` passou por `conferir_correcoes_m1.py` (TUDO VERDE) e pelo oráculo dendropy (45 pares, 0 divergências) em DEC-062. Esta mudança só aponta o gerador do fixture para esse artefato já validado.
+
+#### Diff de resultado
+
+| Campo | Antes | Depois | Δ | Afeta número publicado? |
+|---|---|---|---|---|
+| `source_project` | `Variola_Yu_li_2007` (pré-M1) | `Variola_VARV49_reexec_20260901` | — | Não — nenhum número do artigo cita este fixture ainda |
+| `target_M.aligners` | `["mafft"]` | `["mafft", "mafft_iterative"]` | +1 alinhador | Não — já era o alvo declarado desde DEC-050, só não regravado |
+| `target_M_size` | 5 | 10 | +5 | Não |
+| `present_pipelines` | 8 (4 `mafft_*` + 4 `clustalo_*` contaminados) | 10 (`mafft_*` + `mafft_iterative_*`, sem `clustalo`) | — | Não |
+| `aligner_factor_present` | `false` | `true` | — | Não |
+| `make reference-check` | código 2 (4 de 5, falta `mafft_raxml`) | **código 0** (10 de 10) | **fecha o portão** | Não — é o gate fechando, não um número do artigo mudando |
+
+**Parecer:** não há reafirmação de nenhum número já publicado — o fixture nunca tinha sido regravado com o alvo correto, então não havia valor aceito sendo substituído. O que muda é que o portão científico, aberto desde M2.6, **fecha em código 0** pela primeira vez, com os 3 invariantes de Li *et al.* (2007) recuperados por 10 de 10 pipelines.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python ../docs/science/scripts/gerar_dataset_referencia.py
+  → 49 táxons (45 VARV + 4 grupo externo); 10 árvores, 10 pipelines efetivos;
+    invariantes verificados: 3 de 3; M alvo: 10 pipelines
+
+make reference-check
+  → ✓ monofilia_varv, ✓ clado_p2, ✓ p2_basal — recuperados por todos os 10 pipelines
+    pipelines conferidos: 10 de 10; bipartições universais: 17; RF 0,0217 a 0,587
+    ✓ Portão satisfeito: invariante válido em 10 de 10 pipelines.
+  EXIT: 0        (era: código 2, "4 de 5 pipelines, falta mafft_raxml")
+
+ls Backend/tests/data/reference/trees/   → 10 arquivos (sem clustalo_*, antes 14 com 4 contaminados)
+
+cd Backend && python -m pytest tests -q   → 257 passed, 1 xfailed (sem regressão)
+```
+
+**Write-lock:** `docs/science/scripts/gerar_dataset_referencia.py`, `Backend/tests/data/reference/{expected.json,README.md,MANIFEST.sha256,trees/*}`. Não toca código de produção. **Reversível:** sim (regenerável a qualquer momento pelo mesmo comando).
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -2197,6 +2249,7 @@ Toda mudança na zona sagrada ([04-rigor-cientifico §1](04-rigor-cientifico.md)
 | E4 — leitura exploratória do fator alinhador em `Variola_VARV49_reexec_20260901` (NJ inverte o padrão de ZIKV-478) | 2026-09-01 | **Não** — nenhum número de E4 saiu em artigo ainda; é a primeira leitura, e nenhuma linha de código mudou nesta revisão | [`science/04-agenda-de-pesquisa.md#e4`](../science/04-agenda-de-pesquisa.md#e4--◐--o-fator-alinhador-medido-onde-ele-existe). Os 5 pares mafft×mafft_iterative do `rf_matrix.csv` conferem exatamente (**Δ = 0**) contra dois oráculos independentes (dendropy 4.6.1 e ete3 3.1.3, `taxon_namespace` compartilhado, `force-unrooted`, denominador 2(n−3)=92) — a inversão de padrão (NJ o mais sensível à troca de alinhador aqui, o mais imune em Zika) não é bug de cálculo. Hipótese de politomia/baixo poder do NJ **refutada**: as 10 árvores (5 métodos × 2 alinhadores) são todas estritamente binárias, 46/46 bipartições. O que distingue os métodos: dos ramos internos curtos (≤1e-4), os de caráter (FastTree/IQ-TREE/RAxML) trocam só 1–2 de ~25 entre alinhadores; o NJ troca 7 de 7 (100%); o UPGMA (mesma distância de entrada que o NJ) troca só 1 de ~5, no mesmo patamar dos métodos de caráter. Mecanismo mais provável, não provado: `builder.py:107-115` usa `DistanceCalculator('identity')` sem correção de modelo como entrada única de NJ/UPGMA; com alinhamento de ~236 mil colunas e um deslocamento de 429 colunas entre as duas estratégias do MAFFT, o critério de agrupamento do NJ (matriz-Q) amplifica essa diferença pequena onde UPGMA e os métodos de caráter não amplificam. | **Pendente** — segue ◐; falta VARV-121 como segunda réplica antes de tratar como resultado. Nenhuma correção de código é proposta (nenhum defeito de cálculo encontrado); recomendação de teste de robustez adicional (rodar NJ/UPGMA com modelo de distância corrigido) registrada no documento, não executada |
 | D26 — `tree_config` não alcança o `TreeBuilder`; manifesto declara semente/threads pedidos, não executados | 2026-09-01 | **Não na topologia** — `--workers 1`/`-nt 1` (D17/D21) já fixam o que decide a árvore; o `N` de threads e a semente nunca divergiram na prática (todo experimento até hoje pediu o valor-padrão) | [DEC-060](#dec-060--2026-09-01--m71-fecha-ficha-de-chamada-por-método-achado-d26-e-e4-ganha-validação-de-oráculo). Confirmado lendo `treeBuilderController.py:803-849` (nenhuma das 4 chamadas avançadas repassa `tree_config`) e o `manifest.json` real de VARV-49 (`reproducibility` declara `raxml_threads:8, iqtree_threads:16`; a chamada usou os defaults 4/4). Achado de auditoria de código (M7.1), não de execução — nenhuma árvore recalculada | Não se aplica — nenhum número publicado envolvido; correção fica para lote futuro de M7 (fora do escopo de M7.1, que é só a ficha) |
 | E4 — VARV-121 como segunda réplica: NJ replica como mais sensível, UPGMA não replica exatamente | 2026-09-02 | **Não** — leitura exploratória de E4, nenhuma linha de código mudou | [DEC-062](#dec-062--2026-09-02--varv-121-reexecutado-e-validado-e4-ganha-a-segunda-réplica). Oráculo dendropy confere os 5 pares mafft×mafft_iterative de VARV-121 (Δ=0 contra `rf_matrix.csv`; 118=n−3 bipartições não triviais em ambos os alinhadores, sem polítoma). NJ é o método mais sensível à troca de alinhador nos dois conjuntos de *Variola* (0,1522 e 0,1949) — confirma a recomendação (i) do parecer de DEC-060. UPGMA não replica: no patamar dos métodos de caráter em VARV-49 (0,0217), sobe para perto do NJ em VARV-121 (0,1864) | **Pendente** — critério de sucesso de E4 ("replicar em ao menos 2 conjuntos") parcialmente satisfeito dentro de *Variola*; falta generalização entre espécies/regimes de contraste de alinhador e o rastreio mecanístico da matriz-Q (recomendação ii de DEC-060, não executada) |
+| M2.6/M2.7 — `expected.json` regenerado a partir da reexecução limpa, portão fecha em código 0 | 2026-09-02 | **Não** — o alvo (`mafft`+`mafft_iterative`) já estava correto desde DEC-050, só não regravado; nenhum número do artigo cita este fixture ainda | [DEC-063](#dec-063--2026-09-02--m2-fecha--expectedjson-regenerado-a-partir-da-reexecução-limpa-portão-em-código-0). `source_project` passa de `Variola_Yu_li_2007` (pré-M1) para `Variola_VARV49_reexec_20260901` (D25 corrigido, oráculo-validado em DEC-062). `target_M_size` 5→10; `present_pipelines` 8→10, sem os 4 `clustalo_*` contaminados que sobreviviam por o gerador nunca limpar `trees/` antes de copiar (corrigido). `make reference-check`: código 2 ("4 de 5, falta mafft_raxml") → **código 0**, 10 de 10 pipelines, 3 de 3 invariantes | **Aprovada** — coberta pelo pedido explícito de fechar M2 |
 
 ## Handoffs e relatórios
 

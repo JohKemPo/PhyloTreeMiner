@@ -39,16 +39,18 @@ Os três invariantes são recuperados por **todos** os pipelines presentes.
 
 ## O que ainda falta
 
-As árvores aqui vêm do artefato **anterior à reexecução** e têm **8
-pipelines efetivos**. O M alvo declarado é de 1 alinhadores ×
-5 métodos, alcançável só depois de reexecutar na máquina de
-validação com a biblioteca completa.
+As árvores aqui vêm da reexecução de 2026-09-01 (`Variola_VARV49_reexec_20260901`,
+com [D25](../../../../docs/science/02-defeitos-que-alteram-resultado.md#d25) corrigido)
+e têm **10 pipelines efetivos**. O M alvo declarado é de
+2 alinhadores × 5 métodos — falta só
+o braço `raxml` de `mafft_iterative` completar a biblioteca (`mafft_raxml` já presente).
 
 Até lá, `make reference-check` devolve **código 2**: invariante válido, M incompleto.
 
-⚠️ **Divergência de versão a resolver antes da reexecução:** os logs destas
-árvores registram FastTree 2.2.0 e RAxML-NG 1.2.2; a máquina de desenvolvimento
-tem 2.1.11 e 1.1.0.
+As divergências de versão entre máquina de desenvolvimento e de validação (FastTree,
+RAxML-NG) foram investigadas e resolvidas — ver [DEC-043](../../../../docs/automation/07-log-de-execucao.md)
+e [DEC-044](../../../../docs/automation/07-log-de-execucao.md). As versões usadas nesta
+reexecução são as pinadas em `environment.yml`.
 
 ## Conferir
 

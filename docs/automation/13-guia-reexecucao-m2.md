@@ -372,7 +372,7 @@ cd ../Backend && python scripts/conferir_correcoes_m1.py Zika_ZIKV480_reexec_202
 cd ../BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Zika_ZIKV480_reexec_20260901
 ```
 
-## 4. Fechando M2 — depois que VARV-49 reexecutar limpo
+## 4. Fechando M2 — ✅ fechado em 2026-09-02
 
 ```bash
 cd BioComp_UFF
@@ -381,13 +381,14 @@ python ../docs/science/scripts/reference_check.py --trees projects/Variola_VARV4
 
 Três códigos de saída ([`reference_check.py`](../science/scripts/reference_check.py), M2.7): `0` = invariante válido e M completo; `2` = invariante válido, M incompleto (esperado enquanto M2 está aberto); `1` = invariante violado, **sempre falha** — pare e traga para o ledger.
 
-⚠️ **`Backend/tests/data/reference/expected.json` está desatualizado em relação a [DEC-050](07-log-de-execucao.md#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir).** `target_M.aligners` ainda lista só `["mafft"]`, com `aligners_excluded` justificando Clustal Omega e MUSCLE por OOM — a mesma medição que DEC-050 **retratou** (Clustal é limite de tempo, não de memória; MUSCLE 5.3 recusa em 0,06 s por incompatibilidade de interface, não por OOM). Com o alvo antigo, mesmo uma reexecução perfeita com os dois braços do MAFFT só é contada pela metade — o braço `mafft_iterative` nunca aparece em `alvo_nomes`, e o gate completo nunca vai devolver código `0`. **Atualizar este fixture é o passo que fecha M2**, não parte da reexecução:
+✅ **Fechado.** `docs/science/scripts/gerar_dataset_referencia.py` já tinha `target_M.aligners = ["mafft", "mafft_iterative"]` desde DEC-050 — só `PROJETO` apontava para o artefato anterior à reexecução. Corrigido para `projects/Variola_VARV49_reexec_20260901` (D25 corrigido, oráculo-validado em DEC-062), e regravado:
 
 ```bash
-make reference-dataset      # regenera Backend/tests/data/reference/ a partir do VARV-49
+make reference-dataset      # regenerou Backend/tests/data/reference/ a partir do VARV-49 reexecutado
+make reference-check        # código 0 — 10 de 10 pipelines, 3 de 3 invariantes
 ```
 
-Isto **é** zona sagrada — muda o invariante que gate toda refatoração futura ([`04-rigor-cientifico §3`](04-rigor-cientifico.md#3-protocolo-de-mudança-na-zona-sagrada)). Antes de rodar `make reference-dataset`, atualize `target_M` em `expected.json` para `"aligners": ["mafft", "mafft_iterative"]` com a nota corrigida, registre o parecer no [log de execução](07-log-de-execucao.md) com o número DEC seguinte, e só então regrave.
+Achado no caminho: o gerador nunca limpava `trees/` antes de copiar — os 4 `.nexus` do braço `clustalo` do artefato contaminado original sobreviviam, ignorados pelo portão mas nunca removidos. Corrigido (`shutil.rmtree` antes de recriar). Parecer completo e diff de resultado em [DEC-063](07-log-de-execucao.md#dec-063--2026-09-02--m2-fecha--expectedjson-regenerado-a-partir-da-reexecução-limpa-portão-em-código-0).
 
 ## 5. O que registrar depois de cada reexecução
 

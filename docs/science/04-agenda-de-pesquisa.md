@@ -44,7 +44,7 @@ A agenda abaixo transforma o primeiro em resultado principal e fecha as lacunas 
 
 ---
 
-## E3 · ◐ · `VARV-49-clean`: replicação depurada de Li *et al.* (2007)
+## E3 · ✅ · `VARV-49-clean`: replicação depurada de Li *et al.* (2007)
 
 **Hipótese.** O núcleo metodologicamente invariante de VARV-49 é robusto à remoção da contaminação taxonômica — porque VARV-49 já não tem crocodilepox, mas a hipótese precisa ser testada contra a versão com filtro explícito.
 
@@ -56,7 +56,7 @@ A agenda abaixo transforma o primeiro em resultado principal e fecha as lacunas 
 
 **Este é o conjunto de referência do artigo.** Deve virar `Backend/tests/data/reference/` conforme [`04-rigor-cientifico.md §2`](../automation/04-rigor-cientifico.md#2-dataset-de-referência-pré-requisito-de-w3).
 
-**Estado em 2026-09-01.** ◐→quase ●. `Variola_VARV49_reexec_20260901` já é essencialmente isto: filtro `txid10242` aplicado (M2.2, [DEC-035](../automation/07-log-de-execucao.md)), 49 sequências limpas (52 registros → 49 distintas, sem crocodilepox), M = 4 métodos × 2 alinhadores = 10 árvores, manifesto completo (DEC-027/046/050), enraizamento comum disponível (M2.3, [DEC-034](../automation/07-log-de-execucao.md)). `make reference-check` confirma monofilia de VARV e clado P-II **4/4** sobre os 4 pipelines presentes (código 2 — falta só `mafft_raxml` no fixture publicado, que já existe no artefato novo). **Falta apenas** rodar `make reference-dataset` com `expected.json` corrigido (`aligners: ["mafft", "mafft_iterative"]`) para fechar M2 e tornar este o dataset de referência oficial — ver `docs/automation/13-guia-reexecucao-m2.md §4`.
+**Estado em 2026-09-02 — ✅ fechado.** `Variola_VARV49_reexec_20260901` é o dataset de referência oficial: filtro `txid10242` aplicado (M2.2, [DEC-035](../automation/07-log-de-execucao.md)), 49 sequências limpas (52 registros → 49 distintas, sem crocodilepox), M = 2 alinhadores × 5 métodos = 10 árvores (10 de 10 presentes, `M` completo), manifesto completo (DEC-027/046/050), enraizamento comum disponível (M2.3, [DEC-034](../automation/07-log-de-execucao.md)). `docs/science/scripts/gerar_dataset_referencia.py` regenerou `Backend/tests/data/reference/` a partir deste projeto ([DEC-063](../automation/07-log-de-execucao.md)); `make reference-check` devolve **código 0** — monofilia de VARV, clado P-II e a bipartição aninhada de 10 táxons, os três a 10/10 pipelines.
 
 ---
 
@@ -268,7 +268,7 @@ Ortopoxvírus recombinam, sobretudo nas regiões terminais.
 
 ```
 paralelo:  E9 (manifesto)  ────────────────────────────────────────────►
-           E1 ✓ ──► E2 ──► E3 ──┬──► E4  (fator alinhador — 2º resultado)
+           E1 ✓ ──► E2 ──► E3 ✓ ┬──► E4  (fator alinhador — 2º resultado, ◐ com 2 réplicas)
                                 ├──► E5  (controle ITR)
                                 └──► E6  (recombinação — muda a leitura)
                                           E7 (escala de M) ──► E8 (desempenho)
