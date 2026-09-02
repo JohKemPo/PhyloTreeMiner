@@ -2115,6 +2115,42 @@ BioComp_UFF: git status --porcelain (após reverter M4.13) → só os arquivos a
 
 **Write-lock:** `Backend/src/services/neo4j_services.py`, `Backend/src/routers/{neo4j_router,cql_router,cql_batch_router}.py`, `Backend/src/utils/treePlot.py`, `Backend/src/app.py` (linha 913), `Backend/tests/{api/test_neo4j_resiliencia.py,unit/test_tree_plot.py}` (novos), `Frontend/phylotreeminer/src/components/analysis/{PhylogeneticTreeViewer,GraphVisualization}.jsx`, `Frontend/phylotreeminer/src/__tests__/{zoomCleanup,graphIncremental}.test.jsx` (novos). `BioComp_UFF/` revertido, nada commitado lá. **Reversível:** sim (cada lote em commit próprio).
 
+### DEC-062 · 2026-09-02 · VARV-121 reexecutado e validado; E4 ganha a segunda réplica
+
+**Gatilho:** usuário — "Fechamos VARV121". Validação da reexecução (`Variola_VARV121_reexec_20260901`, iniciada 2026-09-01 17:07, concluída 2026-09-02 12:56, 16h49) pelo mesmo protocolo já aplicado a Zika-21/VARV-6/VARV-49, e aproveitamento como segunda réplica de [E4](../science/04-agenda-de-pesquisa.md#e4--◐--o-fator-alinhador-medido-onde-ele-existe).
+
+#### Validação
+
+```
+conferir_correcoes_m1.py Variola_VARV121_reexec_20260901 Variola_Yu_li_2007_200seq → TUDO VERDE
+  (as 4 falhas reportadas são do artefato ANTERIOR a M1, usado só como comparação — esperado)
+oraculo_rf_dendropy.py projects/Variola_VARV121_reexec_20260901 → 45 pares, 0 divergências
+```
+
+M1.3 (o achado de D25 desta rodada) segue corrigido: nenhum `ValueError` de rótulo duplicado, as 10 árvores (2 alinhadores × 5 métodos) foram todas produzidas e comparadas.
+
+#### E4 — segunda réplica
+
+`workflow.stability.case_study` sobre o novo projeto, com os 5 pares mafft × mafft_iterative recomputados por oráculo dendropy independente (Δ = 0 contra `rf_matrix.csv`, todas as 10 árvores estritamente binárias, 118 = n−3 bipartições não triviais):
+
+| Método | VARV-49 (n=49) | VARV-121 (n=121) |
+|---|---:|---:|
+| FastTree | 0,0217 | 0,0932 |
+| IQ-TREE | 0,0217 | 0,1017 |
+| RAxML | 0,0435 | 0,1186 |
+| UPGMA | 0,0217 | 0,1864 |
+| NJ | **0,1522** | **0,1949** |
+
+**O que replica:** NJ é o método mais sensível à troca de alinhador nos dois conjuntos de *Variola* — confirma a recomendação (i) do parecer anterior (DEC-060) e é o oposto do padrão de ZIKV-478 (NJ o mais imune lá). **O que não replica exatamente:** em VARV-49, UPGMA ficava no patamar dos métodos de caráter; em VARV-121, UPGMA sobe para perto do NJ. Leitura mais defensável: os dois métodos de distância, juntos, são mais sensíveis que os três de caráter neste par de conjuntos — mas a divisão individual NJ/UPGMA ainda oscila. Detalhe completo, com a tabela e o parecer, em `docs/science/04-agenda-de-pesquisa.md` (seção E4, "Segunda réplica — VARV-121").
+
+#### Δ em métrica publicada: nenhum
+
+Validação de reexecução (mesmo protocolo já usado 3 vezes nesta rodada) e leitura exploratória de E4 — nenhum código de produção mudou, nenhuma árvore foi recalculada além do que o próprio `case_study.py` (ferramenta já existente e testada) produz como leitura.
+
+**Evidência de execução:** ver blocos de comando acima — literais, sem edição.
+
+**Write-lock:** `docs/automation/13-guia-reexecucao-m2.md` (estado da rodada), `docs/science/04-agenda-de-pesquisa.md` (E4, segunda réplica). Nenhum código tocado. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -2160,6 +2196,7 @@ Toda mudança na zona sagrada ([04-rigor-cientifico §1](04-rigor-cientifico.md)
 | D25 — `mafft_iterative` colidia com `mafft` em `stability.py`, M1.3 crashava | 2026-09-01 | **Não pelo lote; sim pelo que ele desbloqueou** | [DEC-057](#dec-057--2026-09-01--d25--mafft_iterative-colidia-com-mafft-em-stabilitypy-e-m13-crashava-nas-três-reexecuções). Oráculo dendropy: **0 divergências em 91+91+45 pares** (Zika-21, VARV-6, VARV-49) — a checagem M1.3, antes bloqueada por `ValueError`, passa a existir e bate com o oráculo independente nas três reexecuções da máquina de validação. Não há valor aceito sendo substituído: a medição nunca havia completado sob essas condições | **Aprovada** — coberta pelo pedido explícito "abra o lote e corrija o Achado 1" |
 | E4 — leitura exploratória do fator alinhador em `Variola_VARV49_reexec_20260901` (NJ inverte o padrão de ZIKV-478) | 2026-09-01 | **Não** — nenhum número de E4 saiu em artigo ainda; é a primeira leitura, e nenhuma linha de código mudou nesta revisão | [`science/04-agenda-de-pesquisa.md#e4`](../science/04-agenda-de-pesquisa.md#e4--◐--o-fator-alinhador-medido-onde-ele-existe). Os 5 pares mafft×mafft_iterative do `rf_matrix.csv` conferem exatamente (**Δ = 0**) contra dois oráculos independentes (dendropy 4.6.1 e ete3 3.1.3, `taxon_namespace` compartilhado, `force-unrooted`, denominador 2(n−3)=92) — a inversão de padrão (NJ o mais sensível à troca de alinhador aqui, o mais imune em Zika) não é bug de cálculo. Hipótese de politomia/baixo poder do NJ **refutada**: as 10 árvores (5 métodos × 2 alinhadores) são todas estritamente binárias, 46/46 bipartições. O que distingue os métodos: dos ramos internos curtos (≤1e-4), os de caráter (FastTree/IQ-TREE/RAxML) trocam só 1–2 de ~25 entre alinhadores; o NJ troca 7 de 7 (100%); o UPGMA (mesma distância de entrada que o NJ) troca só 1 de ~5, no mesmo patamar dos métodos de caráter. Mecanismo mais provável, não provado: `builder.py:107-115` usa `DistanceCalculator('identity')` sem correção de modelo como entrada única de NJ/UPGMA; com alinhamento de ~236 mil colunas e um deslocamento de 429 colunas entre as duas estratégias do MAFFT, o critério de agrupamento do NJ (matriz-Q) amplifica essa diferença pequena onde UPGMA e os métodos de caráter não amplificam. | **Pendente** — segue ◐; falta VARV-121 como segunda réplica antes de tratar como resultado. Nenhuma correção de código é proposta (nenhum defeito de cálculo encontrado); recomendação de teste de robustez adicional (rodar NJ/UPGMA com modelo de distância corrigido) registrada no documento, não executada |
 | D26 — `tree_config` não alcança o `TreeBuilder`; manifesto declara semente/threads pedidos, não executados | 2026-09-01 | **Não na topologia** — `--workers 1`/`-nt 1` (D17/D21) já fixam o que decide a árvore; o `N` de threads e a semente nunca divergiram na prática (todo experimento até hoje pediu o valor-padrão) | [DEC-060](#dec-060--2026-09-01--m71-fecha-ficha-de-chamada-por-método-achado-d26-e-e4-ganha-validação-de-oráculo). Confirmado lendo `treeBuilderController.py:803-849` (nenhuma das 4 chamadas avançadas repassa `tree_config`) e o `manifest.json` real de VARV-49 (`reproducibility` declara `raxml_threads:8, iqtree_threads:16`; a chamada usou os defaults 4/4). Achado de auditoria de código (M7.1), não de execução — nenhuma árvore recalculada | Não se aplica — nenhum número publicado envolvido; correção fica para lote futuro de M7 (fora do escopo de M7.1, que é só a ficha) |
+| E4 — VARV-121 como segunda réplica: NJ replica como mais sensível, UPGMA não replica exatamente | 2026-09-02 | **Não** — leitura exploratória de E4, nenhuma linha de código mudou | [DEC-062](#dec-062--2026-09-02--varv-121-reexecutado-e-validado-e4-ganha-a-segunda-réplica). Oráculo dendropy confere os 5 pares mafft×mafft_iterative de VARV-121 (Δ=0 contra `rf_matrix.csv`; 118=n−3 bipartições não triviais em ambos os alinhadores, sem polítoma). NJ é o método mais sensível à troca de alinhador nos dois conjuntos de *Variola* (0,1522 e 0,1949) — confirma a recomendação (i) do parecer de DEC-060. UPGMA não replica: no patamar dos métodos de caráter em VARV-49 (0,0217), sobe para perto do NJ em VARV-121 (0,1864) | **Pendente** — critério de sucesso de E4 ("replicar em ao menos 2 conjuntos") parcialmente satisfeito dentro de *Variola*; falta generalização entre espécies/regimes de contraste de alinhador e o rastreio mecanístico da matriz-Q (recomendação ii de DEC-060, não executada) |
 
 ## Handoffs e relatórios
 

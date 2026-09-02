@@ -6,17 +6,17 @@ Este documento **operacionaliza** [`11-handoff-maquina-de-validacao.md §4.1`](1
 
 ⚠️ **Isto é um guia, não uma ordem de execução.** Rodar os conjuntos grandes (VARV-121, ZIKV-480) leva horas e ocupa a máquina inteira — [regra do `CLAUDE.md`](../../CLAUDE.md): **combine antes de rodar pipeline pesado**. Este documento existe para quando a decisão de rodar já foi tomada.
 
-### Estado desta rodada — atualizado em 2026-09-01
+### Estado desta rodada — atualizado em 2026-09-02
 
 | Conjunto | Seção | Estado | Achado |
 |---|---|---|---|
 | Zika-21 (pré-voo) | §3.0 | ✅ concluído | — |
 | VARV-6 | §3.1 | ✅ concluído | — |
 | VARV-49 | §3.2 | ✅ concluído | [D25](../science/02-defeitos-que-alteram-resultado.md#d25)/[DEC-057](07-log-de-execucao.md#dec-057--2026-09-01--d25--mafft_iterative-colidia-com-mafft-em-stabilitypy-e-m13-crashava-nas-três-reexecuções) encontrado e corrigido aqui: `stability.py` não reconhecia `mafft_iterative` como alinhador e travava M1.3 (`ValueError`) nas três reexecuções acima. Oráculo dendropy confirmou 0 divergências nas três depois do fix |
-| VARV-121 | §3.3 | 🔄 em execução (desde 2026-09-01 17:07) | — |
-| ZIKV-480 | §3.4 | ⏳ não iniciado — planejado para depois que VARV-121 concluir | `parsimony` corrigido para dentro de `ignore_mode` (ver §3.4) |
+| VARV-121 | §3.3 | ✅ concluído (2026-09-01 20:07 → 2026-09-02 12:56, 16h49) | `conferir_correcoes_m1.py` TUDO VERDE, oráculo dendropy 45 pares/0 divergências. Serviu de segunda réplica de [E4](04-agenda-de-pesquisa.md#e4--◐--o-fator-alinhador-medido-onde-ele-existe) — confirma NJ como método mais sensível à troca de alinhador em *Variola* (replica VARV-49), com UPGMA se aproximando do NJ nesta escala (não replica exatamente) |
+| ZIKV-480 | §3.4 | ⏳ não iniciado | `parsimony` corrigido para dentro de `ignore_mode` (ver §3.4) |
 
-Se você está lendo isto numa sessão nova: os três primeiros já provaram M1.3 verde nesta máquina; se `conferir_correcoes_m1.py` voltar a travar em M1.3 com um `ValueError` de rótulo duplicado, o código já deveria ter o fix de D25 — confira `BioComp_UFF/workflow/stability/stability.py` antes de reabrir o achado.
+Se você está lendo isto numa sessão nova: os quatro primeiros já provaram M1.3 verde nesta máquina; se `conferir_correcoes_m1.py` voltar a travar em M1.3 com um `ValueError` de rótulo duplicado, o código já deveria ter o fix de D25 — confira `BioComp_UFF/workflow/stability/stability.py` antes de reabrir o achado.
 
 ## 0. Por que a reexecução importa
 

@@ -160,6 +160,27 @@ Essas duas leituras não são mutuamente exclusivas e ambas podem ser verdadeira
 
 **Ambiente bioinformático:** esta revisão não executa nenhum pipeline pesado; roda apenas leitura de Nexus/FASTA já existentes e chamadas de `dendropy`/`ete3`/`Bio.AlignIO`. Qualquer reexecução de NJ/UPGMA com modelo de distância diferente (recomendação iii acima) é validação numérica que só o usuário deve rodar, em WSL, fora da janela em que VARV-121 está ocupando a máquina.
 
+**Segunda réplica — VARV-121, 2026-09-02.** A reexecução terminou (16h49, `finished_at_utc` no manifesto), `conferir_correcoes_m1.py` TUDO VERDE e o oráculo dendropy confere **45 pares, 0 divergências** sobre os 10 pipelines. Mesma leitura de `case_study.py`, agora com `n=121`:
+
+```
+RF médio | trocando alinhador ........ 0.139 (n=5, máx 0.195)
+RF médio | trocando inferência ....... 0.449 (n=20, máx 0.661)
+```
+
+Por par mafft × mafft_iterative, confirmado por oráculo dendropy independente (todas as árvores estritamente binárias, 118 = n−3 bipartições não triviais em ambos os alinhadores, sem exceção — a hipótese de politomia continua refutada):
+
+| Método | VARV-49 (n=49) | VARV-121 (n=121) |
+|---|---:|---:|
+| FastTree (ML) | 0,0217 | 0,0932 |
+| IQ-TREE (ML) | 0,0217 | 0,1017 |
+| RAxML (ML) | 0,0435 | 0,1186 |
+| UPGMA (distância) | 0,0217 | **0,1864** |
+| NJ (distância) | **0,1522** | **0,1949** |
+
+**O que replica, e o que não.** A recomendação (i) do parecer anterior — "conferir se o NJ volta a ser o mais sensível" — **confirma-se**: NJ é o método mais sensível à troca de alinhador nos dois conjuntos. O que **não replica da mesma forma**: em VARV-49, UPGMA ficava no patamar dos métodos de caráter (0,0217, igual a FastTree/IQ-TREE); em VARV-121, UPGMA sobe para perto do NJ (0,1864 contra 0,1949) — o único método de distância que se comportou "como um método de caráter" em VARV-49 deixa de fazer isso em VARV-121. A leitura mais defensável com os dois pontos: **os dois métodos de distância (NJ e UPGMA) são, juntos, mais sensíveis à troca de alinhador que os três métodos de caráter neste par de conjuntos de *Variola*** — o oposto do padrão de Zika (NJ o mais imune, caráter o mais sensível) — mas a divisão exata entre NJ e UPGMA individualmente ainda oscila entre os dois conjuntos. Recomendação (ii) do parecer anterior (rastrear a matriz-Q) segue **não executada** — é o próximo passo para decidir se a oscilação de UPGMA é ruído de amostra única por conjunto ou parte real do mecanismo.
+
+**Estado de E4 atualizado.** O critério de sucesso do experimento ("replicada em ao menos dois conjuntos") está **parcialmente satisfeito**: o achado "distância mais sensível que caráter em *Variola*, invertendo Zika" replica entre VARV-49 e VARV-121. Mas os dois conjuntos são a mesma espécie com o mesmo desenho de contraste de alinhador (MAFFT × MAFFT-iterativo) — não é ainda a réplica **independente** que decidiria se o efeito é de *Variola* especificamente, do regime quase clonal, ou do tipo de contraste de alinhador (a leitura (a) do parecer anterior). E4 avança de ◐ inicial para **◐ avançado**: o segundo resultado do artigo tem agora dois pontos de dado concordantes entre si e discordantes de Zika, o que já é publicável como achado, mas a mecânica (Passo 3) e a generalização (Zika com o mesmo desenho MAFFT×MAFFT-iterativo, se algum dia rodado) continuam em aberto.
+
 ---
 
 ## E5 · ◐ · Controle com e sem ITRs
