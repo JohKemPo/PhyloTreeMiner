@@ -8,8 +8,8 @@ Este é o arquivo que a próxima janela de contexto lê para saber o que já aco
 
 | Campo | Valor |
 |---|---|
-| Marco corrente | **M2 — Baseline replicado** — **7 de 7 lotes** entregues, M2.1 a M2.7. Falta só a **reexecução**, que leva o portão de código 2 para 0. Marco paralelo **M7** aberto, agora com 8 lotes |
-| Última atualização | 2026-09-01 — **C-5e fechado**: `parse_cql_blocks` cortava em todo `;`, mesmo dentro de string (DEC-052). Pente-fino nos `.cql` dos projetos Zika achou dois defeitos distintos: o tokenizer (código vivo, zona sagrada) e aspas simples não escapadas em 4 artefatos legados (`Zika_Virus_Singapura_{Small_6seq,Medium_11seq,Advanced_21seq,Large_21seq}`), gerados por uma versão anterior ao `neo4jProcessing.py` atual. **Achado fora de escopo:** credencial Neo4j Aura em texto puro em `BioComp_UFF/workflow/utils/neo4jUploader.py` desde jun/2025 — reportado ao usuário, não mexido (rotação é decisão do usuário). Antes: **visores de log e tabela, e o painel de comparação** (DEC-051), com **[D24](../science/02-defeitos-que-alteram-resultado.md#d24)** achado no caminho: o backend afirmava discordância entre métricas quando uma delas não fora medida. Antes, no mesmo dia: **[D1](../science/02-defeitos-que-alteram-resultado.md#d1) fecha e M2 chega a 7 de 7** (DEC-050): o fator alinhador passa a ser duas estratégias do MAFFT, e os dois braços produzem alinhamentos **de md5 diferente** onde antes eram cópias byte a byte. As três decisões pendentes foram tomadas. Antes: **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
+| Marco corrente | **M2 — Baseline replicado** — **7 de 7 lotes** entregues, M2.1 a M2.7. Falta só a **reexecução**, que leva o portão de código 2 para 0. Marco paralelo **M7** com 8 lotes (7 fechados, M3.2/M7.2 nesta rodada). Marco paralelo **M4 — T2 (segurança + desempenho) fecha em 12 de 12 lotes**, M4.1 a M4.12; T5 (grafo) segue com M4.13 revertido e M4.14+ em aberto |
+| Última atualização | 2026-09-02 — **M4, T2 fecha em 8 de 8** (DEC-065): `str(e)` vazando ao cliente cai de 25 para 0 ocorrências em `detail=` (M4.2/M4.3), `ADMIN_TOKEN` nas rotas administrativas (M4.4), `Origin` dos WebSockets (M4.5), limites de upload/ZIP/`retmax` (M4.6), rate limiting anônimo (M4.7), `psutil.cpu_percent` e 3 rotas NCBI e 4 operações de CPU saem do event loop (M4.8–M4.10), `stream_workflow_output` reescrito sem busy-poll (M4.11). `pytest`: 257→294 passed. Nada commitado ainda. Antes, no mesmo dia: **M3.2/M7.2 fecha** — RAxML-NG passa a produzir suporte de ramo (FBP), `--all --bs-trees 1000` (DEC-064). Antes: **VARV-121 validado, E4 ganha segunda réplica** (DEC-062) e **M2 fecha em 7 de 7** com `expected.json` regenerado (DEC-063). Antes, 2026-09-01 — **C-5e fechado**: `parse_cql_blocks` cortava em todo `;`, mesmo dentro de string (DEC-052). Pente-fino nos `.cql` dos projetos Zika achou dois defeitos distintos: o tokenizer (código vivo, zona sagrada) e aspas simples não escapadas em 4 artefatos legados (`Zika_Virus_Singapura_{Small_6seq,Medium_11seq,Advanced_21seq,Large_21seq}`), gerados por uma versão anterior ao `neo4jProcessing.py` atual. **Achado fora de escopo:** credencial Neo4j Aura em texto puro em `BioComp_UFF/workflow/utils/neo4jUploader.py` desde jun/2025 — reportado ao usuário, não mexido (rotação é decisão do usuário). Antes: **visores de log e tabela, e o painel de comparação** (DEC-051), com **[D24](../science/02-defeitos-que-alteram-resultado.md#d24)** achado no caminho: o backend afirmava discordância entre métricas quando uma delas não fora medida. Antes, no mesmo dia: **[D1](../science/02-defeitos-que-alteram-resultado.md#d1) fecha e M2 chega a 7 de 7** (DEC-050): o fator alinhador passa a ser duas estratégias do MAFFT, e os dois braços produzem alinhamentos **de md5 diferente** onde antes eram cópias byte a byte. As três decisões pendentes foram tomadas. Antes: **[D22](../science/02-defeitos-que-alteram-resultado.md#d22) fecha em 8 de 8**: um arquivo de log por execução, com o `run_id` no nome, e o manifesto registrando qual é o seu (DEC-049). Antes, no mesmo dia: backend e frontend passam a ler o manifesto e `idle` deixa de existir (DEC-048); a caracterização de D22 (DEC-047); `tools_invoked` populado e **[D21](../science/02-defeitos-que-alteram-resultado.md#d21)** achado (DEC-046); pré-voo §4.0 (DEC-045); versões **pinadas** (DEC-044) |
 | Lotes em andamento | nenhum. ✅ **M2 em 7 de 7** e **D1 fechado**; o portão segue em **código 2** e o que falta é a **reexecução** de §4.1, agora destravada — [D21](../science/02-defeitos-que-alteram-resultado.md#d21) (o que a bloqueava) fechou junto com D1 em DEC-050, com a decisão do usuário por `-nt 1`. ✅ **M4.O em 8 de 8** — o gate passa nos 5 critérios. ✅ **`tools_invoked` populado** (DEC-046). ✅ **Migração concluída**: ambiente registrado em [`11-handoff §2.3`](11-handoff-maquina-de-validacao.md) |
 | Write-locks ativos | nenhum |
 | Aguardando o usuário | **as seis decisões estão tomadas**, e a política de alinhador foi decidida em 2026-08-25 ([DEC-039](#dec-039--2026-08-25--política-de-alinhador-avisar-não-bloquear--endpoint-e-seletor)): **avisar, não bloquear**. Novo, de DEC-052: **credencial Neo4j Aura em texto puro** em `BioComp_UFF/workflow/utils/neo4jUploader.py` (URI + senha, desde jun/2025) — decidir se rotaciona a credencial na instância e se convém reescrever o histórico do submódulo |
@@ -2241,6 +2241,75 @@ cd BioComp_UFF && python -m unittest workflow.tests.test_stability workflow.test
 **Não verificado, registrado para depois:** determinismo do bootstrap entre execuções (mesma semente) não foi medido — só a busca de ML tinha essa medição (D17/D21); com `raxml_threads` no default (4), o RAxML-NG recusa alinhamentos pequenos ("Too few patterns per thread") — comportamento pré-existente, não causado por este lote, registrado na ficha como escolha silenciosa a revisitar.
 
 **Write-lock:** `BioComp_UFF/workflow/tree_construction/builder.py`, `BioComp_UFF/workflow/tests/test_raxml_bootstrap.py` (novo), `docs/science/08-ficha-de-chamada-por-metodo.md`. Não toca `Backend/` nem `Frontend/`. **Reversível:** sim.
+
+### DEC-065 · 2026-09-02 · M4, segunda onda — T2 segurança e desempenho fecham (M4.2→M4.11, 8 de 8 lotes)
+
+**Gatilho:** continuação da trilha T2 (`app.py` é write-lock único, serial) já planejada em `10-marcos-e-metas.md §6` e no rascunho de retomada da sessão anterior. Uma queda de energia interrompeu a sessão que implementou o lote, sem perda de trabalho (nada estava commitado nem em stash — confirmado por `git status`/`git stash list` limpos além dos arquivos do próprio lote). Esta sessão reconstituiu o estado a partir dos horários de modificação dos arquivos, cruzou contra `10-marcos-e-metas.md` para identificar os oito lotes e validou cada um antes de registrar.
+
+#### M4.2/M4.3 — log estruturado, zero `str(e)` vazando ao cliente (`S-4`)
+
+`logging_conf.py` (novo) centraliza `logging.basicConfig` por `LOG_LEVEL`; toda captura de exceção em `app.py`, nos 4 routers e em `cql_batch_service.py` passa a logar o traceback real no servidor (`logger.exception`) e devolver `detail=` genérico ao cliente. Contagem literal de `str(e)` nos seis arquivos: **HEAD tinha 25** (`app.py`=15, `cql_router.py`=2, `ncbi_router.py`=1, `neo4j_router.py`=2, `cql_batch_service.py`=5, `cql_batch_router.py`=0); **restam 2**, ambos em `app.py` e nenhum em `detail=` de `HTTPException` (uma `ValueError` interna e uma comparação `.lower()`, confirmados pelo teste AST abaixo). Teste é AST, não grep — percorre todo `HTTPException(...)`, acha o argumento `detail` e reprova se ele referencia, em qualquer nível da expressão, o nome do `except ... as <nome>` que o envolve, para não depender de formatação.
+
+#### M4.4 — `ADMIN_TOKEN` em rotas administrativas (`S-5`/DEC-004)
+
+`seguranca.exigir_admin` (novo, `seguranca.py`) compara `X-Admin-Token` contra a variável de ambiente; sem `ADMIN_TOKEN` configurado a rota é recusada, nunca fica aberta por omissão. Aplicado a `POST /api/ncbi/set-email` (`app.py`) e `POST /neo4j/connect` (`neo4j_router.py`).
+
+#### M4.5 — `Origin` dos WebSockets contra `ALLOWED_ORIGINS` (`S-5`)
+
+Os dois WebSockets checam `websocket.headers.get("origin")` contra a allowlist antes de aceitar a conexão e fecham com `1008` (policy violation) quando a origem não bate.
+
+#### M4.6 — limites rígidos de entrada (`S-5`)
+
+`MAX_UPLOAD_BYTES` (200 MB), `MAX_UPLOAD_FILES` (50) e `MAX_ZIP_EXPANSION_RATIO` (100×, contra zip bomb — verifica `descomprimido/comprimido` e o total descomprimido antes de extrair) em `/upload-data`; `NCBI_RETMAX_MAXIMO` (500) limita os dois campos `retmax` do request NCBI que antes não tinham teto.
+
+#### M4.7 — rate limiting anônimo nas rotas de escrita (`S-5`/DEC-004)
+
+`seguranca.limitar_taxa` (novo, mesmo módulo): janela fixa em memória por `(rota, IP)`, 30 requisições/60 s, sem Redis nem infraestrutura externa — não sobrevive a reinício nem a múltiplos workers, aceitável para o vetor que fecha (abuso anônimo de um único processo). `429` com `Retry-After`. Aplicado a `/projects/{nome}/run`, `/projects/{nome}/rerun` e `/upload-data`.
+
+#### M4.8 — `psutil.cpu_percent` sai do event loop (perf)
+
+`cpu_percent(interval=1)` bloqueava o loop inteiro por 1 s a cada ciclo do watcher, travando todo cliente WS conectado nesse intervalo; vira `cpu_percent(interval=None)` (não bloqueante, mede desde a última chamada).
+
+#### M4.9 — 3 rotas NCBI síncronas por `asyncio.to_thread` (`B-4`)
+
+`search-species`, `download` e `download-accessions` chamavam `ncbi_service.*` (rede via Entrez) direto dentro de um handler `async def`. Teste mede diretamente o sintoma: dispara a rota lenta sem `await`, mede quanto tempo uma segunda requisição trivial (`HEAD /`) leva para responder — antes do lote isso ficaria preso atrás da chamada de rede; depois, sempre abaixo de 0,4 s.
+
+#### M4.10 — trabalho de CPU sai do loop (`B-5`)
+
+`get_metadata_cache` (3 chamadas), `Phylo.convert`, geração de plot (`_gerar_plot_sync`) e comparação de árvores (`_comparar_arvores_sync`) passam por `asyncio.to_thread`. Refatoração pura de transporte — nenhuma lógica de cálculo mudou.
+
+#### M4.11 — `stream_workflow_output` reescrito (perf)
+
+Antes: busy-poll a 10 Hz que descartava o fim do buffer ao encerrar. Depois: duas tasks (`consumir_stdout`/`consumir_stderr`), cada uma em `while True: readline(); if not linha: break` — só termina no EOF real do pipe, então nada do que o processo ainda tinha para escrever fica preso.
+
+#### Δ em métrica publicada: nenhum
+
+Segurança e desempenho de API — nenhum arquivo toca distância entre árvores, identidade de clado, extração de metadado ou padrão FPMax. `BioComp_UFF/` e `Frontend/` não tocados.
+
+**Evidência de execução:**
+```
+git status --short && git stash list
+  → confirma: nada commitado, nada em stash: o lote sobreviveu à queda de energia intacto
+
+cd Backend && python -m pytest tests -q
+  → 294 passed, 1 xfailed (era 257 após DEC-061/064; +37, sem regressão)
+
+cd Backend && python -m pytest tests/api/test_vazamento_de_erro.py -v   → 7 passed (M4.2/M4.3, AST, 7 arquivos varridos)
+cd Backend && python -m pytest tests/api/test_admin_token.py -v        → 7 passed (M4.4)
+cd Backend && python -m pytest tests/api/test_ws_origin.py -v          → 4 passed (M4.5)
+cd Backend && python -m pytest tests/api/test_limites_entrada.py -v    → 6 passed (M4.6)
+cd Backend && python -m pytest tests/api/test_rate_limit.py -v         → 3 passed (M4.7)
+cd Backend && python -m pytest tests/api/test_event_loop.py -v         → 1 passed (M4.8)
+cd Backend && python -m pytest tests/api/test_ncbi_thread.py -v        → 3 passed (M4.9)
+cd Backend && python -m pytest tests/api/test_cpu_bound_to_thread.py -v → 4 passed (M4.10)
+cd Backend && python -m pytest tests/unit/test_stream_workflow.py -v   → 2 passed (M4.11)
+
+grep -c "str(e)" em app.py/routers/cql_batch_service.py: HEAD 15+0+2+1+2+5=25 → working tree 2 (nenhum em detail=)
+```
+
+**Não verificado, registrado para depois:** nenhuma revisão cruzada (Revisor/Validador formais) rodou sobre este lote ainda — só a validação desta sessão contra os testes que o próprio lote trouxe. `ADMIN_TOKEN` em `DELETE /projects/{nome}` segue fora do fatiamento, decisão pendente do usuário (nota em `10-marcos-e-metas.md §6`).
+
+**Write-lock:** `Backend/src/app.py`, `Backend/src/logging_conf.py` (novo), `Backend/src/seguranca.py` (novo), `Backend/src/routers/{cql_batch_router,cql_router,ncbi_router,neo4j_router}.py`, `Backend/src/services/cql_batch_service.py`, `Backend/tests/api/{test_admin_token,test_cpu_bound_to_thread,test_event_loop,test_limites_entrada,test_ncbi_thread,test_rate_limit,test_vazamento_de_erro,test_ws_origin,test_security_endpoints}.py`, `Backend/tests/unit/test_stream_workflow.py`. Não toca `BioComp_UFF/` nem `Frontend/`. **Reversível:** sim — nada commitado.
 
 ## Medições
 

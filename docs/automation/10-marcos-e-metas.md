@@ -237,12 +237,12 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 | # | Lote | O que resolve | Defeito | Write-lock | Gate | Depende de |
 |---|---|---|---|---|---|---|
 | M4.1 | ✅ Neo4j indisponível devolve `503` com `Retry-After`, em vez de `[]` mudo / `500` genérico ([DEC-061](07-log-de-execucao.md)) | `C-3c`, `B-9` | `services/neo4j_services.py`, `routers/{neo4j,cql,cql_batch}_router.py`, `tests/api/test_neo4j_resiliencia.py` (novo) | `pytest tests/api/test_neo4j_resiliencia.py -q` — 4 rotas em 503 com Neo4j fora | — |
-| M4.2 | Log estruturado; zero `str(e)` vazando ao cliente (hoje 19 ocorrências) | `S-4` | `logging_conf.py` (novo), `app.py`, `tests/api/test_vazamento_de_erro.py` (novo) | teste AST: 0 ocorrências | — |
-| M4.3 | Mesmo tratamento nos routers e no serviço de lote | `S-4` | `routers/*.py`, `cql_batch_service.py` | mesmo teste AST, agora cobrindo esses arquivos | M4.1, M4.2 |
-| M4.4 | `ADMIN_TOKEN` em `/api/ncbi/set-email` e `/neo4j/connect` | `S-5`/DEC-004 | `seguranca.py` (novo), `app.py`, `neo4j_router.py`, `tests/api/test_admin_token.py` (novo) | sem header → `401`; token correto → passa | M4.2 |
-| M4.5 | `Origin` dos dois WebSockets contra `ALLOWED_ORIGINS` | `S-5` | `app.py`, `tests/api/test_ws_origin.py` (novo) | origem fora da allowlist → fecha `1008` | M4.4 |
-| M4.6 | Limites rígidos: bytes/nº de arquivos em `/upload-data`, razão de expansão do ZIP, teto de `retmax` | `S-5` | `app.py`, `tests/api/test_limites_entrada.py` (novo) | acima do teto → `413`/`400`/`422` | M4.5 |
-| M4.7 | Rate limiting anônimo nas rotas de escrita | `S-5`/DEC-004 | `seguranca.py`, `app.py`, `tests/api/test_rate_limit.py` (novo) | N+1 requisições na janela → `429` | M4.6 |
+| M4.2 | ✅ Log estruturado; zero `str(e)` vazando ao cliente (era 25 ocorrências) ([DEC-065](07-log-de-execucao.md)) | `S-4` | `logging_conf.py` (novo), `app.py`, `tests/api/test_vazamento_de_erro.py` (novo) | teste AST: 0 ocorrências — 7 passed | — |
+| M4.3 | ✅ Mesmo tratamento nos routers e no serviço de lote ([DEC-065](07-log-de-execucao.md)) | `S-4` | `routers/*.py`, `cql_batch_service.py` | mesmo teste AST, agora cobrindo esses arquivos | M4.1, M4.2 |
+| M4.4 | ✅ `ADMIN_TOKEN` em `/api/ncbi/set-email` e `/neo4j/connect` ([DEC-065](07-log-de-execucao.md)) | `S-5`/DEC-004 | `seguranca.py` (novo), `app.py`, `neo4j_router.py`, `tests/api/test_admin_token.py` (novo) | sem header → `401`; token correto → passa — 7 passed | M4.2 |
+| M4.5 | ✅ `Origin` dos dois WebSockets contra `ALLOWED_ORIGINS` ([DEC-065](07-log-de-execucao.md)) | `S-5` | `app.py`, `tests/api/test_ws_origin.py` (novo) | origem fora da allowlist → fecha `1008` — 4 passed | M4.4 |
+| M4.6 | ✅ Limites rígidos: bytes/nº de arquivos em `/upload-data`, razão de expansão do ZIP, teto de `retmax` ([DEC-065](07-log-de-execucao.md)) | `S-5` | `app.py`, `tests/api/test_limites_entrada.py` (novo) | acima do teto → `413`/`400`/`422` — 6 passed | M4.5 |
+| M4.7 | ✅ Rate limiting anônimo nas rotas de escrita ([DEC-065](07-log-de-execucao.md)) | `S-5`/DEC-004 | `seguranca.py`, `app.py`, `tests/api/test_rate_limit.py` (novo) | N+1 requisições na janela → `429` — 3 passed | M4.6 |
 
 ⛔ **Fora do fatiamento, decisão do usuário:** `ADMIN_TOKEN` em `DELETE /projects/{nome}` colide com o propósito de demo público (DEC-004) — token anônimo permitiria apagar o projeto de outro avaliador. Precisa de decisão: token, confirmação por nome, ou lixeira com TTL.
 
@@ -250,10 +250,10 @@ Estes marcos **não estão no caminho crítico da submissão**, mas são o que d
 
 | # | Lote | O que resolve | Defeito | Write-lock | Gate | Depende de |
 |---|---|---|---|---|---|---|
-| M4.8 | `psutil.cpu_percent(interval=1)` sai do event loop — bloqueia 1s inteiro por ciclo, com todo cliente WS conectado | perf | `app.py`, `tests/api/test_event_loop.py` (novo) | latência de `GET /` com watcher ativo, antes/depois | M4.7 |
-| M4.9 | 3 rotas NCBI síncronas passam por `asyncio.to_thread` | `B-4` | `app.py`, `ncbi_router.py` | 2ª requisição responde durante download em curso | M4.8 |
-| M4.10 | `compare_trees`/`pattern-analysis`/`gen_plot`/`build_metadata_index` saem do loop | `B-5` | `app.py` | refatoração pura: golden idêntico; latência de `GET /` durante `POST /api/tree/compare` | M4.9 |
-| M4.11 | `stream_workflow_output` reescrito com duas tasks + leitura até EOF (hoje descarta o fim do buffer e faz busy-poll a 10 Hz) | perf | `app.py`, `tests/unit/test_stream_workflow.py` (novo) | processo falso emite N linhas → as N chegam ao broadcast | M4.10 |
+| M4.8 | ✅ `psutil.cpu_percent(interval=1)` sai do event loop — bloqueia 1s inteiro por ciclo, com todo cliente WS conectado ([DEC-065](07-log-de-execucao.md)) | perf | `app.py`, `tests/api/test_event_loop.py` (novo) | latência de `GET /` com watcher ativo, antes/depois — 1 passed. **Medição formal antes/depois não capturada** (só o gate do teste, <0,4 s), registrado como pendência em DEC-065 | M4.7 |
+| M4.9 | ✅ 3 rotas NCBI síncronas passam por `asyncio.to_thread` ([DEC-065](07-log-de-execucao.md)) | `B-4` | `app.py`, `ncbi_router.py` | 2ª requisição responde durante download em curso — 3 passed | M4.8 |
+| M4.10 | ✅ `get_metadata_cache`/`Phylo.convert`/geração de plot/comparação de árvores saem do loop ([DEC-065](07-log-de-execucao.md)) | `B-5` | `app.py` | refatoração pura de transporte; suíte completa (`pytest tests -q`) sem regressão — 4 passed no teste dedicado | M4.9 |
+| M4.11 | ✅ `stream_workflow_output` reescrito com duas tasks + leitura até EOF (antes descartava o fim do buffer e fazia busy-poll a 10 Hz) ([DEC-065](07-log-de-execucao.md)) | perf | `app.py`, `tests/unit/test_stream_workflow.py` (novo) | processo falso emite N linhas → as N chegam ao broadcast — 2 passed | M4.10 |
 | M4.12 | ✅ **Bug real, não só performance**: `render_annotated_tree` recebia `dict` do índice e iterava como lista → `TypeError` ([DEC-061](07-log-de-execucao.md)) | perf + bug | `utils/treePlot.py`, `tests/unit/test_tree_plot.py` (novo) | dict de 3 acessos gera PNG sem `TypeError` | — · paralelo a toda a cadeia acima |
 
 #### T5 — Grafo
