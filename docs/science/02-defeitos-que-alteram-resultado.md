@@ -545,6 +545,8 @@ python -c "import dendropy; ..."   # symmetric_difference(auto, fixo) == 8
 
 ## D18 · Alta · O modo `auto` não executa os métodos avançados, e nada avisa
 
+> **Estado:** ✅ **fechado em 2026-09-03** ([DEC-072](../automation/07-log-de-execucao.md)/[DEC-073](../automation/07-log-de-execucao.md)). As três correções da seção **Correção** abaixo entraram, nenhuma sozinha: `mode: "basic"` é o nome novo e honesto (`auto` continua aceito como alias, para não quebrar os projetos já em disco), um aviso explícito dispara sempre que o modo é básico, e o manifesto passa a gravar `execution_mode` (métodos avançados disponíveis × executados × pulados) — a opção 3, que este documento já chamava de obrigatória "de qualquer forma". `Backend/` não precisou de nenhuma mudança (repassa `mode` como valor opaco); `Frontend/` passa a enviar `basic`.
+
 **Descoberto em 2026-08-25**, na primeira execução do conjunto de validação sob o pipeline corrigido.
 
 **Onde.** `BioComp_UFF/workflow/controller/treeBuilderController.py` — `_process_auto_mode` (~:438) contra `_process_advanced_mode` (~:459).

@@ -2588,6 +2588,41 @@ Nenhuma árvore, distância, clado ou padrão FPMax é afetado. Mudança é de n
 
 **Write-lock:** `BioComp_UFF/workflow/controller/treeBuilderController.py`, `BioComp_UFF/workflow/utils/manifest.py`, `BioComp_UFF/workflow.py`, `BioComp_UFF/workflow/tests/test_manifest.py`. Não toca `Backend/` nem `Frontend/` — essa é a segunda metade, lote seguinte. **Reversível:** sim.
 
+### DEC-073 · 2026-09-03 · D18 fecha — metade `Backend/`+`Frontend/`: `Backend/` não precisou de mudança nenhuma, `Frontend/` envia `basic` em vez de `auto`
+
+**Gatilho:** pedido do usuário — segunda metade de D18, depois de confirmar que a metade `BioComp_UFF/` (DEC-072) fechava sozinha. Implementado diretamente (sem subagente, mesmo limite de sessão de DEC-071).
+
+#### `Backend/`: zero linhas tocadas
+
+Varredura (`grep -n "mode\b" Backend/src/app.py`) confirma que `tree_config` é repassado como `dict` opaco (`config_dict['tree_config']`, ver `app.py:381-389`) — não existe modelo Pydantic nem validação que enumere valores de `mode`. O Backend nunca soube o que "auto" ou "basic" significam, só copia o campo para `config_backup.json` e invoca `workflow.py`. Nenhuma mudança necessária, nenhuma feita.
+
+#### `Frontend/`: o valor enviado, não só o rótulo
+
+Achado ao investigar o escopo: o **rótulo** que o usuário já via (`pipelineConfigurator.jsx`) dizia `"Only distance and parsimony methods"` — já era honesto. O que mentia era o **valor interno** (`value="auto"` no `Radio`, e dois pontos de código que só reconheciam a string `"auto"` para decidir se o campo `mode` do formulário era um modo especial ou um método manual). Comportamento agora:
+
+- `Radio` de construção de árvore: `value="auto"` → `value="basic"`, rótulo passa a `"Basic (only distance and parsimony methods)"`. Tooltip ganha uma entrada própria para "Basic" (antes só documentava Advanced/Manual).
+- Os dois pontos que resolviam `values.trees?.mode` (`handleNext`, montagem de `finalConfig`/`finalFormat`) passam a reconhecer `"basic"` **e** `"auto"` — o alias legado não foi removido do Frontend por precaução, embora nenhum formulário novo o produza mais.
+- Um ternário sem efeito (`trees.mode === "auto" ? "auto" : trees.mode` — as duas ramificações sempre devolviam o mesmo valor) foi simplificado para `trees.mode` puro, no mesmo trecho já sob revisão.
+
+**Provenance/exibição de projetos antigos:** conferido que `ProvenanceView.jsx` não tem nenhum mapeamento rótulo↔valor para `mode` — exibe o que o manifesto/config trazem, genericamente. Projetos com `mode: "auto"` em disco continuam exibindo `"auto"` ali (o dado bruto, correto), sem quebrar nem precisar de tradução.
+
+#### Δ em métrica publicada: nenhum
+
+Rótulo e valor de formulário; nenhum cálculo científico tocado.
+
+**Evidência de execução:**
+```
+cd Frontend/phylotreeminer && pnpm run test -- --run   → 22 passed (7 arquivos, sem regressão)
+cd Frontend/phylotreeminer && pnpm run build            → build de produção OK, 22.37s
+grep -n "mode" Backend/src/app.py                        → 0 ocorrências (confirma pass-through opaco)
+```
+
+**Write-lock:** `Frontend/phylotreeminer/src/components/configures/pipelineConfigurator.jsx`. `Backend/` conferido, não alterado. Não toca `BioComp_UFF/`. **Reversível:** sim.
+
+#### D18 — estado final
+
+As três correções do defeito (renomear com honestidade, aviso explícito, manifesto grava executado×disponível) estão implementadas ponta a ponta: pipeline (DEC-072) e a superfície que o usuário toca para escolher o modo (esta entrada). D18 passa de **aberto** para **fechado**.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
