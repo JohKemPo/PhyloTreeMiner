@@ -48,6 +48,30 @@ async def test_zip_com_razao_de_expansao_suspeita_400(client):
 
 
 @pytest.mark.security
+async def test_multiplos_zips_honestos_somam_acima_do_teto_400(client, app_module, monkeypatch):
+    """R1 (DEC-067) — o teto de descompressão é do upload inteiro, não por ZIP.
+
+    Cada ZIP isolado passa a triagem de razão (bem abaixo de 100x) e, sozinho,
+    fica sob o teto — mas juntos excedem. Antes da correção, cada ZIP
+    reiniciava `bytes_descomprimidos_reais` em 0 e todos passavam com 200.
+    """
+    monkeypatch.setattr(app_module, "MAX_UPLOAD_BYTES", 3000)
+
+    arquivos = []
+    for i in range(3):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"seq{i}.fasta", b"\x00" * 1200)  # descomprime ~1200 B, comprime a poucas dezenas
+        arquivos.append(("files", (f"honesto{i}.zip", buffer.getvalue(), "application/zip")))
+
+    r = await client.post("/upload-data", data={"name": "projeto-teste"}, files=arquivos)
+
+    assert r.status_code == 400, (
+        f"esperado 400 (soma descomprimida 3600 B > teto 3000 B), veio {r.status_code}: {r.text}"
+    )
+
+
+@pytest.mark.security
 async def test_zip_legitimo_passa(client):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:

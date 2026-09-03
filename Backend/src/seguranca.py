@@ -19,9 +19,18 @@ async def exigir_admin(x_admin_token: Optional[str] = Header(default=None)):
     revisão de M4.4) em vez de `!=`: comparação de string curto-circuita no
     primeiro byte divergente, o que vaza o tamanho do prefixo certo por
     tempo de resposta — pouco prático aqui, mas é o padrão para segredo.
+
+    Compara **bytes**, não `str` (R2, DEC-067): `compare_digest` sobre `str`
+    exige ASCII nos dois lados e levanta `TypeError` (não capturado, vira
+    500) diante de qualquer byte > 0x7F — e um header HTTP chega decodificado
+    em latin-1 pelo Starlette, então basta um `X-Admin-Token` com um byte alto
+    para derrubar a rota administrativa. `.encode()` para UTF-8 nunca levanta
+    para nenhum `str` de entrada, então a comparação em bytes é total.
     """
     admin_token = os.getenv("ADMIN_TOKEN")
-    if not admin_token or not x_admin_token or not secrets.compare_digest(x_admin_token, admin_token):
+    if not admin_token or not x_admin_token:
+        raise HTTPException(status_code=401, detail="Token de administrador ausente ou inválido.")
+    if not secrets.compare_digest(x_admin_token.encode("utf-8"), admin_token.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Token de administrador ausente ou inválido.")
 
 

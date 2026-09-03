@@ -98,14 +98,21 @@ async def test_build_metadata_index_nao_bloqueia_o_loop(client, app_module, monk
 
 
 def test_render_annotated_tree_nao_e_chamado_via_to_thread():
-    """B4 (revisão de M4.10) — guarda de regressão, não repete a reprodução do crash.
+    """B4 (revisão de M4.10) — guarda estática, defesa em profundidade.
 
     `render_annotated_tree` usa ete3/PyQt e crasha (`SIGSEGV`, "QApplication
     was not created in the main() thread") se rodar fora da main thread —
-    reproduzido uma vez ao investigar B4. Recriar o crash a cada `pytest`
-    seria caro e instável entre ambientes; em vez disso, esta varredura AST
-    garante que ninguém reembrulhe a chamada em `asyncio.to_thread`/
-    `run_in_executor` sem repetir essa investigação.
+    reproduzido ao investigar B4. Recriar o crash a cada `pytest` seria caro
+    e instável entre ambientes.
+
+    R3 (DEC-067): esta varredura AST só pega `to_thread(render_annotated_tree, ...)`
+    **direto** — o bug real de M4.10 era indireto, via um wrapper
+    (`_gerar_plot_sync`), forma que uma varredura de um nível não alcança. A
+    defesa que de fato cobre indireção é a asserção em tempo de execução no
+    topo de `render_annotated_tree` (`treePlot.py`), testada em
+    `tests/unit/test_tree_plot.py::test_fora_da_main_thread_levanta_assertion_em_vez_de_crashar`.
+    Esta varredura fica como checagem estática barata do caso direto, não
+    como a única linha de defesa.
     """
     import ast
     import pathlib

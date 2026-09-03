@@ -6,6 +6,7 @@ Caracterização: `metadata_dict` é documentado como indexado por accessionId
 `item["accessionId"]` levantava `TypeError` porque `item` é uma string.
 """
 import pathlib
+import threading
 
 import pytest
 
@@ -45,3 +46,37 @@ def test_acesso_ausente_do_indice_nao_levanta_typeerror(tmp_path):
     render_annotated_tree(str(tree_file), metadata, output_file=str(output_file))
 
     assert output_file.exists()
+
+
+def test_fora_da_main_thread_levanta_assertion_em_vez_de_crashar(tmp_path):
+    """R3 (DEC-067) — guarda em tempo de execução contra o SIGSEGV de B4.
+
+    A guarda AST anterior (`test_cpu_bound_to_thread.py`) só pega
+    `to_thread(render_annotated_tree, ...)` direto; o bug real de M4.10 era
+    indireto, via wrapper. A asserção no topo da função dispara antes de
+    qualquer objeto Qt ser criado, então este teste roda de verdade numa
+    worker thread sem reproduzir o `SIGSEGV` — é a exceção Python que
+    deveria ter existido desde sempre no lugar do crash.
+    """
+    tree_file = tmp_path / "tree.nwk"
+    tree_file.write_text(NEWICK_3_FOLHAS, encoding="utf-8")
+    output_file = tmp_path / "arvore.png"
+
+    resultado = {}
+
+    def alvo():
+        try:
+            render_annotated_tree(str(tree_file), _metadata_dict(), output_file=str(output_file))
+        except AssertionError as exc:
+            resultado["assertion"] = exc
+        except BaseException as exc:  # pragma: no cover - só para diagnóstico se algo mudar
+            resultado["outro"] = exc
+
+    t = threading.Thread(target=alvo)
+    t.start()
+    t.join(timeout=10)
+
+    assert not t.is_alive(), "thread não terminou — algo travou antes da asserção"
+    assert "assertion" in resultado, f"esperava AssertionError, veio {resultado.get('outro')!r}"
+    assert "main thread" in str(resultado["assertion"])
+    assert not output_file.exists()

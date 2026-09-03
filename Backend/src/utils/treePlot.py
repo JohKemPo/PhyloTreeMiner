@@ -1,5 +1,6 @@
 import json
 import pathlib
+import threading
 
 from ete3 import Tree, TreeStyle, NodeStyle, TextFace, CircleFace
 
@@ -58,9 +59,24 @@ def render_annotated_tree(tree_file, metadata_dict, output_file="tree_plot.png")
     
     Parâmetros:
     - tree_file: Caminho para o arquivo .nwk
-    - metadata_dict: Dicionário onde a chave é o nome do nó na árvore (geralmente Accession ID) 
+    - metadata_dict: Dicionário onde a chave é o nome do nó na árvore (geralmente Accession ID)
                      e o valor é o dicionário retornado por `get_node_information`.
     """
+    # R3 (DEC-067): guarda em tempo de execução, não só estática. A guarda
+    # AST anterior (test_cpu_bound_to_thread.py) só pegava
+    # `to_thread(render_annotated_tree, ...)` direto — o bug real de M4.10
+    # era indireto, via um wrapper (`_gerar_plot_sync`), forma que a AST não
+    # alcançava. Esta asserção roda sempre, não importa por onde a função foi
+    # chamada, e falha com uma exceção Python normal — não com o SIGSEGV
+    # reproduzido em DEC-066/067 — porque dispara antes de qualquer objeto
+    # Qt (TreeStyle, CircleFace, TextFace) ser criado.
+    assert threading.current_thread() is threading.main_thread(), (
+        "render_annotated_tree usa ete3/PyQt e só roda na main thread — "
+        "chamá-la de uma worker thread (ex.: asyncio.to_thread) crasha o "
+        "processo com SIGSEGV em vez de levantar uma exceção Python "
+        "(reproduzido e documentado em DEC-066/DEC-067)."
+    )
+
     # 1. Carregar a árvore
     # format=0 lê a árvore de forma flexível (suporta nomes de nós internos e folhas)
     t = Tree(tree_file, format=0) 

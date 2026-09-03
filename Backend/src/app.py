@@ -2404,8 +2404,17 @@ def _extrair_membro_com_teto(zip_ref: "zipfile.ZipFile", nome_membro: str, bytes
     escrito pelo próprio autor do arquivo — um ZIP forjado pode declarar um
     tamanho pequeno e entregar muito mais bytes na descompressão real, o que
     contornaria a checagem por `infolist()` feita antes (mantida como
-    triagem barata do caso honesto, não como a defesa). Aqui o teto é
-    aplicado sobre o que a descompressão de fato produz, byte a byte.
+    triagem barata do caso honesto, não como a defesa). O teto aqui é
+    aplicado sobre o `lido` que este laço acumula, byte a byte — não sobre
+    `file_size` — então um `file_size` maior que o real não engana este teto.
+
+    Correção (S1, DEC-067): a alegação anterior de que a função "nunca lê
+    `file_size`" estava errada — `zipfile.ZipExtFile` usa esse campo
+    internamente (junto com o CRC-32) para detectar um cabeçalho forjado
+    *menor* que o conteúdo real, e levanta `BadZipFile` nesse caso, que o
+    chamador captura e vira `400`. É uma falha segura, não a defesa em si:
+    a defesa é este laço nunca confiar no que o cabeçalho diz para decidir
+    quanto ler.
     """
     partes = []
     lido = 0
@@ -2453,6 +2462,12 @@ async def upload_data(
         all_sequences = []
         processed_files = []
         total_bytes = 0
+        # R1 (revisão de DEC-066/DEC-067): global ao upload inteiro, não por
+        # ZIP — reiniciar a cada arquivo dava a cada ZIP um orçamento novo de
+        # MAX_UPLOAD_BYTES, e vários ZIPs honestos e pequenos somados
+        # acumulavam bem mais que o teto declarado (~10 GB nos valores de
+        # produção, com 200 OK).
+        bytes_descomprimidos_reais = 0
 
         for uploaded_file in files:
             file_content = await _ler_upload_ate_o_teto(uploaded_file, MAX_UPLOAD_BYTES - total_bytes)
@@ -2479,12 +2494,23 @@ async def upload_data(
                     fasta_files = [f for f in zip_files if f.lower().endswith(('.fasta', '.fa', '.fas', '.faa'))]
 
                     # Defesa real (B2): teto sobre o byte de fato
-                    # descomprimido, indiferente ao que o cabeçalho declara.
-                    bytes_descomprimidos_reais = 0
+                    # descomprimido, indiferente ao que o cabeçalho declara —
+                    # e sobre o upload inteiro (R1), não reiniciado por ZIP.
                     for fasta_file in fasta_files:
-                        raw = _extrair_membro_com_teto(
-                            zip_ref, fasta_file, MAX_UPLOAD_BYTES - bytes_descomprimidos_reais
-                        )
+                        try:
+                            raw = _extrair_membro_com_teto(
+                                zip_ref, fasta_file, MAX_UPLOAD_BYTES - bytes_descomprimidos_reais
+                            )
+                        except zipfile.BadZipFile:
+                            # S1: um file_size de cabeçalho forjado menor que o
+                            # real produz CRC inválido ao ler até esse limite —
+                            # falha segura (não é bypass), mas precisa virar
+                            # 400 explícito, não cair no 500 genérico do except
+                            # Exception mais externo.
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Conteúdo do ZIP corrompido ou com cabeçalho inconsistente.",
+                            )
                         bytes_descomprimidos_reais += len(raw)
                         content = raw.decode('utf-8', errors='ignore')
                         sequences = list(SeqIO.parse(StringIO(content), "fasta"))

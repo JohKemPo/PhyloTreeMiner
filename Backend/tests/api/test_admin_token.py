@@ -29,6 +29,22 @@ async def test_token_errado_401(client, admin_token, metodo, rota, kwargs):
 
 
 @pytest.mark.security
+async def test_token_com_byte_nao_ascii_401_nao_500(client, admin_token):
+    """R2 (DEC-067) — `compare_digest` sobre `str` derrubava a rota em 500.
+
+    Um header HTTP chega decodificado em latin-1 pelo Starlette; qualquer
+    byte > 0x7F virava `TypeError` não capturado dentro de `exigir_admin`.
+    Comparar em bytes (`.encode("utf-8")`) nunca levanta para essa entrada.
+    """
+    r = await client.post(
+        "/api/ncbi/set-email",
+        headers={"X-Admin-Token": "token-\xe9-forjado".encode("latin-1")},
+        data={"email": "teste@exemplo.com"},
+    )
+    assert r.status_code == 401, f"esperado 401, veio {r.status_code}: {r.text}"
+
+
+@pytest.mark.security
 async def test_sem_admin_token_configurado_recusa_por_padrao(client, monkeypatch):
     """Sem ADMIN_TOKEN no ambiente, a rota nunca fica aberta por omissão."""
     monkeypatch.delenv("ADMIN_TOKEN", raising=False)
