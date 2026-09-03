@@ -2540,6 +2540,54 @@ Custo medido: Variola_VARV121_reexec (10 árvores) 0,35s/0,15MB; Zika Large_480s
 
 **Não é achado de código** — não entra na fila de triagem de defeitos, é um limite operacional desta sessão.
 
+### DEC-072 · 2026-09-03 · D18 (metade `BioComp_UFF/`) fecha — `basic` é o nome novo, `auto` continua aceito, manifesto para de esconder o que foi pulado
+
+**Gatilho:** pedido do usuário — renomear o modo `auto` com honestidade e fechar D18. Implementado diretamente nesta sessão (sem subagente — ver DEC-071, limite de sessão em vigor).
+
+#### As três opções do defeito, todas atendidas
+
+`docs/science/02-defeitos-que-alteram-resultado.md#d18` listava três correções, com a nota "a opção 3 é obrigatória de qualquer forma". As três entraram, nenhuma sozinha:
+
+1. **Renomear com honestidade.** `mode: "basic"` é o nome novo — `MODOS_BASICOS = ("auto", "basic")` em `treeBuilderController.py`, os dois tratados de forma idêntica em todo ponto de dispatch. `"auto"` **continua aceito**, como alias: os projetos já em disco com `mode: "auto"` em `config_backup.json` (dezenas) não podem quebrar, e nenhum deles precisa ser tocado.
+2. **Aviso explícito.** Novo `logging.warning` (e `print`) disparado sempre que o modo é básico: *"Modo básico: métodos avançados (IQ-TREE, FastTree, RAxML-NG, MrBayes) NÃO serão executados nesta execução. Use mode='advanced' para incluí-los."* A descrição no início da execução também deixou de ser `"DISTANCE TREE CONSTRUCTOR e PARSIMONY"` (neutra) e passou a nomear o que não roda.
+3. **Manifesto grava o executado contra o disponível** (a obrigatória). `ExecutionManifest.register_execution_mode` (novo, `manifest.py`) — campo `execution_mode` no `to_dict()`: `mode_solicitado`, `metodos_avancados_disponiveis` (via `external_tools.resolve_tool`, não suposição), `metodos_avancados_executados`, `metodos_avancados_pulados`. Calculado e registrado em `workflow.py`, antes de qualquer controlador rodar — não depende do resultado da execução. Ausente (execução antiga, sem esse registro) é `None`, nunca `{}` — regra 5: lista vazia pareceria "básico, zero métodos disponíveis" em vez de "não registrado".
+
+#### O que "Completed successfully!" continua sendo
+
+Esse texto (emitido por `subtreeBuilderController.py`, ao fim da mineração de subárvores, não do `treeBuilderController`) não foi alterado — ele marca o fim do *pipeline*, não do *modo de árvore*. A opção 2 (aviso explícito) e a opção 3 (manifesto) juntas já respondem à pergunta "quantos métodos rodaram de fato" sem precisar mexer nessa mensagem, que é sobre outra etapa.
+
+#### Evidência de execução — ponta a ponta, não só sintaxe
+
+```
+python workflow.py -p <config com mode: "basic">
+  → "Iniciando construção das árvores utilizando o método: BÁSICO (...)"
+  → "AVISO: Modo básico: métodos avançados [...] NÃO serão executados [...]"
+  → manifest.json.execution_mode = {
+       "mode_solicitado": "basic",
+       "metodos_avancados_disponiveis": ["iqtree","fasttree","raxml","mrbayes"],
+       "metodos_avancados_executados": [],
+       "metodos_avancados_pulados": ["fasttree","iqtree","mrbayes","raxml"]
+     }
+
+python workflow.py -p <mesmo config, mode: "auto">
+  → mesma descrição BÁSICO, mesmo aviso, manifest.execution_mode.mode_solicitado == "auto"
+  → confirma que o alias legado produz o comportamento idêntico ao nome novo
+
+cd BioComp_UFF && python -m unittest workflow.tests.test_manifest workflow.tests.test_stability \
+  workflow.tests.test_subtree_mining workflow.tests.test_tree_identity workflow.tests.test_rf_bipartition \
+  workflow.tests.test_rooting workflow.tests.test_taxonomy workflow.tests.test_aligners \
+  workflow.tests.test_external_tools workflow.tests.test_raxml_bootstrap workflow.tests.test_deduplicacao
+  → 180 tests, OK (era 177; +3 de execution_mode)
+```
+
+**Não testado por unidade, só pela execução real acima:** não existe suíte de testes para `treeBuilderController.py` (nenhum `test_tree_builder_controller.py` no repositório) — a classe cria diretórios e roda construção real no `__init__`/`__call__`, o que tornaria um teste de unidade caro sem refatorar a classe primeiro, fora do escopo deste lote. A evidência do dispatch e do aviso é a execução ponta a ponta acima, repetida com `"basic"` e `"auto"`. Registrado como lacuna, não escondido.
+
+#### Δ em métrica publicada: nenhum
+
+Nenhuma árvore, distância, clado ou padrão FPMax é afetado. Mudança é de nomenclatura, mensagem e provenência no manifesto — o comportamento de quais métodos rodam para um `mode` dado é idêntico a antes.
+
+**Write-lock:** `BioComp_UFF/workflow/controller/treeBuilderController.py`, `BioComp_UFF/workflow/utils/manifest.py`, `BioComp_UFF/workflow.py`, `BioComp_UFF/workflow/tests/test_manifest.py`. Não toca `Backend/` nem `Frontend/` — essa é a segunda metade, lote seguinte. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
