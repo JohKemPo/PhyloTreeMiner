@@ -2716,6 +2716,93 @@ $ cd BioComp_UFF && git status --short
 
 **Commit:** `6282d46` (submódulo). **Reversível:** sim — `git rm --cached` não apaga blob nenhum do histórico; `git checkout <commit-anterior> -- .gitignore` desfaz o ignore se algum dia for preciso re-versionar.
 
+### DEC-076 · 2026-09-03 · `CQLExecutor.jsx`: modal e notificação de execução CQL mostravam 0 sucesso/0 falha por closure travada — corrigido, com teste de regressão
+
+**Gatilho:** pedido do usuário — "o painel de status de execução (sucessos e falhas) de execução cypher não estão alinhados corretamente, as informações não refletem corretamente o status (modal e na notificação)".
+
+**Causa raiz.** `executeNextCommand` e `finishExecution` são `const` redeclaradas a cada render, mas a primeira se re-invoca via `setTimeout(() => executeNextCommand(notificationId), ...)` referenciando **a si mesma** — a cadeia inteira de chunks de uma execução roda com a closure de quando `executeCQLDirect` disparou o primeiro chunk, e nunca "vê" os re-renders seguintes. `finishExecution`, chamada no fim dessa cadeia, lia `executionStats` **diretamente dessa closure travada** (não pela forma funcional `setState(prev => ...)`, que teria pego o valor real) — então tanto `executionResult.stats` (o modal) quanto o conteúdo da notificação final liam contadores presos nos valores de **antes** de qualquer chunk ser processado, tipicamente 0/0. Ao mesmo tempo, o card "Review and Retry Failed Commands" lia `executionStats.failedBlocks` **direto no JSX de um novo render** (sempre correto, porque JSX é reavaliado a cada render, não uma closure antiga) — daí o desalinhamento relatado: Alert dizendo 0% e 0 falhas, card de retry ao lado mostrando o número certo. Um terceiro sintoma do mesmo desenho: `executionResult.stats` era uma cópia **congelada** no instante do término, então um retry bem-sucedido depois (que atualiza `executionStats` ao vivo) nunca se refletia de volta no Alert.
+
+**Correção** (`Frontend/phylotreeminer/src/components/CQLExecutor.jsx`):
+1. `executionStatsRef` (novo `useRef`), sincronizado de forma síncrona por um wrapper único (`updateExecutionStats`) que substitui todo `setExecutionStats` direto (6 pontos de chamada) — sempre reflete o valor real mais recente, não importa qual closure o lê.
+2. `finishExecution` passa a montar `finalStats` a partir do ref, não da closure — corrige a notificação final (`updateNotification`/`message.success`).
+3. `executionResult` deixa de carregar uma cópia `stats`/`detailedResults` congelada (campo `detailedResults` nunca era lido em lugar nenhum, conferido por grep); o Alert do modal passa a ler `executionStats` ao vivo, a mesma fonte do card de retry logo abaixo — elimina o desalinhamento e corrige também o caso de retry pós-conclusão.
+
+**Teste de regressão novo:** `Frontend/phylotreeminer/src/__tests__/cqlExecutionStats.test.jsx` — monta `CQLExecutor` de verdade (sem mock do próprio componente) com 2 comandos CQL, mocka `POST /api/cql/execute-batch` devolvendo 1 sucesso + 1 falha, e confere que o Alert, o card de retry **e** a notificação final (renderizada pelo `GlobalNotificationCenter` de verdade) mostram 1/2, 50% e "Failures: 1" — não 0/0. **Verificado que o teste pega o bug**: revertido o fix (`git stash` só do componente) e rodado de novo — falha exatamente como esperado (`"Execution Completed - 0% success rate"` em vez de 50%); com o fix de volta, passa.
+
+**Evidência de execução:**
+```
+$ pnpm run test -- --run
+ Test Files  8 passed (8)
+      Tests  23 passed (23)          # era 7/22; +1 arquivo, +1 teste
+
+$ npx eslint src/components/CQLExecutor.jsx
+  5 problems (3 errors, 2 warnings) — todos pré-existentes (onClose/debugCQLBlock/
+  retryCount não usados, deps de useEffect), nenhum introduzido por este diff
+```
+
+**Δ em métrica publicada:** nenhum — UI de execução de Cypher em lote, fora da zona sagrada (§1 de `04-rigor-cientifico.md`; não toca distância entre árvores, identidade de clado, metadado ou FPMax).
+
+**Write-lock:** `Frontend/phylotreeminer/src/components/CQLExecutor.jsx`, `Frontend/phylotreeminer/src/__tests__/cqlExecutionStats.test.jsx` (novo). **Reversível:** sim, nada commitado ainda.
+
+### DEC-077 · 2026-09-03 · Máquina de validação confirmada; VARV-52 ≠ `teste52` corrigido no guia; `.cql` passam a identificar o projeto de origem — retroativo aplicado em 25 projetos
+
+**Gatilho:** pedido do usuário — confirmar que esta sessão roda na máquina de validação, atualizar `13-guia-reexecucao-m2.md` com o comando de reexecução, e implementar a identificação de projeto/experimento que faltava na geração de `.cql` (achado pelo usuário ao usar o grafo).
+
+#### 1. Máquina de validação confirmada
+
+`nproc --all` → 48, `free -h` → 47 GB — bate exatamente com o que `13-guia-reexecucao-m2.md §1.1` já documentava (medido 2026-09-01, Threadripper 2970WX). Registrado no topo do guia.
+
+#### 2. Achado ao preparar a reexecução de M3.4: VARV-52 não é `teste52`
+
+DEC-069 já apontava "VARV-52 bloqueado" como uma das duas causas do código de saída 2 de `make main-result`. Antes de disparar qualquer reexecução, investiguei se isso era mesmo necessário — hipótese inicial (minha, errada): `teste52` e VARV-49 são o mesmo dado antes/depois do dedup, então "VARV-52" seria contabilidade duplicada, não um conjunto que falta.
+
+**Refutado com evidência, via `ptm`-style investigação dedicada:**
+- `projects/teste52/out/outputs/config_backup.json` usa `input_path = data/replication-RetMax200-ITRs` — **o mesmo dado de VARV-49** (52 registros brutos → 49 distintos, D23). `teste52` é duplicata de VARV-49, não um quinto conjunto.
+- O VARV-52 real é `projects/test_variola_noITRs_57_Complete`, com `input_path = data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs` — **dado de origem diferente**, 55 registros brutos, contendo o contaminante *Nile crocodilepox virus* (`NC_008030`, fora de *Orthopoxvirus*, [D6](../science/02-defeitos-que-alteram-resultado.md#d6)) que a tabela de `11-handoff §4.1` já registrava para VARV-52 e que `teste52` não tem.
+- `01-revisao-variola.md` já tinha a tabela canônica correta (`VARV-52 | test_variola_noITRs_57_Complete | — | 52 | 9`); a confusão nasceu de comparar o `config_backup.json` errado.
+
+**Corrigido em `13-guia-reexecucao-m2.md §3`**: a frase antiga (que dizia "VARV-52 não foi localizado como conjunto próprio") reescrita com a correção e a evidência. Nova **§3.2-bis** com a config pronta para rodar VARV-52 de verdade, usando o dataset já limpo (`data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs-clean`, 54 sequências, gerado em [DEC-038](#dec-038--2026-08-25--conjuntos-limpos-criados-ao-lado-dos-contaminados), contaminante já removido) — **não precisa reaquisição nem nova limpeza, só rodar `workflow.py`**. Documentado também que `resultado_principal.py` tem `Conjunto("VARV-52", None, ...)` hardcoded e precisa ser trocado pelo caminho do projeto novo depois da reexecução, senão o gate continua bloqueado com o artefato pronto.
+
+**A reexecução em si NÃO foi disparada** — pedido explícito do usuário ("Não disparar VARV52!!!!... somente atualizar o doc com o comando") depois de eu já ter rodado os pré-requisitos (`check_dependencies.sh --strict` 7/7 ✓, `make test-backend` 338 passed/1 xfailed — nenhum toca dado de projeto). Fica pronta para quando o usuário decidir rodar.
+
+#### 3. `.cql` gerado passa a identificar o projeto/experimento de origem
+
+**Achado do usuário**: nós `Tree` no `.cql` gerado (`BioComp_UFF/workflow/utils/neo4jProcessing.py`) não carregavam nenhuma propriedade dizendo de qual projeto vieram — um grafo com mais de um projeto carregado não dava para separar por origem.
+
+**Corrigido**: `project_name_from_output_path()` (novo) deriva o nome do projeto do próprio caminho de saída (`.../projects/<nome>/out/outputs`, convenção que o pipeline já usa em todo lugar — não foi criado nenhum campo de config novo). `generate_cypher` passa a gravar `project: '<nome>'` no nó `Tree`; `Subtree`/`Metadata`/`Feature`/`Qualifier` continuam sem a propriedade (alcançáveis por travessia a partir do `Tree`, evita redundância em cada nó). Novo `workflow/tests/test_neo4j_processing.py` (4 testes): deriva o nome corretamente, o Cypher gerado carrega `project`, e o arquivo `.cql` escrito em disco também.
+
+**Correção retroativa dos `.cql` já gerados** — pergunta do usuário: custoso corrigir sem reexecutar? Medido, não estimado: `workflow/utils/rotular_projeto_cql_legado.py` (novo, mesmo padrão de `reparar_cql_legado.py`/DEC-052) varre `projects/*/out/outputs/*.cql`, insere `project: '<nome>'` em cada `CREATE (t:Tree {...})` que ainda não tiver (idempotente — roda de novo e não duplica), com backup automático (`.bak-preRotuloProjeto`) antes de qualquer gravação. **Não é custoso**: 25 projetos existentes em disco, 275 nós `Tree`, 1m21s de execução total (dominado por I/O dos dois arquivos de ~700 MB de VARV-49/121) — sem tocar o pipeline de bioinformática.
+
+**Aplicado nos 25 projetos**, por pedido explícito do usuário ("Aplique a correção cql em todos os projetos!!! eu irei depois re-alimentar o banco"). Confirmado pós-aplicação: 25 backups criados, segunda rodada em modo conferência devolve 0 a corrigir / 275 já rotulados (idempotência confere). **`projects/` é `.gitignore`d neste submódulo** — os `.cql` corrigidos e os backups não entram em commit nenhum, só o script novo entra.
+
+**O que este lote NÃO faz:** não atualiza nenhum Neo4j já em execução — o `.cql` corrigido precisa ser reexecutado contra o banco (Cypher puro, segundos, não o pipeline) para os nós já ingeridos ganharem `project`. Fica com o usuário, que declarou que vai "re-alimentar o banco" depois.
+
+#### Evidência de execução
+
+```
+nproc --all → 48; free -h → 47Gi total (bate com 13-guia-reexecucao-m2.md §1.1)
+
+cd BioComp_UFF && python -m unittest workflow.tests.test_neo4j_processing -v
+  → 4 tests, OK
+
+cd BioComp_UFF && python -m unittest <11 módulos + test_deduplicacao + test_execution_mode_dispatch + test_neo4j_processing>
+  → Ran 183 tests, OK (era 179; +4)
+
+python -m workflow.utils.rotular_projeto_cql_legado           (conferência)
+  → 25 arquivos, 275 nós Tree a rotular
+python -m workflow.utils.rotular_projeto_cql_legado --apply
+  → 25 arquivos aplicados, 25 backups .bak-preRotuloProjeto criados, 1m21s
+python -m workflow.utils.rotular_projeto_cql_legado           (conferência, pós-apply)
+  → 0 a rotular, 275 já rotulados — idempotência confirmada
+
+bash scripts/check_dependencies.sh --strict → 7/7 ✓
+make test-backend PY=.../envs/Phylotreeminer/bin/python → 338 passed, 1 xfailed
+```
+
+**Δ em métrica publicada:** nenhum — nenhuma árvore, distância, clado ou padrão FPMax recalculado. A correção de VARV-52×`teste52` é de **planejamento de reexecução** (nenhuma reexecução rodou ainda); a de `.cql` é de **rotulagem no grafo de visualização**, não no caminho de cálculo científico.
+
+**Write-lock:** `BioComp_UFF/workflow/utils/neo4jProcessing.py`, `BioComp_UFF/workflow/tests/test_neo4j_processing.py` (novo), `BioComp_UFF/workflow/utils/rotular_projeto_cql_legado.py` (novo), `docs/automation/13-guia-reexecucao-m2.md`, `docs/automation/07-log-de-execucao.md`. **Reversível:** sim — código não commitado ainda; `.cql` têm backup automático (fora do git, mas em disco).
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**

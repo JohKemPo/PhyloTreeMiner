@@ -6,17 +6,20 @@ Este documento **operacionaliza** [`11-handoff-maquina-de-validacao.md §4.1`](1
 
 ⚠️ **Isto é um guia, não uma ordem de execução.** Rodar os conjuntos grandes (VARV-121, ZIKV-480) leva horas e ocupa a máquina inteira — [regra do `CLAUDE.md`](../../CLAUDE.md): **combine antes de rodar pipeline pesado**. Este documento existe para quando a decisão de rodar já foi tomada.
 
-### Estado desta rodada — atualizado em 2026-09-02
+### Estado desta rodada — atualizado em 2026-09-03
+
+**Esta é a máquina de validação** (48 núcleos lógicos / Threadripper 2970WX, 47 GB RAM — confirmado batendo com §1.1 nesta sessão, 2026-09-03). Todas as reexecuções abaixo, passadas e futuras, rodam aqui.
 
 | Conjunto | Seção | Estado | Achado |
 |---|---|---|---|
 | Zika-21 (pré-voo) | §3.0 | ✅ concluído | — |
 | VARV-6 | §3.1 | ✅ concluído | — |
 | VARV-49 | §3.2 | ✅ concluído | [D25](../science/02-defeitos-que-alteram-resultado.md#d25)/[DEC-057](07-log-de-execucao.md#dec-057--2026-09-01--d25--mafft_iterative-colidia-com-mafft-em-stabilitypy-e-m13-crashava-nas-três-reexecuções) encontrado e corrigido aqui: `stability.py` não reconhecia `mafft_iterative` como alinhador e travava M1.3 (`ValueError`) nas três reexecuções acima. Oráculo dendropy confirmou 0 divergências nas três depois do fix |
+| VARV-52 | §3.2-bis | ⏳ não iniciado | Confundido com `teste52` (= VARV-49) até esta sessão corrigir — ver a nota de correção em §3. É a causa nº 1 do código de saída 2 de [DEC-069](07-log-de-execucao.md) |
 | VARV-121 | §3.3 | ✅ concluído (2026-09-01 20:07 → 2026-09-02 12:56, 16h49) | `conferir_correcoes_m1.py` TUDO VERDE, oráculo dendropy 45 pares/0 divergências. Serviu de segunda réplica de [E4](04-agenda-de-pesquisa.md#e4--◐--o-fator-alinhador-medido-onde-ele-existe) — confirma NJ como método mais sensível à troca de alinhador em *Variola* (replica VARV-49), com UPGMA se aproximando do NJ nesta escala (não replica exatamente) |
 | ZIKV-480 | §3.4 | ⏳ não iniciado | `parsimony` corrigido para dentro de `ignore_mode` (ver §3.4) |
 
-Se você está lendo isto numa sessão nova: os quatro primeiros já provaram M1.3 verde nesta máquina; se `conferir_correcoes_m1.py` voltar a travar em M1.3 com um `ValueError` de rótulo duplicado, o código já deveria ter o fix de D25 — confira `BioComp_UFF/workflow/stability/stability.py` antes de reabrir o achado.
+Se você está lendo isto numa sessão nova: os já concluídos já provaram M1.3 verde nesta máquina; se `conferir_correcoes_m1.py` voltar a travar em M1.3 com um `ValueError` de rótulo duplicado, o código já deveria ter o fix de D25 — confira `BioComp_UFF/workflow/stability/stability.py` antes de reabrir o achado.
 
 ## 0. Por que a reexecução importa
 
@@ -91,7 +94,9 @@ O que aconteceu: uma tentativa anterior, no **mesmo** diretório de saída, morr
 
 ## 3. Os conjuntos, na ordem recomendada
 
-Ordem: do mais barato para o mais caro — cada um valida o anterior antes de comprometer horas no próximo. `VARV-52` da tabela do [`11-handoff §4.1`](11-handoff-maquina-de-validacao.md#41-reexecutar-os-experimentos-com-o-pipeline-corrigido--prioridade-máxima) **não foi localizado como conjunto próprio**: os 52 registros brutos e as 49 folhas pós-deduplicação (`deduplicar_por_sequencia`, log confirmado abaixo) são o **mesmo** VARV-49 — a linha parece contar o mesmo conjunto antes/depois do dedup, não um quinto conjunto.
+Ordem: do mais barato para o mais caro — cada um valida o anterior antes de comprometer horas no próximo.
+
+⚠️ **Correção de revisão (2026-09-03):** a frase que estava aqui dizia que `VARV-52` "não foi localizado como conjunto próprio" e que seria o mesmo VARV-49 contado antes/depois do dedup. **Isso está errado** — a confusão veio de comparar o `config_backup.json` do diretório errado. `projects/teste52/` de fato usa o mesmo `input_path` de VARV-49 (`data/replication-RetMax200-ITRs`, 52 registros brutos → 49 distintos) e é **duplicata** de VARV-49, não VARV-52. O VARV-52 real é `projects/test_variola_noITRs_57_Complete`, cujo dado de origem é **outro** diretório — `data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs`, **55 registros brutos**, com o contaminante *Nile crocodilepox virus* (`NC_008030`, fora de *Orthopoxvirus*, [D6](../science/02-defeitos-que-alteram-resultado.md#d6)) que a tabela de [`11-handoff §4.1`](11-handoff-maquina-de-validacao.md#41-reexecutar-os-experimentos-com-o-pipeline-corrigido--prioridade-máxima) já registrava. Confirmado por `grep -c '^>'` nos dois FASTA (52 × 55) e por composição de acessos — nenhum dos dois é subconjunto do outro. Ver §3.2-bis abaixo para a reexecução real de VARV-52; a nota antiga permanece incorreta em qualquer commit anterior a esta correção.
 
 ### 3.0 Pré-voo — Zika-21 (não pula esta etapa)
 
@@ -258,13 +263,80 @@ python workflow.py -p /tmp/varv49_reexec.json
 
 `num_threads: 16` para o alinhamento e `iqtree_threads: 16` para o bootstrap — generoso de propósito: o bootstrap é embaraçosamente paralelo e não decide topologia (§2), então não há risco em usar boa parte dos 48 núcleos lógicos aqui. `raxml_threads: 8` é o valor já testado nesta máquina, neste conjunto, numa tentativa anterior (`Variola_Yu_li_2007_M2`, §2.1) — chegou a rodar (5 árvores do braço `mafft`, incluindo `raxml`, todas produzidas) antes de a tentativa morrer por outro motivo. Se `raxml-ng` recusar com *"Too few patterns per thread"*, baixe para 4.
 
-**Esperado:** 52 registros → 49 sequências distintas (log confirmado: *"52 registros → 49 sequências distintas. Descartados por sequência idêntica: NC_008291.1 (idêntico a DQ437594.1); NC_003391.1 (idêntico a AF438165.1); DQ437594.1 (idêntico a DQ437594.1)"* — [D23](../science/02-defeitos-que-alteram-resultado.md#d23), declarado e não corrigido). 10 árvores (2 alinhadores × {nj, upgma, fasttree, iqtree, raxml}). MAFFT roda em minutos nos dois alinhamentos ([DEC-050](07-log-de-execucao.md#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir): *"roda em ambos os conjuntos"*, medido em 228 kb); RAxML-NG com `--threads N --workers 1` completou o mesmo porte de alinhamento (VARV-52, 251 s) na máquina de desenvolvimento, de 12 núcleos — espere igual ou mais rápido aqui.
+**Esperado:** 52 registros → 49 sequências distintas (log confirmado: *"52 registros → 49 sequências distintas. Descartados por sequência idêntica: NC_008291.1 (idêntico a DQ437594.1); NC_003391.1 (idêntico a AF438165.1); DQ437594.1 (idêntico a DQ437594.1)"* — [D23](../science/02-defeitos-que-alteram-resultado.md#d23), declarado e não corrigido). 10 árvores (2 alinhadores × {nj, upgma, fasttree, iqtree, raxml}). MAFFT roda em minutos nos dois alinhamentos ([DEC-050](07-log-de-execucao.md#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir): *"roda em ambos os conjuntos"*, medido em 228 kb); RAxML-NG com `--threads N --workers 1` completou o mesmo porte de alinhamento (`teste52`, mesmo dado de VARV-49, 251 s) na máquina de desenvolvimento, de 12 núcleos — espere igual ou mais rápido aqui.
 
 ```bash
 cd ../Backend && python scripts/conferir_correcoes_m1.py Variola_VARV49_reexec_20260901 Variola_Yu_li_2007
 cd ../BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Variola_VARV49_reexec_20260901
 cd .. && python docs/science/scripts/audit_variola.py --secao 3 --secao 5
 ```
+
+### 3.2-bis VARV-52 — o conjunto que faltava para fechar M3.4
+
+Adicionado em 2026-09-03: é o segundo motivo do código de saída 2 de `make main-result` ([DEC-069](07-log-de-execucao.md#dec-069--2026-09-03--m34-implementado--make-main-result-existe--as-duas-afirmações-do-artigo-se-sustentam-em-2-de-3-conjuntos-com-números-atualizados)). `docs/science/scripts/resultado_principal.py` tem `Conjunto("VARV-52", None, bloqueio=...)` **hardcoded** — depois de reexecutar, é preciso trocar o `None` pelo caminho do projeto novo nesse arquivo, senão o gate continua bloqueado mesmo com o artefato em disco.
+
+**O dado já está adquirido e já está limpo.** Ao contrário de VARV-49, o dado bruto de VARV-52 (`data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs/dataset_final.fasta`, 55 registros) **está contaminado** — 1 táxon fora de *Orthopoxvirus* ([D6](../science/02-defeitos-que-alteram-resultado.md#d6)/[DEC-035](07-log-de-execucao.md#dec-035--2026-08-25--m22--filtro-taxonômico-declarado-e-a-contaminação-de-d6-medida-acesso-a-acesso)). A variante limpa já existe, gerada em 2026-08-25 por [DEC-038](07-log-de-execucao.md#dec-038--2026-08-25--conjuntos-limpos-criados-ao-lado-dos-contaminados) — **use-a**, não o dado bruto:
+
+```bash
+cat BioComp_UFF/data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs-clean/PROVENIENCIA.md
+# 55 → 54 sequências; removida NC_008030 (Nile crocodilepox virus); DQ437594 e
+# NC_003391 mantidas sem lineage por falta de metadado (mesma classe de D23/DEC-038)
+grep -c '^>' BioComp_UFF/data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs-clean/dataset_final.fasta   # 54
+```
+
+**Config para a reexecução** — mesmo padrão de §3.2 (VARV-49), só troca `input_path`/`output_path`/`project_name`:
+
+```bash
+cd BioComp_UFF
+cat > /tmp/varv52_reexec.json <<'JSON'
+{
+  "log_file": true,
+  "project_name": "Variola_VARV52_reexec_20260903",
+  "output_log": "/home/geomesh/Documentos/GIT/PhyloTreeMiner/BioComp_UFF/projects/Variola_VARV52_reexec_20260903/out",
+  "tree_config": {
+    "mode": "advanced",
+    "ignore_mode": ["mrbayes", "parsimony"],
+    "aligners": ["mafft", "mafft_iterative"],
+    "align_method": "mafft",
+    "num_threads": 16,
+    "random_seed": 12345,
+    "raxml_threads": 8,
+    "iqtree_threads": 16,
+    "input_path": "/home/geomesh/Documentos/GIT/PhyloTreeMiner/BioComp_UFF/data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs-clean",
+    "output_path": "/home/geomesh/Documentos/GIT/PhyloTreeMiner/BioComp_UFF/projects/Variola_VARV52_reexec_20260903/out",
+    "output_format": "nexus"
+  },
+  "subtree_config": {
+    "construct_tree_method": "distance",
+    "input_path": "/home/geomesh/Documentos/GIT/PhyloTreeMiner/BioComp_UFF/projects/Variola_VARV52_reexec_20260903/out/Trees",
+    "output_path": "/home/geomesh/Documentos/GIT/PhyloTreeMiner/BioComp_UFF/projects/Variola_VARV52_reexec_20260903/out",
+    "input_format": "nexus",
+    "output_format": "nexus",
+    "resume_infos": true,
+    "save_metadata": true,
+    "subtree_miner": true,
+    "subtree_miner_configs": {
+      "mode": "OFST",
+      "save_fpmax": true,
+      "output_path": "/home/geomesh/Documentos/GIT/PhyloTreeMiner/BioComp_UFF/projects/Variola_VARV52_reexec_20260903/out",
+      "support_fpmax": "auto"
+    }
+  }
+}
+JSON
+python workflow.py -p /tmp/varv52_reexec.json
+```
+
+`ignore_mode` inclui `"parsimony"` pelo mesmo motivo de VARV-49 (§3.2): 54 táxons × ~236 kb deixariam o `ParsimonyTreeConstructor` puro-Python dominar o tempo total. `raxml_threads: 8`/`iqtree_threads: 16` seguem o mesmo raciocínio de §3.2 — porte de dado quase idêntico a VARV-49 (54 × ~236 kb contra 49 × ~236 kb), então o mesmo orçamento de threads deve se comportar igual.
+
+**Esperado:** 54 sequências (já deduplicadas na origem — D23 ainda não conferido neste conjunto especificamente; se `deduplicar_por_sequencia` descartar alguma, o log dirá quantas sobram). 10 árvores (2 alinhadores × {nj, upgma, fasttree, iqtree, raxml}).
+
+```bash
+cd ../BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Variola_VARV52_reexec_20260903
+cd .. && python docs/science/scripts/audit_variola.py --secao 3 --secao 5
+```
+
+**Depois de validado**, edite `docs/science/scripts/resultado_principal.py`: troque `Conjunto("VARV-52", None, bloqueio=...)` por `Conjunto("VARV-52", "projects/Variola_VARV52_reexec_20260903")` e rode `make main-result` de novo — é o que fecha a primeira das duas causas do código 2 de DEC-069.
 
 ### 3.3 VARV-121 — escala e histórico do workflow
 

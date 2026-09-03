@@ -79,10 +79,31 @@ const CQLExecutor = ({
     isExecuting: false,
     isPaused: false,
   });
+  // Correção: executeNextCommand se rechama via setTimeout referenciando a
+  // si mesma (closure da própria função), então nunca vê os re-renders
+  // seguintes — o `executionStats` fechado nessa cadeia fica travado no
+  // valor de quando a execução começou. finishExecution/notificação final
+  // liam esse `executionStats` direto e mostravam sucesso/falha zerados ou
+  // desatualizados. O ref é atualizado de forma síncrona junto de todo
+  // `setExecutionStats`, então sempre reflete o valor real mais recente,
+  // independentemente de qual closure o está lendo.
+  const executionStatsRef = useRef(executionStats);
   const { addNotification, removeNotification, updateNotification } =
     useNotification();
 
   const API_BASE_URL = "http://localhost:8000";
+
+  // Substitui todo `setExecutionStats` direto: mantém executionStatsRef
+  // sincronizado no mesmo instante, para leitura confiável fora de render
+  // (dentro de closures de fetch/setTimeout, onde o estado do React pode
+  // estar desatualizado).
+  const updateExecutionStats = (updater) => {
+    setExecutionStats((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      executionStatsRef.current = next;
+      return next;
+    });
+  };
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -133,7 +154,7 @@ const CQLExecutor = ({
 
     console.log(`Parsed blocks: ${blocks.length} commands found`);
 
-    setExecutionStats((prev) => ({
+    updateExecutionStats((prev) => ({
       ...prev,
       totalBlocks: blocks.length,
       currentBlock: 0,
@@ -213,7 +234,7 @@ const CQLExecutor = ({
         ),
       );
 
-      setExecutionStats((prev) => ({
+      updateExecutionStats((prev) => ({
         ...prev,
         successfulBlocks: prev.successfulBlocks + 1,
         failedBlocks: prev.failedBlocks - 1,
@@ -425,7 +446,7 @@ const CQLExecutor = ({
 
     setIsExecuting(true);
 
-    setExecutionStats({
+    updateExecutionStats({
       totalBlocks: cqlBlocks.length,
       completedBlocks: 0,
       successfulBlocks: 0,
@@ -480,7 +501,7 @@ const CQLExecutor = ({
       executionQueueRef.current.length,
     );
 
-    setExecutionStats((prev) => ({
+    updateExecutionStats((prev) => ({
       ...prev,
       currentBlock: endIndex,
       status: "executing",
@@ -566,7 +587,7 @@ const CQLExecutor = ({
         return newDetails;
       });
 
-      setExecutionStats((prev) => {
+      updateExecutionStats((prev) => {
         const newStats = {
           ...prev,
           completedBlocks: prev.completedBlocks + currentChunk.length,
@@ -652,7 +673,7 @@ const CQLExecutor = ({
         return newDetails;
       });
 
-      setExecutionStats((prev) => {
+      updateExecutionStats((prev) => {
         const newStats = {
           ...prev,
           completedBlocks: prev.completedBlocks + currentChunk.length,
@@ -725,25 +746,23 @@ const CQLExecutor = ({
     setIsExecuting(false);
     setIsPaused(false);
 
-    const finalStats = { ...executionStats };
+    // Lê do ref, não do `executionStats` fechado nesta closure: quando
+    // finishExecution é chamada pela cadeia executeNextCommand → setTimeout
+    // → executeNextCommand, a closure é a de quando a execução começou, e
+    // `executionStats` ali está travado nos valores iniciais (ver comentário
+    // em executionStatsRef). O ref é sempre o valor mais recente.
+    const finalStats = { ...executionStatsRef.current };
 
-    setExecutionResult({
-      success,
-      stats: {
-        totalBlocks: finalStats.totalBlocks,
-        executedBlocks: finalStats.successfulBlocks,
-        failedBlocks: finalStats.failedBlocks,
-        successRate:
-          finalStats.totalBlocks > 0
-            ? Math.round(
-                (finalStats.successfulBlocks / finalStats.totalBlocks) * 100,
-              )
-            : 0,
-      },
-      detailedResults: executionDetails,
-    });
+    setExecutionResult({ success });
 
     if (success) {
+      const successRate =
+        finalStats.totalBlocks > 0
+          ? Math.round(
+              (finalStats.successfulBlocks / finalStats.totalBlocks) * 100,
+            )
+          : 0;
+
       updateNotification(notificationId, {
         type: "success",
         message: "CQL Execution Completed",
@@ -759,29 +778,24 @@ const CQLExecutor = ({
               }}
             >
               <span>
-                <Text strong>Total:</Text> {executionStats.totalBlocks}
+                <Text strong>Total:</Text> {finalStats.totalBlocks}
               </span>
               <span style={{ color: "#3f8600" }}>
-                <Text strong>Success:</Text> {executionStats.successfulBlocks}
+                <Text strong>Success:</Text> {finalStats.successfulBlocks}
               </span>
               <span style={{ color: "#cf1322" }}>
-                <Text strong>Failures:</Text> {executionStats.failedBlocks}
+                <Text strong>Failures:</Text> {finalStats.failedBlocks}
               </span>
             </div>
             <div style={{ color: "#52c41a", fontWeight: "bold" }}>
-              Success rate:{" "}
-              {Math.round(
-                (executionStats.successfulBlocks / executionStats.totalBlocks) *
-                  100,
-              )}
-              %
+              Success rate: {successRate}%
             </div>
           </div>
         ),
         duration: 10,
       });
       message.success(
-        `Execution completed: ${executionStats.successfulBlocks}/${executionStats.totalBlocks} commands successful`,
+        `Execution completed: ${finalStats.successfulBlocks}/${finalStats.totalBlocks} commands successful`,
       );
     }
 
@@ -1237,18 +1251,33 @@ const CQLExecutor = ({
         {executionResult && !isExecuting && (
           <div>
             <Title level={4}>Execution Result:</Title>
+            {/* Lê executionStats (estado ao vivo), a mesma fonte do card de
+                retry logo abaixo: antes o Alert lia uma cópia congelada no
+                instante em que a execução terminou, que nunca via os
+                sucessos de retry subsequentes nem, por um bug de closure
+                em finishExecution, os totais corretos da própria execução —
+                Alert e card de retry podiam mostrar números diferentes
+                para o mesmo lote. Uma única fonte elimina o desalinhamento. */}
             <Alert
-              message={`Execution Completed - ${executionResult.stats.successRate}% success rate`}
+              message={`Execution Completed - ${
+                executionStats.totalBlocks > 0
+                  ? Math.round(
+                      (executionStats.successfulBlocks /
+                        executionStats.totalBlocks) *
+                        100,
+                    )
+                  : 0
+              }% success rate`}
               description={
                 <div>
                   <p>
-                    <strong>{executionResult.stats.executedBlocks}</strong> of{" "}
-                    <strong>{executionResult.stats.totalBlocks}</strong>{" "}
-                    commands executed successfully
+                    <strong>{executionStats.successfulBlocks}</strong> of{" "}
+                    <strong>{executionStats.totalBlocks}</strong> commands
+                    executed successfully
                   </p>
                   <p>
-                    <strong>{executionResult.stats.failedBlocks}</strong>{" "}
-                    commands failed
+                    <strong>{executionStats.failedBlocks}</strong> commands
+                    failed
                   </p>
                 </div>
               }
