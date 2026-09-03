@@ -2455,7 +2455,7 @@ git status --short (BioComp_UFF)                                              �
 
 Oráculo dendropy: **1682 testes de pertinência de bipartição, 0 divergências**. Oráculo RF do projeto: **181 pares, 0 divergências**. `make reference-check` intocado: 3/3 invariantes, 10/10 pipelines, código 0.
 
-**Código de saída: 2 (não 0)** — as afirmações valem, a reprodução não está completa. Duas causas, ambas exigindo reexecução pesada, nenhuma corrigível por código:
+**Código de saída do script: 2 (não 0)** — as afirmações valem, a reprodução não está completa. **Correção de revisão:** `make main-result` em si sai com código **0** — o `Makefile` absorve o 2 de propósito (mesmo padrão de `reference-check`, comentado nas linhas 58-61), então quem rodar `make main-result` num CI vê alvo verde sobre reprodução incompleta. É o `resultado_principal.py` chamado direto que devolve 2; `make main-result` não. Duas causas do 2, ambas exigindo reexecução pesada, nenhuma corrigível por código:
 1. **VARV-52 bloqueado**: não existe reexecução pós-M1/M2 no disco (só `teste52/`, pré-D1, sem `mafft_iterative`, sem manifesto). O script **recusa** produzir número para VARV-52 em vez de usar o artefato velho — confirmado: em modo `--caracterizar`, os artefatos velhos reproduzem exatamente os números antigos de §4.4 (30/14/38, Δ=0), o que confirma a proveniência do número antigo sem validá-lo para hoje.
 2. **RAxML sem suporte de ramo nos três reexecutados de 2026-09-01**: `--bs-trees 1000` só entrou em M3.2/DEC-064 (2026-09-02), depois das reexecuções. A sub-afirmação do gate ("toda árvore ML carrega suporte de ramo") é falsa hoje para `mafft_raxml`/`mafft_iterative_raxml` — código correto, artefato anterior à correção.
 
@@ -2463,7 +2463,7 @@ Oráculo dendropy: **1682 testes de pertinência de bipartição, 0 divergência
 
 Números mudam em relação a `03-metricas §4.1` (universo comparável de 4 métodos): VARV-49 UFBoot=100 27→**30**, sobrevivem 13→**14**, UFBoot≥95 34→**36**, Pearson 0,44→**0,432**; VARV-121 UFBoot=100 86→**77**, sobrevivem 35→**34**, UFBoot≥95 94→**90**, Pearson 0,37→**0,413**. Causa isolada e confirmada: alinhamento **idêntico byte a byte** (mesmo md5, velho e novo), modelo idêntico (`GTR+G -bb 1000`) — o que mudou foi o **IQ-TREE**: 2.2.2.6 com threads em auto-detect (32 núcleos) → 3.1.3 com `-nt 1`, semente `12345` explícita. Mesmo mecanismo de [D17](../science/02-defeitos-que-alteram-resultado.md#d17)/[D21](../science/02-defeitos-que-alteram-resultado.md#d21): versão/determinismo do inferidor é parte do resultado. Os números novos são os defensáveis (determinísticos, D1/D3/D5 já corrigidos); os de §4.4 vieram de execução não determinística — caracterizado, não é regressão do script.
 
-**Achado adicional sobre o Pearson:** a faixa herdada 0,27–0,44 (`03-metricas §4.1`) só se sustenta no universo de 4 métodos. Com 5 métodos (braço `mafft` completo) sobe a 0,504 (VARV-121); com os 10 pipelines, a 0,596. `03-metricas §4.1` precisa declarar a que universo a faixa se refere.
+**Achado adicional sobre o Pearson:** a faixa herdada 0,27–0,44 (`03-metricas §4.1`) só se sustenta no universo de 4 métodos. Com 5 métodos (braço `mafft` completo) sobe a 0,504 (VARV-121); com os 10 pipelines, a 0,596. `03-metricas §4.1` precisa declarar a que universo a faixa se refere. **Correção de revisão:** o Δ=0 do modo `--caracterizar` vale para as 16 contagens, não para o Pearson — medido em revisão independente: VARV-49 +0,007, VARV-52 −0,005, VARV-121 **−0,055**, mesmo rodando sobre os artefatos antigos. Causa declarada e não é regressão: §4.4 lia suporte do `.contree` do IQ-TREE, o script lê da árvore de produção em `out/Trees/`, que diferem em 2 bipartições — é uma troca de fonte deliberada (`out/Trees/` é o que o usuário de fato recebe), mas a frase "reproduz §4.4 com Δ=0" precisa do qualificador "nas contagens", não em toda métrica.
 
 **Defeito achado e corrigido dentro do próprio lote:** a primeira versão do script devolvia **"AFIRMAÇÃO VIOLADA" (código 1)** quando nada tinha sido medido (ex.: rodar só com VARV-52 bloqueado) — falsidade silenciosa da regra 5 do CLAUDE.md (`0`/`-1` onde a métrica é indefinida é defeito, não convenção; aqui era "violada" em vez de "não medida"). Corrigido antes de qualquer saída chegar ao usuário: "não medida" e "violada" são estados agora distintos.
 
@@ -2479,6 +2479,7 @@ make main-result
   → código de saída: 2
 
 modo --caracterizar (sobre artefatos pré-correção) → reproduz §4.4 exatamente, Δ=0 nas 16 contagens
+  (Δ=0 é das contagens; Pearson diverge mesmo em modo --caracterizar — ver nota abaixo, confirmada em revisão)
 oráculo dendropy: 1682 testes, 0 divergências · oráculo RF do projeto: 181 pares, 0 divergências
 make reference-check → inalterado, 3/3 invariantes, código 0
 ```
@@ -2622,6 +2623,79 @@ grep -n "mode" Backend/src/app.py                        → 0 ocorrências (con
 #### D18 — estado final
 
 As três correções do defeito (renomear com honestidade, aviso explícito, manifesto grava executado×disponível) estão implementadas ponta a ponta: pipeline (DEC-072) e a superfície que o usuário toca para escolher o modo (esta entrada). D18 passa de **aberto** para **fechado**.
+
+### DEC-074 · 2026-09-03 · Revisão de D23/M3.4/M3.1/D18: 3 aprovados, D18 reprovado e corrigido — a mentira do defeito sobrevivia em duas strings do próprio lote que o fechou
+
+**Gatilho:** rodada de Revisor sobre os quatro lotes implementados durante o bloqueio de rate limit (DEC-071), despachada depois do reset.
+
+#### Vereditos
+
+| Lote | Veredito |
+|---|---|
+| D23 (`e863f33`) | **Aprovado** — diff é mesmo só string/docstring; testes provam integração real via `_validate_and_prepare_fasta`, não só a função isolada |
+| M3.4 (`aa1713b`) | **Aprovado com ressalvas** — reusa identidade canônica de verdade (não é D5 de novo); `--caracterizar` funciona; "não medida"×"violada" corrigido no código |
+| M3.1 (`6fbd6c7`) | **Aprovado com ressalvas** — não normaliza (confirmado por varredura), `clade_id` reusa D5, oráculo roda de verdade (15 passed, 0 skip), fixture de FBP é de chamada real do RAxML-NG |
+| D18 (`b633ada`+`fa27c94`) | **Reprovado** — 2 bloqueadores, ambos em `pipelineConfigurator.jsx` |
+
+#### D18 — o que reprovou, e por quê isso importa mais que os outros três
+
+O lote que fecha um defeito sobre **texto que mente ao usuário** deixou duas frases mentindo, no mesmo arquivo que editou:
+- **D18-1**, linha 561: o tour guiado dizia *"automatic mode to test various combinations"* — exatamente a promessa falsa que D18 documenta (o modo básico não testa combinação nenhuma). O lote reescreveu o tooltip da Radio, mas não o Popover do tour, uma tela antes.
+- **D18-2**, linha 663: um tooltip citava *"auto/advanced modes"* como se `auto` fosse vocabulário de escolha nova, não o alias legado que só serve para não quebrar projeto em disco.
+
+**Corrigido nesta sessão**, ambos: a descrição do tour passa a nomear os três modos reais (Basic/Advanced/Manual, cada um com o que faz); o tooltip do "Ignore Methods" passa a dizer `"basic/advanced modes"`.
+
+#### Dívida técnica do Revisor, também corrigida (não bloqueava, mas o Revisor pediu antes de D18 continuar "fechado")
+
+- **D18-3** — `MODOS_BASICOS` tinha duas fontes de verdade (`treeBuilderController.py`, dentro do método, e um literal repetido em `workflow.py`). Promovida a constante de módulo, importada nos dois lugares.
+- **D18-4** — docstring de `register_execution_mode` nomeava o vocabulário errado (`"raxml-ng"`, a chave de `external_tools.CANDIDATOS`, onde o valor gravado é `"raxml"`, o nome de método do controlador). Corrigida, com a ressalva explícita de que `workflow.py` já faz essa tradução.
+- **D18-5** — não existia teste automatizado para o dispatch, só a execução manual relatada em DEC-072. Novo `BioComp_UFF/workflow/tests/test_execution_mode_dispatch.py`: roda `TreeBuilderController` de verdade (MAFFT real, FASTA sintético de 3 sequências) com `mode="basic"` e `mode="auto"`, confere que os dois constroem o mesmo número de árvores. **Primeiro teste automatizado que existe para `treeBuilderController.py`** — a classe não tinha nenhuma cobertura de unidade/integração antes.
+
+#### M3.1-1 corrigido (achado do Revisor)
+
+Docstring do oráculo (`Backend/tests/oracle/test_oraculo_suporte_dendropy.py`) alegava *"Nenhuma linha de código de produção é importada aqui"* — falso, o arquivo importa `suporte_de_ramo` como objeto sob teste. Corrigido: a frase agora distingue o **lado oráculo** (de fato independente) do módulo de produção que ele confronta.
+
+#### M3.1-2 — checado, não é lacuna
+
+O Revisor perguntou se `GET /api/tree/{project}/branch-support` (rota nova de M3.1) deveria ter entrado na cobertura de rate limiting de M4.7. Conferido: M4.7 cobre só rotas de **escrita** (`/run`, `/rerun`, `/upload-data`, `/cql-batch/execute-batch`); `branch-support` é `GET`, leitura, mesma categoria de `/insights`/`/metadata`, nenhuma das quais é limitada. Consistente com a política já estabelecida — não é achado, registrado para fechar a pergunta.
+
+#### M3.4-1 e M3.4-2 — texto do ledger corrigido em DEC-069
+
+`DEC-069` alegava "código de saída 2" sem qualificar que é do **script**, não do alvo `make main-result` (que absorve o 2 e sai 0, por desenho — mesmo padrão de `reference-check`). E alegava que `--caracterizar` reproduz §4.4 com "Δ=0" sem qualificar que isso vale para as **16 contagens**, não para o Pearson (que diverge mesmo sobre artefato antigo — +0,007/−0,005/−0,055 — por troca deliberada de fonte, `.contree` → `out/Trees/`). Os dois parágrafos de `DEC-069` foram corrigidos in-line com essas ressalvas.
+
+#### Evidência de execução
+
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_execution_mode_dispatch -v
+  → 2 passed (novo)
+
+cd BioComp_UFF && python -m unittest workflow.tests.test_stability workflow.tests.test_subtree_mining \
+  workflow.tests.test_tree_identity workflow.tests.test_rf_bipartition workflow.tests.test_manifest \
+  workflow.tests.test_rooting workflow.tests.test_taxonomy workflow.tests.test_aligners \
+  workflow.tests.test_external_tools workflow.tests.test_deduplicacao workflow.tests.test_execution_mode_dispatch
+  → Ran 179 tests, OK
+
+cd Frontend/phylotreeminer && pnpm run test -- --run
+  → 22 passed, sem regressão (após as correções de D18-1/D18-2)
+```
+
+**Correção de revisão (Validador de reposição, ver abaixo):** o número acima estava errado — "182 (era 180; +2)". A lista de 11 módulos deste lote **não inclui** `test_raxml_bootstrap`, que fazia parte da lista de 11 módulos de DEC-072 (essa é a origem do "180" herdado por engano); trocando-o por `test_execution_mode_dispatch` o total real, reexecutado, é **179**, não 182. Nenhum teste falha (0 FAILED/ERROR) — é erro de contagem no ledger, não regressão funcional.
+
+**Write-lock:** `Frontend/phylotreeminer/src/components/configures/pipelineConfigurator.jsx`, `BioComp_UFF/workflow/controller/treeBuilderController.py`, `BioComp_UFF/workflow.py`, `BioComp_UFF/workflow/utils/manifest.py`, `BioComp_UFF/workflow/tests/test_execution_mode_dispatch.py` (novo), `Backend/tests/oracle/test_oraculo_suporte_dendropy.py`, `docs/automation/07-log-de-execucao.md` (correção in-line de DEC-069, e desta vez a própria contagem de testes). **Reversível:** sim.
+
+#### Validador de reposição — 2026-09-03
+
+A sessão que despachou o Validador original foi interrompida antes dele retornar; nenhum agente com esse trabalho sobreviveu (`ListAgents` não mostra nada em processo em nenhuma sessão-par). Um `ptm-validador` novo reexecutou os 5 itens de evidência do Revisor contra o estado atual da working tree (nada commitado entre uma rodada e outra):
+
+| Item | Veredito | Evidência |
+|---|---|---|
+| `test_execution_mode_dispatch` isolado | **PASS** | `Ran 2 tests in 3.751s` · `OK` |
+| Suíte completa (11 módulos) | **FAIL na contagem, PASS nos testes** | `Ran 179 tests in 5.564s` · `OK` — ver correção acima |
+| Frontend vitest | **PASS** | `Test Files 7 passed (7)` · `Tests 22 passed (22)` |
+| Oráculo `test_oraculo_suporte_dendropy.py` | **PASS** | `pytest -v` → `15 passed in 2.18s`; `grep -n "mock\|Mock"` sem ocorrência — import real de `suporte_de_ramo` (linha 81), sem mock |
+| Grep D18 (`pipelineConfigurator.jsx`) e `MODOS_BASICOS` | **PASS** | Tour (~561) e tooltip (~646–655) sem "auto"/"automatic" referente a modo de árvore; demais ocorrências de "auto" no arquivo são de outro recurso (nome de arquivo, `support_fpmax`); `workflow.py:3,124` importa e usa `MODOS_BASICOS`, definida uma vez em `treeBuilderController.py:34` |
+
+4 de 5 itens batem exatamente; o 5º (contagem de testes) é o achado corrigido acima. **DEC-074 fecha** — nenhum código de produção tocado por este Validador, nenhum commit feito.
 
 ## Medições
 

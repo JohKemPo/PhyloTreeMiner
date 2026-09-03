@@ -8,8 +8,11 @@ confronta valor a valor.
 
 Se as duas leituras concordam em todos os ramos das árvores de referência, o
 número que a API devolve não é artefato do parser nem da forma de identificar o
-ramo. Nenhuma linha de código de produção é importada aqui: o oráculo reimplementa
-a leitura do zero, que é a única forma de ele valer alguma coisa.
+ramo. O **lado oráculo** não importa nenhuma linha de produção — reimplementa a
+leitura do zero, que é a única forma de ele valer alguma coisa; `suporte_de_ramo`
+entra só como o objeto sob teste, do outro lado da comparação (correção de
+revisão: a frase anterior dizia "nenhuma linha de código de produção é
+importada aqui", que o próprio `import` logo abaixo contradiz).
 """
 
 import pathlib

@@ -558,7 +558,7 @@ const PipelineConfigurator = () => {
     {
       title: "Tree Building Settings",
       description:
-        "In this section, you define how the main phylogenetic trees will be generated. Choose between automatic mode to test various combinations or manual mode for greater control.",
+        "In this section, you define how the main phylogenetic trees will be generated. Choose Basic for distance and parsimony only, Advanced to run every available method, or Manual for a single method with full control.",
       target: () => ref2.current,
     },
     {
@@ -660,7 +660,7 @@ const PipelineConfigurator = () => {
               <Form.Item
                 name={["trees", "ignore_mode"]}
                 label="Ignore Methods (Optional)"
-                tooltip="Select multiple methods to ignore in auto/advanced modes"
+                tooltip="Select multiple methods to ignore in basic/advanced modes"
               >
                 <Select
                   mode="multiple" 
