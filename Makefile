@@ -9,7 +9,7 @@ PNPM ?= bash scripts/pnpm.sh --dir $(FRONT)
 
 .PHONY: help setup test test-backend test-frontend lint build golden oracle security \
         reference-check reference-check-full reference-dataset taxonomy-audit \
-        baseline snapshots-update check
+        baseline main-result snapshots-update check
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -49,6 +49,16 @@ snapshots-update: ## regrava os golden snapshots (exige parecer no ledger)
 
 baseline: ## reproduz as tabelas de Variola pelo oráculo de auditoria
 	cd BioComp_UFF && $(PY) ../docs/science/scripts/audit_variola.py
+
+main-result: ## PORTÃO DE M3 — regenera as tabelas cruzadas UFBoot x suporte metodológico
+	@cd BioComp_UFF && $(PY) ../docs/science/scripts/resultado_principal.py; \
+	  codigo=$$?; \
+	  if [ $$codigo -eq 1 ]; then exit 1; fi; \
+	  exit 0
+# Código 2 (afirmações válidas, reprodução incompleta) não derruba o alvo, pela
+# mesma razão de `reference-check`: hoje VARV-52 está bloqueado por falta de
+# reexecução, e colapsar "ainda não terminamos" com "quebrou" ensina a ignorar o
+# portão. Código 1 — afirmação violada ou oráculo divergente — sempre falha.
 
 reference-check: ## PORTÃO CIENTÍFICO — invariante de Li et al. (2007), sobre as árvores versionadas
 	@cd BioComp_UFF && $(PY) ../docs/science/scripts/reference_check.py; \
