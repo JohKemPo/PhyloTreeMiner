@@ -2485,6 +2485,61 @@ make reference-check → inalterado, 3/3 invariantes, código 0
 
 **Write-lock:** `docs/science/scripts/resultado_principal.py` (novo), `Makefile` (alvo `main-result`). Não toca `Backend/`, `Frontend/` nem `BioComp_UFF/`. **Reversível:** sim — nada commitado.
 
+### DEC-070 · 2026-09-03 · M3.1 (metade `Backend/`) fecha — suporte de ramo chega ao usuário, sem achatar a heterogeneidade entre métodos
+
+**Gatilho:** pedido do usuário — atacar a metade `Backend/` de M3.1 em paralelo a M3.4/D23, via `ptm-bioinformatica-inferencia`, esta sessão gerenciando.
+
+#### O que fechou
+
+Rota nova `GET /api/tree/{project_name}/branch-support` (`Backend/src/suporte_de_ramo.py`, novo módulo, ~370 linhas — não engordou `app.py`, só 2 linhas: 1 import, 1 handler). Lê `.confidence` das árvores em `out/Trees/*.nexus` — nunca `.name` (nas árvores de distância o Biopython guarda `InnerNN` em `.name` quando não há suporte; um leitor que caísse para `.name` inventaria número onde não há nenhum). `clade_id` é a bipartição canônica já usada em `metadata.json`/FPMax/Neo4j (D5) — nenhuma segunda fórmula de identidade.
+
+**A decisão central: nenhum valor é normalizado.** UFBoot (0-100, IQ-TREE), FBP (0-100, RAxML-NG pós-M3.2), suporte local (0-1, FastTree) e posterior (MrBayes) viajam cada um com `metrica` e `metodo` no próprio ramo — payload declara `comparabilidade.entre_metodos: false`. O limiar "alto" (95) só existe para UFBoot, porque é o único que o projeto já adota (é o limiar do próprio gate de M3.4); FBP e suporte local recebem `limiar_alto: null` com nota de que a decisão é pendente do usuário — não emprestou o 95 do UFBoot para eles.
+
+#### Oráculo independente
+
+`Backend/tests/oracle/test_oraculo_suporte_dendropy.py` relê os mesmos Nexus com dendropy (parser, bipartição e normalização de D13 reimplementados do zero, nenhuma linha de produção importada). **656 ramos das árvores de referência (VARV-49, VARV-121) + 5 de uma fixture de FBP real: 0 divergências**, incluindo os casos de ausência (NJ/UPGMA/RAxML-pré-M3.2 — o oráculo também confirma que não há suporte a encontrar).
+
+#### Achado crítico, cross-validado por M3.4 de forma independente
+
+**Nenhum artefato em disco tem FBP.** As reexecuções validadas de VARV-49/121 são de 2026-09-01; `--all --bs-trees 1000` só entrou em código em 2026-09-02 (M3.2/DEC-064). M3.2 mudou o código, nenhum resultado em disco o materializou ainda. **O agente de M3.4, trabalhando em paralelo sem ver este relatório, achou exatamente a mesma lacuna** (RAxML sem suporte de ramo nos três reexecutados) — duas investigações independentes, mesmo achado, reforça que não é erro de leitura de nenhuma das duas.
+
+**Achado novo:** probabilidade posterior do MrBayes confirmada perdida no artefato final — 0 de 2 nós internos com `.confidence` em `tree_dataset_test_*_mrbayes.nexus`. Consistente com suspeita já registrada na ficha de chamada por método (M7.1); agora tem evidência de artefato real. Fora do escopo deste lote (é `BioComp_UFF/`), fica para M7.4.
+
+**Achado fora de escopo:** `Zika_ZIKV480_reexec_20260901` tem só 3 árvores em `out/Trees/` contra 8-10 dos demais — pode ser perda silenciosa de pipeline (padrão de D19). Não investigado; a execução está ativa (ver acompanhamento de ZIKV-480 nesta sessão). Registrado para triagem.
+
+#### Δ em métrica publicada: nenhum
+
+Aditivo — rota nova, 2 linhas tocadas em `app.py`. Nenhum cálculo existente (distância, clado, metadado, FPMax) foi alterado; golden snapshots não regravados.
+
+**Pendências de decisão do usuário, explícitas no parecer do agente:**
+1. Limiar de suporte alto para FBP e suporte local do FastTree — hoje `null` de propósito. Bloqueia M3.3 (UI) pintar "alto/baixo" para esses dois métodos.
+2. Propagação ao grafo Neo4j (a terceira perna de M3.1, "ao grafo") — não implementada; registrada como ingestão de `(valor, metrica, metodo)` numa propriedade de clado que já existe, coordenar com A12.
+3. Reexecução de VARV-49/121 com o código pós-M3.2 é o que materializaria FBP em disco — bloqueia a coluna de RAxML em M3.4, mesma pendência que M3.4 já registrou em DEC-069.
+
+**Evidência de execução:**
+```
+cd Backend && conda run -n Phylotreeminer python -m pytest tests --tb=short
+  → 338 passed, 1 xfailed (era 302; +36, sem regressão)
+
+pytest tests/unit/test_suporte_de_ramo.py tests/api/test_branch_support.py tests/oracle/test_oraculo_suporte_dendropy.py
+  → 36 passed (15 + 7 + 14)
+
+Varredura de FBP em disco: nenhuma árvore RAxML com valor de suporte (0 arquivos)
+Fixture de FBP: raxml-ng --all --bs-trees 200 ... → FBP real [72,83,95,100,100], gerado em scratchpad, não em BioComp_UFF/
+
+Custo medido: Variola_VARV121_reexec (10 árvores) 0,35s/0,15MB; Zika Large_480seq (9 árvores) 3,21s/0,72MB — sem teto compilado (regra 8)
+```
+
+**Write-lock:** `Backend/src/suporte_de_ramo.py` (novo), `Backend/src/app.py` (+45 linhas), `Backend/tests/{unit/test_suporte_de_ramo.py,api/test_branch_support.py,oracle/test_oraculo_suporte_dendropy.py,data/suporte/}` (novos). Não toca `BioComp_UFF/` nem `Frontend/`. **Reversível:** sim.
+
+### DEC-071 · 2026-09-03 · Sessão bate no limite de agentes em paralelo — revisor/validador de D23/M3.4 falharam, retomada às 12:20
+
+**O que aconteceu.** Duas rodadas de revisão despachadas em paralelo (Revisor + Validador sobre `e863f33` D23 e `aa1713b` M3.4) falharam com `rate_limit`/HTTP 429: *"You've hit your session limit · resets 12:20pm (America/Sao_Paulo)"*. Nenhuma delas chegou a veredito — o Validador só confirmou, antes de cair, que `make main-result` absorve o código 2 de propósito (`Makefile:58-61`, comentado) e que o código de saída literal do script precisa ser conferido cru, não pelo `make`.
+
+**Consequência prática.** Até 12:20, novos agentes (`Agent`, incluindo forks) tendem a falhar pelo mesmo motivo — é limite de sessão, não condição transitória por chamada. Esta sessão passa a revisar/validar diretamente (sem subagente) o que já foi implementado, e retoma o despacho paralelo de agentes depois do horário de reset.
+
+**Não é achado de código** — não entra na fila de triagem de defeitos, é um limite operacional desta sessão.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
