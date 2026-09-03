@@ -318,7 +318,9 @@ const PipelineConfigurator = () => {
             input_format: values.trees?.output_format || "nexus",
           },
           trees: {
-            mode: values.trees?.mode === "auto" || values.trees?.mode === "advanced"
+            // D18: "basic" é o valor novo (Radio abaixo); "auto" só chega
+            // aqui se um formulário/estado antigo ainda carregar esse valor.
+            mode: ["basic", "auto", "advanced"].includes(values.trees?.mode)
               ? values.trees?.mode
               : values.trees?.construct_method,
             ignore_mode: ignoreMode || [], 
@@ -438,7 +440,7 @@ const PipelineConfigurator = () => {
       output_log: outputPath,
 
       tree_config: {
-        mode: trees.mode === "auto" ? "auto" : trees.mode,
+        mode: trees.mode,
         ignore_mode: ignoreMode,
         construct_tree_method:
           trees.mode === "manual" ? trees.algorithm_reconstruct : "nj",
@@ -635,13 +637,18 @@ const PipelineConfigurator = () => {
                 initialValue="advanced"
                 tooltip={
                   <p>
+                    <b>Basic</b>: Distance (NJ/UPGMA) and parsimony only — no IQ-TREE, FastTree, RAxML-NG or MrBayes. <br/><br/>
                     <b>Advanced</b>: Combination of all available methods for constructing trees. <br/><br/>
-                    <b>Manual</b>: Manually select a single method. 
+                    <b>Manual</b>: Manually select a single method.
                   </p>
                 }
               >
+                {/* D18 — "auto" mentia sobre o que o modo faz (só distância e
+                    parcimônia, nunca os métodos avançados). "basic" é o valor
+                    novo, honesto; o backend/pipeline aceitam "auto" como alias
+                    legado só para projetos já em disco, não para escolha nova. */}
                 <Radio.Group>
-                  <Radio value="auto">Only distance and parsimony methods   </Radio>
+                  <Radio value="basic">Basic (only distance and parsimony methods)</Radio>
                   <Radio value="manual">Manual</Radio>
                   <Radio value="advanced">Advanced (all combinations)</Radio>
                 </Radio.Group>
