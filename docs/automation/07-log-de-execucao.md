@@ -2401,6 +2401,90 @@ Reprodução do SIGSEGV de B4 (fora do event loop, script isolado, não faz part
 
 **Write-lock:** nenhum (sessão de revisão, não de código). **Reversível:** não se aplica.
 
+### DEC-068 · 2026-09-03 · D23 caracterizado a fundo — dois fenômenos, não um; decisão de curadoria formalizada, não implementada
+
+**Gatilho:** pedido do usuário — atacar D23 em paralelo a M3.1/M3.4, via `ptm-bioinformatica-inferencia`, esta sessão gerenciando.
+
+#### O que o lote fechou
+
+O item 2 de D23 (renomear `remove_pipe`, corrigir a mensagem, registrar no manifesto quem foi descartado) **já estava implementado desde DEC-050** — o agente não refez, só achou e corrigiu um defeito de legibilidade dentro do que já existia: a mensagem para **acesso repetido** (mesmo `VERSION` baixado duas vezes) dizia `"DQ437594.1 (idêntico a DQ437594.1)"`, uma contradição que conflava esse caso com o de GenBank×RefSeq. Agora distingue os dois. Diff de produção: **+26 −1**, só string de log, docstring e comentário — nenhuma chave de deduplicação, nenhum caminho de cálculo, nenhum arquivo gravado muda.
+
+#### O que o lote achou, além do pedido
+
+1. **D23 descrevia um fenômeno; são dois.** Além do par GenBank/RefSeq, há o **mesmo acesso baixado duas vezes** (`DQ437594.1` duas vezes em VARV-49, `NC_008291.1` duas vezes em VARV-121) — explica por que VARV-49 tem 52 registros para 51 rótulos únicos.
+2. **`HQ849551` é o terceiro gêmeo, não um caso à parte**: `NC_015960.1` (RefSeq) == `HQ849551.1` (GenBank), Yokapox virus, confirmado por md5.
+3. **O descasamento de identidade está vivo nos artefatos reexecutados de 2026-09-01**: Taterapox virus é `DQ437594` em VARV-49 e `NC_008291` em VARV-121 — o mesmo táxon sob dois rótulos em dois experimentos que se pretendem comparáveis.
+4. **Achado novo, fora de D23**: `raw_data_sequences.gb` de VARV-121 tem **4 registros `LOCUS` para 121 folhas** (VARV-49 tem os 49 completos) — se não for já sabido, qualquer leitura filogeográfica de VARV-121 hoje está vazia. Registrado como achado, não corrigido.
+
+#### Oráculo independente
+
+Script próprio (parser FASTA + agrupamento por md5, sem usar `workflow/`), confrontado contra `tools_invoked.deduplicacao.descartados` dos manifestos: **zero divergências** nos grupos de VARV-49 e VARV-121.
+
+#### Pendência de decisão do usuário — qual registro sobrevive quando GenBank e RefSeq coexistem
+
+4 opções levantadas com impacto medido (detalhe completo no relatório do agente, arquivado neste DEC): **(A)** preferir RefSeq, relabelando na posição de hoje — 2/1/0 táxons mudam de acesso (VARV-49/121/6), **provavelmente neutro em topologia** (sequência idêntica, só o cabeçalho muda); **(B)** preferir RefSeq mantendo a posição do registro RefSeq — mesmos táxons, mas a ordem de entrada no MAFFT muda, o que pode afetar alinhamento/busca de ML, **não medido**; **(C)** manter arbitrário (estado atual) — defeito permanece; **(D)** recusar o conjunto e exigir declaração por experimento. Achado que eleva a aposta: `raw_data_sequences.gb` é baixado a partir das **folhas da árvore**, ou seja, pós-deduplicação — o acesso sobrevivente decide de qual registro vêm país/ano/hospedeiro em `metadata.json`. Não é cosmética de rótulo, é a fonte dos metadados filogeográficos. Verificação pendente de rede (`efetch` em `NC_003391.1`/`HQ849551.1` — não existem nos `.gb` locais) antes de decidir entre A e a perda potencial de `geo_loc_name` do Camelpox.
+
+#### Δ em métrica publicada: nenhum
+
+Confirmado pelo oráculo — chave de deduplicação, política de sobrevivência e conteúdo gravado são idênticos byte a byte ao antes.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_deduplicacao          → 10 passed
+cd BioComp_UFF && python -m unittest <14 módulos, incl. o novo>                → 205 passed
+git status --short (BioComp_UFF)                                              → M workflow/utils/dataValidation.py,
+                                                                                  ?? workflow/tests/test_deduplicacao.py
+```
+
+**Write-lock:** `BioComp_UFF/workflow/utils/dataValidation.py`, `BioComp_UFF/workflow/tests/test_deduplicacao.py` (novo). Não toca `Backend/` nem `Frontend/`. **Reversível:** sim — nada commitado.
+
+### DEC-069 · 2026-09-03 · M3.4 implementado — `make main-result` existe; as duas afirmações do artigo se sustentam em 2 de 3 conjuntos, com números atualizados
+
+**Gatilho:** pedido do usuário — atacar M3.4 em paralelo a M3.1/D23, via `ptm-dominio-cientifico`, esta sessão gerenciando.
+
+#### O que o lote entregou
+
+`docs/science/scripts/resultado_principal.py` (novo, reusa `StabilityAnalyzer`/`TreeSet` já corrigidos por D3/D5/D13, e a receita de oráculo de `oraculo_rf_dendropy.py`) + alvo `main-result` no `Makefile`, espelhando `reference-check` (código 1 = falso, código 2 = incompleto, código 0 = completo e sustentado).
+
+**Resultado do gate, agora:**
+
+| Afirmação | VARV-49 (M=5) | VARV-121 (M=5) | VARV-6 (auxiliar) | Veredito |
+|---|---|---|---|---|
+| (i) UFBoot=100 não garante robustez | 14/30 sobrevivem (46,7%) | 33/77 (42,9%) | 1/1 | **sustenta** |
+| (ii) UFBoot≥95 idiossincrático (um só pipeline) | 0/36 | 0/90 | 0/1 | **sustenta** — total 0/127 |
+
+Oráculo dendropy: **1682 testes de pertinência de bipartição, 0 divergências**. Oráculo RF do projeto: **181 pares, 0 divergências**. `make reference-check` intocado: 3/3 invariantes, 10/10 pipelines, código 0.
+
+**Código de saída: 2 (não 0)** — as afirmações valem, a reprodução não está completa. Duas causas, ambas exigindo reexecução pesada, nenhuma corrigível por código:
+1. **VARV-52 bloqueado**: não existe reexecução pós-M1/M2 no disco (só `teste52/`, pré-D1, sem `mafft_iterative`, sem manifesto). O script **recusa** produzir número para VARV-52 em vez de usar o artefato velho — confirmado: em modo `--caracterizar`, os artefatos velhos reproduzem exatamente os números antigos de §4.4 (30/14/38, Δ=0), o que confirma a proveniência do número antigo sem validá-lo para hoje.
+2. **RAxML sem suporte de ramo nos três reexecutados de 2026-09-01**: `--bs-trees 1000` só entrou em M3.2/DEC-064 (2026-09-02), depois das reexecuções. A sub-afirmação do gate ("toda árvore ML carrega suporte de ramo") é falsa hoje para `mafft_raxml`/`mafft_iterative_raxml` — código correto, artefato anterior à correção.
+
+#### Δ em métrica publicada: sim, mas por versão de ferramenta, não por bug
+
+Números mudam em relação a `03-metricas §4.1` (universo comparável de 4 métodos): VARV-49 UFBoot=100 27→**30**, sobrevivem 13→**14**, UFBoot≥95 34→**36**, Pearson 0,44→**0,432**; VARV-121 UFBoot=100 86→**77**, sobrevivem 35→**34**, UFBoot≥95 94→**90**, Pearson 0,37→**0,413**. Causa isolada e confirmada: alinhamento **idêntico byte a byte** (mesmo md5, velho e novo), modelo idêntico (`GTR+G -bb 1000`) — o que mudou foi o **IQ-TREE**: 2.2.2.6 com threads em auto-detect (32 núcleos) → 3.1.3 com `-nt 1`, semente `12345` explícita. Mesmo mecanismo de [D17](../science/02-defeitos-que-alteram-resultado.md#d17)/[D21](../science/02-defeitos-que-alteram-resultado.md#d21): versão/determinismo do inferidor é parte do resultado. Os números novos são os defensáveis (determinísticos, D1/D3/D5 já corrigidos); os de §4.4 vieram de execução não determinística — caracterizado, não é regressão do script.
+
+**Achado adicional sobre o Pearson:** a faixa herdada 0,27–0,44 (`03-metricas §4.1`) só se sustenta no universo de 4 métodos. Com 5 métodos (braço `mafft` completo) sobe a 0,504 (VARV-121); com os 10 pipelines, a 0,596. `03-metricas §4.1` precisa declarar a que universo a faixa se refere.
+
+**Defeito achado e corrigido dentro do próprio lote:** a primeira versão do script devolvia **"AFIRMAÇÃO VIOLADA" (código 1)** quando nada tinha sido medido (ex.: rodar só com VARV-52 bloqueado) — falsidade silenciosa da regra 5 do CLAUDE.md (`0`/`-1` onde a métrica é indefinida é defeito, não convenção; aqui era "violada" em vez de "não medida"). Corrigido antes de qualquer saída chegar ao usuário: "não medida" e "violada" são estados agora distintos.
+
+**Decisão do usuário, ainda pendente:** o que fazer com o Δ acima em `03-metricas §4.1`/§4.4 — **(a)** atualizar para os números novos, **(b)** manter os antigos com nota de proveniência, **(c)** postergar até VARV-52 reexecutar e atualizar tudo de uma vez. Mesmo padrão de D1/D6 — decisão do usuário, não do agente.
+
+**Evidência de execução:**
+```
+make main-result
+  → VARV-49: n=49, 10 árvores, UFBoot 100=30, sobrevivem 14/30, Pearson=0.425 (mafft-5)
+  → VARV-121: n=121, UFBoot 100=77, sobrevivem 33/77, Pearson=0.504 (mafft-5)
+  → (i) sustenta em VARV-49 e VARV-121; (ii) 0 de 127 idiossincráticos, sustenta
+  → VARV-52: bloqueado (requer reexecução) — reprodução INCOMPLETA
+  → código de saída: 2
+
+modo --caracterizar (sobre artefatos pré-correção) → reproduz §4.4 exatamente, Δ=0 nas 16 contagens
+oráculo dendropy: 1682 testes, 0 divergências · oráculo RF do projeto: 181 pares, 0 divergências
+make reference-check → inalterado, 3/3 invariantes, código 0
+```
+
+**Write-lock:** `docs/science/scripts/resultado_principal.py` (novo), `Makefile` (alvo `main-result`). Não toca `Backend/`, `Frontend/` nem `BioComp_UFF/`. **Reversível:** sim — nada commitado.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
