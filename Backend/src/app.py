@@ -47,6 +47,10 @@ if PATH_BASE_WORKFLOW not in sys.path:
 from workflow.alignment.aligners import (ALIGNERS, memoria_disponivel_bytes,
                                          viability as aligner_viability)
 
+# M3.1: mesma razão — `suporte_de_ramo` reutiliza `workflow.stability`, então
+# só pode ser importado depois que `PATH_BASE_WORKFLOW` entra no `sys.path`.
+from src.suporte_de_ramo import ler_suporte_do_projeto
+
 NCBI_WORK_DIR = os.path.join(BASE_DIR, "temp_ncbi")
 os.makedirs(NCBI_WORK_DIR, exist_ok=True)
 
@@ -878,6 +882,48 @@ async def get_tree_insights(project_name: str):
     except Exception:
         logger.exception("Erro ao gerar insights do projeto '%s'", project_name)
         raise HTTPException(status_code=500, detail="Erro ao gerar insights da árvore.")
+
+@app.get("/api/tree/{project_name}/branch-support")
+async def get_branch_support(
+    project_name: str,
+    tree: Optional[str] = Query(
+        None,
+        description="Nome de um único arquivo de árvore em out/Trees. Omitido, lê todos.",
+    ),
+):
+    """Suporte de ramo por clado, **com o método e a métrica de origem** (M3.1).
+
+    É a primeira rota que leva ao usuário o suporte que o pipeline já calcula e
+    grava no Nexus. Cada ramo sai com `valor`, `metrica` e `metodo`, e nada é
+    normalizado: UFBoot (IQ-TREE) e FBP (RAxML-NG) dividem a escala 0-100 sem
+    serem a mesma métrica, e o suporte local do FastTree (0-1) é outra coisa
+    ainda (DEC-064). Um campo genérico `support` seria pior que não expor nada.
+
+    Método sem métrica declarada (NJ/UPGMA) devolve `metrica: null` com o
+    motivo e lista de ramos vazia — nunca `0` (regra 5).
+    """
+    dir_trees = resolve_within(PROJECTS_ROOT, project_name, "out", "Trees")
+    if not os.path.isdir(dir_trees):
+        raise HTTPException(status_code=404, detail="Diretório de árvores não encontrado")
+
+    if tree is not None:
+        caminho = resolve_within(dir_trees, tree)
+        if not os.path.isfile(caminho):
+            raise HTTPException(status_code=404, detail="Árvore não encontrada")
+        tree = os.path.basename(caminho)
+
+    try:
+        # Leitura e travessia de árvore são CPU-bound (M4.10): fora do loop.
+        resultado = await asyncio.to_thread(ler_suporte_do_projeto, dir_trees, tree)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Erro ao ler suporte de ramo do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Erro ao ler suporte de ramo.")
+
+    resultado["projeto"] = project_name
+    return resultado
+
 
 @app.get("/api/tree/metadata/{project_name}", status_code=202)
 async def get_tree_metadata(project_name: str):
