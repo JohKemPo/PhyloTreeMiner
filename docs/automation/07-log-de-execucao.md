@@ -2803,6 +2803,43 @@ make test-backend PY=.../envs/Phylotreeminer/bin/python → 338 passed, 1 xfaile
 
 **Write-lock:** `BioComp_UFF/workflow/utils/neo4jProcessing.py`, `BioComp_UFF/workflow/tests/test_neo4j_processing.py` (novo), `BioComp_UFF/workflow/utils/rotular_projeto_cql_legado.py` (novo), `docs/automation/13-guia-reexecucao-m2.md`, `docs/automation/07-log-de-execucao.md`. **Reversível:** sim — código não commitado ainda; `.cql` têm backup automático (fora do git, mas em disco).
 
+### DEC-078 · 2026-09-03 · VARV-52 disparado em paralelo ao ZIKV-480 — sem contenção de recursos; `PROVENIENCIA.md` movido temporariamente para não ser lido como input
+
+**Gatilho:** pergunta do usuário — disparar a reexecução de VARV-52 (config pronta desde DEC-077 §3.2-bis) **agora**, com o ZIKV-480 ainda em execução, causa algum problema de contenção? Se sim, matar o processo de ZIKV-480 (não entra em nenhuma análise corrente e não bloqueia M3).
+
+**Checagem feita (sem alterar código):**
+- `nproc` → 48 threads; `free -h` → 35 GiB disponíveis de 47 GiB; `uptime` → load average 6,13 no momento da checagem.
+- ZIKV-480 (PID 84363/84519, iniciado 16:38) usa só **4 threads** (`raxml-ng --threads 4 --workers 1`, `--all --bs-trees 1000`, em andamento há >3h).
+- Config de VARV-52 (`13-guia-reexecucao-m2.md §3.2-bis`) pede no máximo 16 threads (alinhamento/IQ-TREE) e 8 (RAxML-NG) — cabe folgado ao lado do ZIKV-480.
+- Diretórios de entrada e saída **totalmente distintos**: ZIKV-480 lê `data/Zika479ONE` e escreve em `projects/Zika_ZIKV480_reexec_20260901/`; VARV-52 lê `data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs-clean` e escreve em `projects/Variola_VARV52_reexec_20260903/`. Nenhum arquivo compartilhado — regra 6 do `CLAUDE.md` não é violada por rodar os dois ao mesmo tempo.
+- Dado de VARV-52 já adquirido e limpo (DEC-038) — sem nova chamada ao NCBI, sem contenção de e-mail/rate limit do Entrez.
+
+**Conclusão:** sem problema de contenção. **Não matei o ZIKV-480** — não havia motivo.
+
+**O usuário disparou o VARV-52 por conta própria** (fora desta análise), comando exatamente o de `13-guia-reexecucao-m2.md §3.2-bis`: `cd BioComp_UFF && python workflow.py -p /tmp/varv52_reexec.json` — PID 450831, iniciado 19:49:41, MAFFT rodando com 16 threads (PID 451160, `disttbfast`) no momento deste registro. **Os dois processos seguem rodando em paralelo** ao fechar esta sessão:
+
+| Processo | PID (principal) | Início | Elapsed (neste registro, 19:55) | Etapa |
+|---|---|---|---|---|
+| ZIKV-480 (`Zika_ZIKV480_reexec_20260901`) | 84363 | 16:38:03 | 03:17 | `raxml-ng --all --bs-trees 1000` |
+| VARV-52 (`Variola_VARV52_reexec_20260903`) | 450831 | 19:49:41 | 00:05 | MAFFT (alinhamento) |
+
+**Achado fora de escopo, não investigado:** `docs/automation/13-guia-reexecucao-m2.md §3.4` já registrava que `Zika_ZIKV480_reexec_20260901` tem só 3 árvores em `out/Trees/` contra 8-10 dos demais experimentos — possível perda silenciosa de pipeline, padrão de [D19](../science/02-defeitos-que-alteram-resultado.md#d19). Ainda não investigado; a execução segue ativa. **O usuário confirmou nesta sessão que este projeto não entra em nenhuma análise corrente e não bloqueia M3** — registrar essa confirmação para a próxima janela não reabrir a dúvida sobre se pode encerrá-lo.
+
+**`PROVENIENCIA.md` fora do lugar, de propósito, temporariamente:** o usuário moveu manualmente `BioComp_UFF/data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs-clean/PROVENIENCIA.md` → `BioComp_UFF/docs/case_study_variola/PROVENIENCIA.md` porque o workflow estava tratando esse `.md` como mais um arquivo de sequência de entrada dentro do diretório do dataset (a etapa de leitura de input não filtra por extensão/conteúdo, só varre o diretório). `git status` do submódulo confirma: `D` no caminho original, `??` no novo. **O usuário disse explicitamente que vai desfazer isso depois** (devolver o arquivo ao diretório do dataset) — não fazer essa reversão automaticamente, é ação dele, e só depois que o VARV-52 (que lê desse diretório) tiver passado da etapa de leitura de input.
+
+**Achado a triar:** presença de `PROVENIENCIA.md` (ou qualquer `.md` de proveniência) dentro do diretório de um dataset confunde a etapa de leitura de input do workflow — mesma classe de risco de D19 (perda/contaminação silenciosa de pipeline por arquivo inesperado no diretório de dados). Não caracterizado a fundo nesta sessão (não houve tempo nem foi o pedido); registrado na fila de triagem abaixo.
+
+**Nenhum código alterado nesta sessão. Nenhum write-lock aberto. Nada para commitar.**
+
+**Pendências para a próxima janela:**
+1. Acompanhar VARV-52 até completar (10 árvores esperadas: 2 alinhadores × {nj, upgma, fasttree, iqtree, raxml}); depois rodar oráculo dendropy e `audit_variola.py --secao 3 --secao 5` (comandos já em `13-guia-reexecucao-m2.md §3.2-bis`).
+2. Depois de validado, editar `docs/science/scripts/resultado_principal.py` (`Conjunto("VARV-52", None, ...)` → caminho do projeto novo) e rodar `make main-result` de novo.
+3. Usuário vai devolver `PROVENIENCIA.md` ao diretório original do dataset — não fazer isso por conta própria antes de perguntar se já pode.
+4. Investigar (fila de triagem) por que `Zika_ZIKV480_reexec_20260901` só produz 3 árvores em vez de 8-10.
+5. `.cql` corrigidos (DEC-077) ainda esperam o usuário "re-alimentar o banco" Neo4j — não é ação de agente.
+
+**Write-lock:** nenhum. **Reversível:** não se aplica — nenhuma mudança de código ou dado feita por mim nesta sessão.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -2960,3 +2997,4 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-08-25 | A máquina de validação tem **48 núcleos lógicos** contra 12 da de desenvolvimento. É o gatilho direto de [D17](../science/02-defeitos-que-alteram-resultado.md#d17): com a mesma semente, o esquema de paralelização muda a topologia | máquina | DEC-044 | **Aberto** — `--threads N --workers 1` obrigatório, e o próprio `N` vai ao manifesto |
 | 2026-09-01 | Uma tentativa real de reexecutar VARV-49 (`projects/Variola_Yu_li_2007_M2/`, 3 tentativas no mesmo diretório) morreu com `ValueError: No records found in handle`: o cache de alinhamento (`STEP: Reusing Aligning...`) reaproveitou um `dataset_final_mafft_iterative.aln` vazio, deixado por uma tentativa anterior interrompida no meio da escrita. O braço `mafft` tinha completado (5 árvores); `mafft_iterative` nunca produziu nada. Generaliza o aviso já existente em `docs/skills/validar-workflow/SKILL.md` ("o workflow reaproveita árvore existente") para o alinhamento também, agora com evidência de log | `projects/Variola_Yu_li_2007_M2/out/outputs/log_setup_2026-08-27_bb3fcd1b784d.log:14-20` | pesquisa para o guia de reexecução | Documentado como armadilha operacional em [`13-guia-reexecucao-m2.md §2.1`](13-guia-reexecucao-m2.md#21-regra-operacional-que-já-derrubou-uma-tentativa-diretório-novo-sempre) — `Variola_Yu_li_2007_M2/` fica envenenado e não deve ser reaproveitado. Sem write-lock aberto; considerar um guard (não reusar `.aln` de 0 bytes) como item de M7 |
 | 2026-09-01 | `Backend/tests/data/reference/expected.json` (`target_M`) ainda declara `"aligners": ["mafft"]` e justifica a exclusão de Clustal Omega/MUSCLE pela medição de OOM que [DEC-050](#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir) **retratou** (Clustal é limite de tempo; MUSCLE 5.3 recusa por interface, não OOM). Com o alvo desatualizado, uma reexecução de VARV-49 com os dois braços do MAFFT nunca faz `reference_check.py --trees` devolver M completo — o braço `mafft_iterative` não entra em `alvo_nomes` | `Backend/tests/data/reference/expected.json` (`target_M`) | pesquisa para o guia de reexecução | **Bloqueia o fechamento de M2** — é zona sagrada (muda o invariante de gate); atualizar via `make reference-dataset` **depois** de corrigir `target_M` e registrar parecer próprio, não junto de outro lote |
+| 2026-09-03 | Um arquivo `PROVENIENCIA.md` (ou qualquer `.md` de proveniência) dentro do diretório de um dataset é lido pela etapa de input do workflow como mais um arquivo de sequência — a leitura varre o diretório sem filtrar por extensão/conteúdo. Contornado nesta sessão movendo o arquivo para fora do diretório do dataset (usuário, manual); não caracterizado a fundo | leitura de input do `BioComp_UFF/workflow` (etapa não localizada nesta sessão) | DEC-078 | **Triagem pendente** — mesma classe de risco de [D19](../science/02-defeitos-que-alteram-resultado.md#d19) (arquivo inesperado no diretório de dados contamina/quebra o pipeline silenciosamente); considerar filtro por extensão/whitelist como item de M7 |
