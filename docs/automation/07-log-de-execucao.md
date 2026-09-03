@@ -2697,6 +2697,25 @@ A sessão que despachou o Validador original foi interrompida antes dele retorna
 
 4 de 5 itens batem exatamente; o 5º (contagem de testes) é o achado corrigido acima. **DEC-074 fecha** — nenhum código de produção tocado por este Validador, nenhum commit feito.
 
+### DEC-075 · 2026-09-03 · `*_NoPipe` sai do rastreio do submódulo — dado grande de experimento não pertence ao git
+
+**Gatilho:** pedido explícito do usuário ao fechar o lote de DEC-074: `data/Zika479ONE/dataset_final_NoPipe` (mudança de permissão, 4,6 MB) e `data/replication-RetMax200-ITRs/dataset_final_NoPipe` (deleção de 153 593 linhas, já ausente do disco) apareciam como sujeira no `git status` do submódulo — pré-existente, sem write-lock, fora do escopo de DEC-074. O usuário pediu para "limpar do histórico de commit" sem apagar o arquivo, porque **VARV/ZIKAV-480 está em execução** e escreve nesse caminho.
+
+**Decisão tomada, não a mais agressiva:** duas leituras possíveis de "limpar do histórico" tinham risco muito diferente — perguntado ao usuário via `AskUserQuestion`, escolhida a opção **não destrutiva**: `git rm --cached` (sai do índice, o arquivo físico não é tocado) em vez de reescrever o histórico com `git filter-repo` (mudaria o SHA de todo commit downstream, incluindo os 5 mais recentes, e quebraria o ponteiro que o repositório principal grava para o submódulo em toda a sua própria história — exigiria force-push e recoordenação com outras máquinas). `bda8883` e `f75e1f9`, os commits que introduziram esses arquivos, **não foram tocados**.
+
+`*_NoPipe` entra no `.gitignore` do submódulo para não voltar a ser versionado. Um terceiro arquivo já rastreado com o mesmo padrão (`data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax100/dataset_final_NoPipe`, 11,3 MB) **segue tracked** — estava limpo no momento deste lote, sem write-lock aberto, fora do pedido explícito.
+
+**Evidência:**
+```
+$ ls -la BioComp_UFF/data/Zika479ONE/dataset_final_NoPipe
+-rw-rw-r-- 1 geomesh geomesh 4781135 set  3 16:38 ... dataset_final_NoPipe    # sobrevive, íntegro
+
+$ cd BioComp_UFF && git status --short
+                                                                              # limpo
+```
+
+**Commit:** `6282d46` (submódulo). **Reversível:** sim — `git rm --cached` não apaga blob nenhum do histórico; `git checkout <commit-anterior> -- .gitignore` desfaz o ignore se algum dia for preciso re-versionar.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
