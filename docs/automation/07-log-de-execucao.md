@@ -2932,6 +2932,67 @@ make main-result PY="$(which python)"
 
 **Write-lock:** `docs/science/scripts/resultado_principal.py`. **Não tocado:** `docs/science/scripts/audit_variola.py` (ver item 2). **Reversível:** sim — nada commitado.
 
+### DEC-081 · 2026-09-04 · M3.3 implementado — bootstrap e suporte metodológico lado a lado na UI; achado: D6 já fechou para VARV-52 (incidental), não para VARV-121/VARV-6
+
+**Gatilho:** pedido do usuário — "ataque M3.3 em paralelo" (junto com a pergunta sobre reexecutar VARV-49/121/6 e o que falta para D6/D23).
+
+#### 1. M3.3 — o que faltava: `Backend/` não tinha NENHUMA rota para suporte metodológico
+
+`GET /branch-support` (M3.1/DEC-070) só cobre bootstrap. O outro lado do argumento do artigo — `sup(b) = |pipelines que recuperam b| / M` — não tinha rota nenhuma; só existia dentro de scripts de CLI (`resultado_principal.py`, `audit_variola.py`), hardcoded para *Variola*. Fechar M3.3 exigiu **backend novo**, não só frontend.
+
+**`Backend/src/suporte_metodologico.py` (novo).** `ler_suporte_metodologico_do_projeto(dir_trees, alinhador=None)` — camada de serialização sobre `StabilityAnalyzer.clade_records()`, a mesma classe (não uma segunda implementação) que o gate de M3.4 usa e que o oráculo dendropy já validou (1682 testes/0 divergências, DEC-069). Sem `alinhador`, cobre todos os pipelines em disco ("universo todos"); com `alinhador`, restringe ao braço de um alinhador só (universo "mafft-5"-like). `clade_id` é o mesmo `canonical_item_id` de `/branch-support` — confirmado por teste que o mesmo clado sai com o mesmo id nas duas rotas.
+
+**Rota nova:** `GET /api/tree/{project_name}/methodological-support?alinhador=<opcional>`, em `app.py` (+45 linhas, mesmo padrão de `/branch-support`: `asyncio.to_thread` por ser CPU-bound/M4.10, 404 para alinhador ou projeto inexistente, 500 genérico para o resto).
+
+**Achado corrigido no próprio lote:** a primeira versão devolvia `detail=str(erro)` no 404 de alinhador inexistente — `test_vazamento_de_erro.py` (M4.2/M4.3, varredura AST) reprovou corretamente. Trocado por mensagem estática + `logger.warning` server-side antes de qualquer commit.
+
+**Testes:** `tests/unit/test_suporte_metodologico.py` (5) — inclui o teste de equivalência com chamada direta de `StabilityAnalyzer` (a serialização não pode divergir da classe já oráculo-validada) e o teste de `clade_id` cruzado com `/branch-support`. `tests/api/test_methodological_support.py` (5) — contrato HTTP. **Nenhum oráculo dendropy novo**: não há fórmula nova, só reuso direto de uma função já oráculo-validada — diferente de `suporte_de_ramo.py` (M3.1), que reimplementa a travessia com Bio.Phylo puro e por isso tinha seu próprio oráculo.
+
+**Frontend:** `Frontend/phylotreeminer/src/components/analysis/MethodologicalSupport.jsx` (novo) — busca `/branch-support` e, para cada alinhador com bootstrap presente, `/methodological-support?alinhador=X`; junta por `clade_id`; tabela com bootstrap bruto (nunca normalizado) ao lado da fração M/M, e uma tag "bootstrap alto, não unânime entre métodos" quando `bootstrap >= limiar_alto` e `suporte_metodologico < 1.0` — é exatamente a afirmação (i) do artigo, agora por ramo individual. Montado em `projectExplorer.jsx`, dentro do modal que já tinha `TreePatternAnalysis`/`PhylogeneticInsights` (mesmo gatilho, botão "Deep Analysis" com a pasta `out/Trees` selecionada).
+
+**Verificado no navegador de verdade** (não só teste), projeto `Variola_VARV52_reexec_20260903`: 288 ramos com bootstrap, **40 com bootstrap alto e sem unanimidade metodológica** (ex.: `mafft_iqtree`, UFBoot=100, suporte metodológico 3/5 = 60%). Nenhum erro novo no console (dois warnings pré-existentes e não relacionados: SVG `xml:space` do logo, e um `setState`-em-render do `<List>` do próprio `ProjectExplorer`).
+
+**Correção de revisão (mesmo dia):** o usuário reportou que a tabela nova não seguia o tamanho das outras tabelas do modal (ficou maior — sem `width` nas colunas, o conteúdo da coluna de bootstrap e a tag de discordância empurravam a tabela para além da largura do modal, forçando rolagem horizontal onde as outras tabelas do mesmo modal não têm). Corrigido: colunas com `width` explícito (150/130/190/90 ≈ 560px), `tableLayout="fixed"`, tag "bootstrap alto, não unânime entre métodos" encurtada para "discordante" com `Tooltip` carregando o texto completo, `max-width: 700px` na tabela. Teste do frontend ajustado ao novo texto do tag; suíte completa roda verde de novo (25/25). Verificação no navegador não repetida após esta correção — timeout de ferramenta (`Page.captureScreenshot`) no segundo tab aberto, ambiental, não investigado; a correção em si é conferida por leitura do componente e pela suíte de testes.
+
+**Evidência de execução:**
+```
+cd Backend && python -m pytest tests -q          → 348 passed, 1 xfailed (era 338; +10)
+cd Frontend/phylotreeminer && pnpm test -- --run  → 9 arquivos, 25 testes (era 8/23; +2 testes)
+make lint  → débito reduzido (61/66 erros, 24/27 avisos), catraca não reprovou
+make build → build de produção OK (25s, mesmo aviso pré-existente de chunk >500kB)
+Verificação manual: Projects → Variola_VARV52_reexec_20260903 → out/Trees → Deep Analysis
+  → painel novo renderiza com dado real, sem erro de console atribuível a ele
+```
+
+#### 2. Achado ao montar o teste: D6 já fechou para VARV-52 (incidental), continua aberto para VARV-121/VARV-6
+
+Ao investigar o que faltava para D6, conferi se o contaminante de VARV-52 (`NC_008030`, Nile crocodilepox) sobrevive na reexecução nova:
+
+```bash
+grep -c NC_008030 BioComp_UFF/data/workflow_dataAcquisition_li_et_al_2007_replication-RetMax200-ITRs-clean/dataset_final.fasta   # 0
+grep -c NC_008030 BioComp_UFF/projects/Variola_VARV52_reexec_20260903/out/outputs/metadata.json                                  # 0
+```
+
+**VARV-52 está limpo nesta reexecução** — não porque alguém rodou M2.6, mas porque `13-guia-reexecucao-m2.md §3.2-bis` já apontava para o dataset `-clean` gerado em [DEC-038](#dec-038--2026-08-25--conjuntos-limpos-criados-ao-lado-dos-contaminados) (que remove `NC_008030`), sem que isso fosse o objetivo declarado do lote. É o único contaminante que a tabela de D6 atribui a VARV-52, então **D6 fecha para este conjunto especificamente**, incidentalmente.
+
+**VARV-121 e VARV-6 continuam contaminados** — confirmado, não corrigido:
+```bash
+config_backup.json de Variola_VARV121_reexec_20260901 → input_path=".../RetMax200" (SEM "-clean")
+grep -c NC_008030|MG450915|MG450916|NC_015960 .../Variola_VARV121_reexec_20260901/out/outputs/metadata.json   # 595/527/527/563 (presentes)
+config_backup.json de Variola_VARV6_reexec_20260901 → input_path=".../RetMax200-ITRs" (SEM "-clean")
+grep -c NC_008030 .../Variola_VARV6_reexec_20260901/out/outputs/metadata.json   # 68 (presente)
+```
+
+Essas duas reexecuções (01/09) usaram os datasets **contaminados**, não os `-clean` de DEC-038 — provavelmente porque o guia de reexecução, para VARV-121/VARV-6, ainda não apontava para a variante limpa quando essas rodaram (§3.2-bis de VARV-52 é mais recente, escrito depois da correção de DEC-077). **Não corrigido nesta sessão** — reexecutar VARV-121/VARV-6 com o dataset `-clean` é decisão do usuário (mesmo padrão de D1/D6/D23: reexecução pesada, ~16h49 medidas para VARV-121).
+
+**O que falta para D6 fechar de vez:** (a) reexecutar VARV-121/VARV-6 apontando para os datasets `-clean` já existentes (não precisa nova aquisição), e (b) o filtro sistemático `txid10242` em `workflow_dataAcquisition.py` (a correção "de verdade", que evita depender de alguém lembrar de apontar para `-clean` a cada reexecução) — nenhuma das duas foi feita.
+
+#### Δ em métrica publicada: não nesta sessão
+
+M3.3 é aditivo (rota nova + componente novo, nenhum cálculo existente tocado). O achado de D6/VARV-52 não muda nenhum número: a reexecução de DEC-079/080 já estava correta (o dendropy já confirmava 45 pares/0 divergências); o que muda é a **classificação de VARV-52 como contaminado**, que deixa de valer para este artefato específico.
+
+**Write-lock:** `Backend/src/suporte_metodologico.py` (novo), `Backend/src/app.py` (+~45 linhas), `Backend/tests/{unit/test_suporte_metodologico.py,api/test_methodological_support.py}` (novos), `Frontend/phylotreeminer/src/components/analysis/MethodologicalSupport.jsx` (novo), `Frontend/phylotreeminer/src/components/displayData/projectExplorer.jsx` (+2 linhas), `Frontend/phylotreeminer/src/__tests__/methodologicalSupport.test.jsx` (novo). Não toca `BioComp_UFF/`. **Reversível:** sim — nada commitado ainda.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
