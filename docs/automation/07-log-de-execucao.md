@@ -2840,6 +2840,98 @@ make test-backend PY=.../envs/Phylotreeminer/bin/python → 338 passed, 1 xfaile
 
 **Write-lock:** nenhum. **Reversível:** não se aplica — nenhuma mudança de código ou dado feita por mim nesta sessão.
 
+### DEC-079 · 2026-09-03 · VARV-52 (`Variola_VARV52_reexec_20260903`) concluído e validado pelo oráculo; `audit_variola.py` ainda audita o artefato antigo — mesma classe de defeito do `resultado_principal.py`
+
+**Gatilho:** usuário reportou que a reexecução de VARV-52 (disparada por ele mesmo, ver DEC-078) terminou.
+
+**1. Execução confirmada no log** (`out/outputs/log_setup_2026-09-03_195b65d7330e.log`): `STEP: Completed successfully!`, 10 árvores em `out/Trees/` (2 alinhadores × {nj, upgma, fasttree, iqtree, raxml} — bate com o esperado do guia), 98 subárvores, `manifest.json` gravado (`run_id 195b65d7330e45cab87cd0a0b0c89071`).
+
+**2. Deduplicação por sequência (D23) medida para este conjunto pela primeira vez:** 54 registros brutos → **51 sequências distintas**. Descartados: `NC_008291.1` (registro repetido do mesmo acesso), `NC_003391.1` (idêntica a `AF438165.1`, mantida), `DQ437594.1` (idêntica a `NC_008291.1`, mantida) — log e `manifest.json["tools_invoked"]["deduplicacao"]` concordam. Isto refina o "esperado: 54 sequências" do guia (`13-guia-reexecucao-m2.md §3.2-bis`): o `n` real pós-pipeline é 51, não 54 — o guia não previa a deduplicação porque D23 não tinha sido conferido neste conjunto especificamente (achado agora fechado, registrado na fila de triagem original em 2026-08-25 — linha "Três acessos... não têm registro no `raw_data_sequences.gb`").
+
+**3. Manifesto confere com a receita:** `random_seed: 12345`; IQ-TREE com `-nt 1` (D21) e `-seed 12345`, UFBoot 1000; FastTree `-nt -gtr`; RAxML-NG (ver comando do processo) com `--workers 1` (D17). Nenhum parâmetro fora do padrão de `08-ficha-de-chamada-por-metodo.md`.
+
+**4. Oráculo independente — validação real da produção nova:**
+
+```
+cd BioComp_UFF && python ../docs/science/scripts/oraculo_rf_dendropy.py projects/Variola_VARV52_reexec_20260903
+→ Variola_VARV52_reexec_20260903 n=51 árvores=10 pares=45 divergências=0
+```
+
+**45 pares, 0 divergências** — a RF de bipartição que o pipeline produz para VARV-52 bate exatamente com dendropy. Esta é a validação que decide: **VARV-52 reexecutado está correto**.
+
+**5. Achado — `audit_variola.py --secao 3 --secao 5` NÃO validou a reexecução nova.** Rodei conforme o guia:
+
+```
+cd BioComp_UFF && python ../docs/science/scripts/audit_variola.py --secao 3 --secao 5
+```
+
+A saída para "VARV-52" reproduziu **exatamente** os números antigos já registrados nesta tabela (`fasttree × iqtree: RF enraizada 0,2600 → bipartição 0,0204`, `n=52`, `M efetivo=4`, "itens legados 194 / clados canônicos 119" — idênticos aos já publicados em `03-metricas`/linhas 413/426/439 deste log). **Causa:** `docs/science/scripts/audit_variola.py:49` tem a tabela `VARIOLA` hardcoded com `("VARV-52", "projects/test_variola_noITRs_57_Complete", 9)` — o artefato **antigo, contaminado, pré-M1/M2** — e não foi atualizada para apontar a `projects/Variola_VARV52_reexec_20260903`. É a **mesma classe de defeito** já documentada para `docs/science/scripts/resultado_principal.py` (`Conjunto("VARV-52", None, ...)` hardcoded, DEC-077 §3.2-bis), só que num script diferente que o guia também mandava rodar. **Não corrigi** — script de zona sagrada (reproduz números citados em `docs/science/`), decisão de trocar o caminho é do mesmo tipo que `resultado_principal.py` já está esperando, mas nunca foi pedida explicitamente para este arquivo.
+
+**O que falta para fechar M3.4 nesta frente** (nenhum feito ainda, aguardando decisão do usuário sobre fazer agora ou na próxima sessão):
+1. Editar `docs/science/scripts/resultado_principal.py`: `Conjunto("VARV-52", None, bloqueio=...)` → `Conjunto("VARV-52", "projects/Variola_VARV52_reexec_20260903")`, depois `make main-result`.
+2. Decidir se `docs/science/scripts/audit_variola.py:49` também troca de `test_variola_noITRs_57_Complete` para `Variola_VARV52_reexec_20260903` (e se sim, registrar o Δ nos números da seção 3/5 — "itens legados"/"clados canônicos"/RF vão mudar porque `n` vai de 52 para 51 e o conjunto não é mais o contaminado).
+3. ZIKV-480 (`13-guia-reexecucao-m2.md §3.4`) segue como o único conjunto sem reexecução — ver achado fora de escopo já registrado (só 3 árvores em `out/Trees/`, possível D19).
+
+**Δ em métrica publicada:** nenhum ainda — nenhum consumidor (`resultado_principal.py`, `audit_variola.py`) foi repontado para o artefato novo. A validação (item 4) prova que o artefato novo está correto; ele só passa a valer para o gate depois do item 1.
+
+**Write-lock:** nenhum — só leitura (`oraculo_rf_dendropy.py`, `audit_variola.py`) e o registro deste achado. **Reversível:** não se aplica.
+
+### DEC-080 · 2026-09-03 · M3.4 sustenta em 3 de 3 conjuntos principais — VARV-52 entra no gate; `audit_variola.py` **não** tinha o defeito que DEC-079 apontou
+
+**Gatilho:** pedido do usuário — "faz os dois agora e roda make main-result", os dois itens deixados pendentes em DEC-079.
+
+#### 1. `resultado_principal.py` corrigido — feito
+
+`CONJUNTOS` (`docs/science/scripts/resultado_principal.py:175-181`): `Conjunto("VARV-52", None, bloqueio=...)` → `Conjunto("VARV-52", "projects/Variola_VARV52_reexec_20260903")`. Comentário do bloco e a nota de `Enquanto VARV-52 não for reexecutado, 2 é o esperado.` (linha 86) atualizados para não afirmar mais um estado que deixou de existir. `PRE_CORRECAO["VARV-52"]` **mantido** apontando para `projects/test_variola_noITRs_57_Complete` — esse dicionário serve só ao modo `--caracterizar` (reproduzir os números antigos de §4.4), propósito diferente de `CONJUNTOS`.
+
+#### 2. `audit_variola.py` — **correção do achado de DEC-079: não era o mesmo defeito, não editei**
+
+Antes de repetir a edição, conferi a tabela inteira `VARIOLA` (`audit_variola.py:47-51`), não só a linha de VARV-52:
+
+```
+VARV-49   → projects/Variola_Yu_li_2007          (artefato pré-M1/M2)
+VARV-52   → projects/test_variola_noITRs_57_Complete  (artefato pré-M1/M2)
+VARV-121  → projects/Variola_Yu_li_2007_200seq   (artefato pré-M1/M2)
+VARV-6    → projects/Variola_Yu_li_2007_noITRs_6seqs (artefato pré-M1/M2)
+```
+
+**As quatro linhas apontam para artefatos antigos, não só a de VARV-52** — e essa lista é **idêntica** a `PRE_CORRECAO` de `resultado_principal.py`. `audit_variola.py` não é o script que expõe o número corrigido para o gate (esse é `resultado_principal.py`/`CONJUNTOS`); é o script de **caracterização histórica**, que reproduz de propósito os números que já foram publicados em `01-revisao-variola.md`/`03-metricas.md` sobre os artefatos pré-correção — a mesma função que `--caracterizar` cumpre no outro script. Repontar só a linha de VARV-52 para a reexecução nova teria misturado um conjunto corrigido com três antigos na mesma tabela, quebrando a comparação histórica que a seção 3/5 existe para fazer — um defeito novo, não uma correção.
+
+**DEC-079 errou o diagnóstico** ao chamar isso de "mesma classe de defeito do `resultado_principal.py`": lá, `CONJUNTOS` (números do gate) e `PRE_CORRECAO` (números históricos) são dois dicionários **separados**, e só `CONJUNTOS` tinha o `None` bloqueado — o defeito real. Em `audit_variola.py` só existe a tabela histórica; não há um segundo lugar que devesse apontar para o artefato novo. **Não há edição pendente neste arquivo.**
+
+#### 3. `make main-result` — evidência de execução
+
+```
+cd /home/geomesh/Documentos/GIT/PhyloTreeMiner
+conda activate Phylotreeminer
+make main-result PY="$(which python)"
+  → VARV-49   n=49  ramos internos com suporte=46  oráculo dendropy: ... 0 divergências
+  → VARV-52   n=51  ramos internos com suporte=48  oráculo dendropy: 480 testes, 0 divergências
+  → VARV-121  n=121 ramos internos com suporte=118 oráculo dendropy: 1180 testes, 0 divergências
+  → VARV-6    n=6   ramos internos com suporte=3   oráculo dendropy: 42 testes, 0 divergências
+
+  (i) UFBoot=100 não garante robustez — universo mafft-5, M=5
+      VARV-49   30 em UFBoot=100, 14 sobrevivem (46,7%)  sustenta
+      VARV-52   28 em UFBoot=100, 15 sobrevivem (53,6%)  sustenta   ← novo
+      VARV-121  77 em UFBoot=100, 33 sobrevivem (42,9%)  sustenta
+      VARV-6     1 em UFBoot=100,  1 sobrevive (100,0%)  auxiliar, fora do portão
+
+  (ii) UFBoot>=95 idiossincrático — 0 de 163 (era 0 de 127 sem VARV-52)
+      VARV-49 0/36, VARV-52 0/36, VARV-121 0/90, VARV-6 0/1 — sustenta nos 4
+
+  ✓ As duas afirmações do artigo se sustentam nos 3 conjuntos principais testados.
+  ○ Reprodução INCOMPLETA — só a segunda causa de DEC-069 sobrevive:
+      VARV-49/VARV-121/VARV-6: mafft_raxml e mafft_iterative_raxml sem suporte de ramo
+      (reexecutados em 2026-09-01, antes de DEC-064/2026-09-02 acrescentar --bs-trees 1000)
+  Código do script: 2. `make main-result` (alvo): 0 — absorve o 2 por desenho, igual a `reference-check`.
+```
+
+**A causa "VARV-52 bloqueado" de DEC-069 está fechada.** Resta só a segunda causa (RAxML sem suporte de ramo nos três reexecutados de 2026-09-01) — não corrigível sem reexecutar VARV-49/121/6 de novo, agora que DEC-064 já existe; fica registrado como pendência, não decidido nesta sessão se vale a pena reexecutar só por isso.
+
+**Δ em métrica publicada:** sim, agora com VARV-52 dentro do gate — os cinco números de VARV-52 na tabela de diff (`ramos UFBoot=100: 30→28`, `sobrevivem M/M: 14→15`, `UFBoot>=95: 38→36`, `Pearson: 0,270→0,275`) passam de "medição pré-M1/M2, não confrontada" para "medição validada por oráculo (480 testes, 0 divergências), dentro do portão de M3.4". Mesma causa dos Δ de VARV-49/121 em DEC-069 (versão/determinismo do IQ-TREE, D17/D21), não um defeito novo.
+
+**Write-lock:** `docs/science/scripts/resultado_principal.py`. **Não tocado:** `docs/science/scripts/audit_variola.py` (ver item 2). **Reversível:** sim — nada commitado.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**

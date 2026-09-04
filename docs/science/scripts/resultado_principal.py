@@ -83,7 +83,9 @@ Três códigos de saída, não dois
         nestes dados
 
 Colapsar 1 e 2 ensinaria a ignorar o portão: "ainda não terminamos" e "quebrou"
-são estados diferentes. Enquanto VARV-52 não for reexecutado, 2 é o esperado.
+são estados diferentes. VARV-52 reexecutado e validado em 2026-09-03 (DEC-079);
+2 ainda pode ocorrer por outra causa (ex.: reexecução sem suporte de ramo do
+RAxML, anterior a DEC-064) — ver `CONJUNTOS` e o log de execução.
 """
 
 from __future__ import annotations
@@ -166,20 +168,16 @@ class Conjunto:
 
 #: Os três conjuntos do portão de M3, mais VARV-6 como auxiliar.
 #:
-#: VARV-52 **não tem reexecução corrigida em disco**. Os dois diretórios que
-#: existem (`projects/teste52` e `projects/test_variola_noITRs_57_Complete`) são
-#: anteriores a M1/M2: têm o braço `clustalo` que D1 mostrou ser cópia byte a
-#: byte do `mafft`, não têm o braço `mafft_iterative`, e não têm `manifest.json`.
-#: Usá-los produziria um número plausível e errado — exatamente o defeito que
-#: `04-rigor-cientifico` proíbe. O conjunto fica declarado como pendência.
+#: VARV-52 reexecutado em `Variola_VARV52_reexec_20260903` (2026-09-03,
+#: `13-guia-reexecucao-m2.md §3.2-bis`): 54 registros brutos → 51 sequências
+#: distintas (D23), 10 árvores, `manifest.json` presente. Validado contra o
+#: oráculo dendropy antes de entrar aqui: 45 pares, 0 divergências (DEC-079).
+#: Os diretórios antigos (`projects/teste52` e
+#: `projects/test_variola_noITRs_57_Complete`) continuam só em `PRE_CORRECAO`,
+#: para a caracterização de `--caracterizar`.
 CONJUNTOS = [
     Conjunto("VARV-49", "projects/Variola_VARV49_reexec_20260901"),
-    Conjunto("VARV-52", None,
-             bloqueio="requer reexecução — nenhum artefato pós-M1/M2 em disco "
-                      "(só `projects/teste52` e "
-                      "`projects/test_variola_noITRs_57_Complete`, ambos com o "
-                      "braço `clustalo` de D1, sem `mafft_iterative` e sem "
-                      "manifesto)"),
+    Conjunto("VARV-52", "projects/Variola_VARV52_reexec_20260903"),
     Conjunto("VARV-121", "projects/Variola_VARV121_reexec_20260901"),
     Conjunto("VARV-6", "projects/Variola_VARV6_reexec_20260901", principal=False),
 ]
