@@ -20,3 +20,4 @@ Um documento entra aqui quando responde a uma pergunta que vai voltar: *por que 
 |---|---|---|
 | [R1](r1.md) | O conjunto de validação, D11, e o que uma execução real revela | 2026-08-25 |
 | [R2](r2.md) | Limites de ferramenta não são propriedade da ferramenta — o que é do algoritmo e o que é da máquina | 2026-08-25 |
+| [R3](r3.md) | Por que o Deep Analysis precisava de bootstrap e suporte metodológico lado a lado (DEC-081) | 2026-09-04 |
