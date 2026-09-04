@@ -181,14 +181,17 @@ SEM_SUPORTE_POR_CONSTRUCAO: Dict[str, str] = {
     "parsimony": "método de parcimônia sem reamostragem: não há suporte de ramo a reportar",
 }
 
+# Texto exposto direto na UI (`/branch-support`'s "comparabilidade.nota",
+# renderizado por MethodologicalSupport.jsx) — em inglês por convenção do
+# projeto: código/comentário fica em português, o que aparece na tela não.
 NOTA_DE_COMPARABILIDADE = (
-    "Os valores de suporte NÃO são comparáveis entre métodos de inferência. "
-    "UFBoot (IQ-TREE) e FBP (RAxML-NG) compartilham a escala 0-100 sem serem a "
-    "mesma métrica; o suporte local do FastTree é 0-1 e mede outra coisa; a "
-    "probabilidade posterior do MrBayes é outra coisa ainda. Nenhum valor é "
-    "normalizado por esta API justamente para não sugerir essa comparação. "
-    "Comparar métodos entre si é o que a distância entre árvores e a mineração "
-    "de padrões fazem — não a leitura lado a lado de dois números de suporte."
+    "Support values are NOT comparable across inference methods. "
+    "UFBoot (IQ-TREE) and FBP (RAxML-NG) share the 0-100 scale without being "
+    "the same metric; FastTree's local support is 0-1 and measures something "
+    "else; MrBayes's posterior probability is something else again. No value "
+    "is normalized by this API precisely to avoid suggesting that comparison. "
+    "Comparing methods against each other is what tree distance and pattern "
+    "mining do — not reading two support numbers side by side."
 )
 
 

@@ -139,13 +139,13 @@ const MethodologicalSupport = ({ projectName }) => {
   if (loading) {
     return (
       <Card>
-        <Spin tip="Carregando bootstrap e suporte metodológico..." />
+        <Spin tip="Loading bootstrap and methodological support..." />
       </Card>
     );
   }
 
   if (error) {
-    return <Alert type="error" showIcon message="Erro" description={error} />;
+    return <Alert type="error" showIcon message="Error" description={error} />;
   }
 
   if (!bootstrap || linhas.length === 0) {
@@ -153,11 +153,11 @@ const MethodologicalSupport = ({ projectName }) => {
       <Alert
         type="info"
         showIcon
-        message="Sem bootstrap para cruzar com suporte metodológico"
+        message="No bootstrap to cross with methodological support"
         description={
           bootstrap
-            ? "Nenhuma árvore deste projeto tem bootstrap gravado (RAxML-NG sem --bs-trees, ou reexecução anterior a DEC-064)."
-            : "Nada carregado ainda."
+            ? "No tree in this project has bootstrap recorded (RAxML-NG without --bs-trees, or a rerun predating DEC-064)."
+            : "Nothing loaded yet."
         }
       />
     );
@@ -171,7 +171,7 @@ const MethodologicalSupport = ({ projectName }) => {
       width: 130,
       sorter: (a, b) => (a.bootstrap ?? -1) - (b.bootstrap ?? -1),
       render: (_, r) => (
-        <Tooltip title={`${r.metricaLabel} (escala ${r.escala[0]}-${r.escala[1]})`}>
+        <Tooltip title={`${r.metricaLabel} (scale ${r.escala[0]}-${r.escala[1]})`}>
           <Text strong={r.limiarAlto != null && r.bootstrap >= r.limiarAlto}>
             {r.bootstrap.toFixed(1)}
           </Text>{" "}
@@ -182,14 +182,14 @@ const MethodologicalSupport = ({ projectName }) => {
       ),
     },
     {
-      title: "Suporte metodológico",
+      title: "Methodological support",
       key: "suporte_metodologico",
       width: 190,
       sorter: (a, b) =>
         (a.suporteMetodologico ?? -1) - (b.suporteMetodologico ?? -1),
       render: (_, r) =>
         r.suporteMetodologico == null ? (
-          <Text type="secondary">não medido</Text>
+          <Text type="secondary">not measured</Text>
         ) : (
           <Space size={4}>
             <Text>
@@ -199,34 +199,35 @@ const MethodologicalSupport = ({ projectName }) => {
             {r.limiarAlto != null &&
               r.bootstrap >= r.limiarAlto &&
               r.suporteMetodologico < 1.0 && (
-                <Tooltip title="Bootstrap alto, mas nem todo pipeline recupera este clado — a discordância que o argumento do artigo mede.">
+                <Tooltip title="High bootstrap, but not every pipeline recovers this clade — the discordance the article's argument measures.">
                   <Tag color="warning" style={{ marginInlineEnd: 0 }}>
-                    discordante
+                    discordant
                   </Tag>
                 </Tooltip>
               )}
           </Space>
         ),
     },
-    { title: "n táxons", dataIndex: "nTaxa", key: "n_taxa", width: 90 },
+    { title: "N taxa", dataIndex: "nTaxa", key: "n_taxa", width: 90 },
   ];
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space direction="vertical" style={{ padding: "24px" }} size="middle">
       <Alert
         type="info"
         showIcon
-        message="Bootstrap e suporte metodológico são grandezas ortogonais"
+        message="Bootstrap and methodological support are orthogonal measures"
         description={
           <>
             <Paragraph style={{ marginBottom: 4 }}>
               {bootstrap.comparabilidade?.nota}
             </Paragraph>
             <Paragraph style={{ marginBottom: 0 }}>
-              Suporte metodológico é a fração de pipelines (alinhador × método
-              de inferência) que recuperam o mesmo clado — mede robustez
-              metodológica, não amostral. Um clado com bootstrap máximo pode
-              não ser recuperado por outros métodos, e vice-versa.
+              Methodological support is the fraction of pipelines (aligner ×
+              inference method) that recover the same clade — it measures
+              methodological robustness, not sampling robustness. A clade
+              with maximum bootstrap may not be recovered by other methods,
+              and vice versa.
             </Paragraph>
           </>
         }
@@ -234,11 +235,11 @@ const MethodologicalSupport = ({ projectName }) => {
 
       <Row gutter={16}>
         <Col>
-          <Statistic title="Ramos com bootstrap" value={linhas.length} />
+          <Statistic title="Branches with bootstrap" value={linhas.length} />
         </Col>
         <Col>
           <Statistic
-            title="Bootstrap alto, sem unanimidade metodológica"
+            title="High bootstrap, no methodological unanimity"
             value={discordanciasAltoBootstrapBaixoSuporte}
             valueStyle={
               discordanciasAltoBootstrapBaixoSuporte > 0
@@ -252,7 +253,7 @@ const MethodologicalSupport = ({ projectName }) => {
       <Table
         size="small"
         tableLayout="fixed"
-        style={{ maxWidth: 700 }}
+        //style={{ maxWidth: 700 }}
         columns={colunas}
         dataSource={linhas}
         pagination={{ pageSize: 15, showSizeChanger: true }}

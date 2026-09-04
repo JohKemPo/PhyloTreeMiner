@@ -22,7 +22,6 @@ from src.routers.cql_router import router as cql_router
 from src.routers.cql_batch_router import router as cql_batch_router
 from src.services.neo4j_services import neo4j_service
 from src.services.execution_state import resolver_estado
-from src.services.ncbi_acquisition import NCBIAcquisition
 from src.services.genericOWIDAnalyzer import GenericOWIDAnalyzer
 from src.services.cql_batch_service import init_cql_batch_service
 from src.utils.treePlot import render_annotated_tree, map_country_to_region
@@ -52,6 +51,14 @@ from workflow.alignment.aligners import (ALIGNERS, memoria_disponivel_bytes,
 from src.suporte_de_ramo import ler_suporte_do_projeto
 # M3.3: mesma razão — `suporte_metodologico` também reutiliza `workflow.stability`.
 from src.suporte_metodologico import ler_suporte_metodologico_do_projeto
+<<<<<<< HEAD
+=======
+# D23/DEC-082: mesma razão — `ncbi_acquisition` passa a reusar
+# `workflow.utils.ncbi_accession.eh_refseq` (mesma regra de preferência
+# RefSeq/GenBank da aquisição de `workflow_dataAcquisition.py`, não uma
+# segunda implementação).
+from src.services.ncbi_acquisition import NCBIAcquisition
+>>>>>>> 099c0ae286e0c61aa7a6fd1475fc073447864cb7
 
 NCBI_WORK_DIR = os.path.join(BASE_DIR, "temp_ncbi")
 os.makedirs(NCBI_WORK_DIR, exist_ok=True)
