@@ -2993,6 +2993,40 @@ M3.3 é aditivo (rota nova + componente novo, nenhum cálculo existente tocado).
 
 **Write-lock:** `Backend/src/suporte_metodologico.py` (novo), `Backend/src/app.py` (+~45 linhas), `Backend/tests/{unit/test_suporte_metodologico.py,api/test_methodological_support.py}` (novos), `Frontend/phylotreeminer/src/components/analysis/MethodologicalSupport.jsx` (novo), `Frontend/phylotreeminer/src/components/displayData/projectExplorer.jsx` (+2 linhas), `Frontend/phylotreeminer/src/__tests__/methodologicalSupport.test.jsx` (novo). Não toca `BioComp_UFF/`. **Reversível:** sim — nada commitado ainda.
 
+### DEC-082 · 2026-09-04 · D23 — decisão do usuário entre as opções A-D: **(A)** preferir RefSeq, relabelando na posição de hoje
+
+**Gatilho:** pedido do usuário — "decide sobre D23: qual das opções A-D seguir", depois das 4 opções levantadas em [DEC-068](#dec-068--2026-09-03--d23-caracterizado-a-fundo--dois-fenômenos-não-um-decisão-de-curadoria-formalizada-não-implementada).
+
+#### A verificação de rede que faltava, feita agora
+
+DEC-068 travava a escolha entre (A) e "a perda potencial de `geo_loc_name` do Camelpox" numa checagem pendente: os três pares RefSeq/GenBank não estão nos `.gb` locais, então a completude de metadado de cada lado do par era desconhecida. `efetch` direto (fora de `workflow/`, sem tocar `NCBI_EMAIL` do projeto — identificação genérica `mail@mail.com`, sem enviar e-mail pessoal a serviço externo) nos seis acessos:
+
+| Par (RefSeq == GenBank) | `geo_loc_name` | `collection_date` | Resultado |
+|---|---|---|---|
+| `NC_008291.1` == `DQ437594.1` (Taterapox) | ausente nos dois | ausente nos dois | idêntico — nada a perder |
+| `NC_003391.1` == `AF438165.1` (Camelpox) | `"Kazakhstan: Oblast"` nos dois | ausente nos dois | idêntico — nada a perder |
+| `NC_015960.1` == `HQ849551.1` (Yokapox) | `"Central African Republic"` nos dois | `"1972"` nos dois | idêntico — nada a perder |
+
+**A premissa que travava a decisão não se sustentou.** RefSeq nesses três genomas é cópia curada do mesmo *submitter*/anotação do GenBank — o `source` é byte-a-byte igual nos campos que `get_node_information` lê. Preferir RefSeq não custa `geo_loc_name`/`collection_date` em nenhum dos três pares.
+
+#### Decisão
+
+**(A)** — preferir RefSeq, relabelando o táxon sobrevivente para o acesso RefSeq na posição em que o registro escolhido pela deduplicação já está hoje. Descartadas:
+
+- **(B)** — mesmo resultado de metadado que (A) (confirmado pela tabela acima), mas reordena a entrada no MAFFT sem medição do efeito em alinhamento/busca de ML: risco sem benefício correspondente.
+- **(C)** — mantém o defeito vivo: o mesmo táxon continua trocando de rótulo entre experimentos por acidente de ordenação de arquivo (a consequência 3 de D23).
+- **(D)** — os três acessos são o mesmo genoma, confirmado por md5; recusar o conjunto descartaria dado real por uma pergunta que (A) já responde sem perda.
+
+**O que essa decisão NÃO é:** a implementação. Corrigir a aquisição (item 1 da correção de D23) muda a composição de conjunto e portanto toda árvore publicada — exige o protocolo completo de [`04-rigor §3`](04-rigor-cientifico.md) (caracterizar → formalizar → oráculo independente → casos-limite → tabela de diff → parecer), golden snapshot antes de mexer, e é um lote à parte. Esta entrada fecha a pendência de **qual regra seguir**; a pendência de **implementar a regra** continua na fila.
+
+**Evidência de execução:**
+```
+curl efetch NC_008291.1/DQ437594.1/NC_003391.1/AF438165.1/NC_015960.1/HQ849551.1 → 6 registros .gb baixados
+grep source/geo_loc_name/collection_date/host/strain em cada — tabela acima
+```
+
+**Write-lock:** só este documento. Não toca `Backend/`, `Frontend/` nem `BioComp_UFF/`. **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
