@@ -50,6 +50,8 @@ from workflow.alignment.aligners import (ALIGNERS, memoria_disponivel_bytes,
 # M3.1: mesma razão — `suporte_de_ramo` reutiliza `workflow.stability`, então
 # só pode ser importado depois que `PATH_BASE_WORKFLOW` entra no `sys.path`.
 from src.suporte_de_ramo import ler_suporte_do_projeto
+# M3.3: mesma razão — `suporte_metodologico` também reutiliza `workflow.stability`.
+from src.suporte_metodologico import ler_suporte_metodologico_do_projeto
 
 NCBI_WORK_DIR = os.path.join(BASE_DIR, "temp_ncbi")
 os.makedirs(NCBI_WORK_DIR, exist_ok=True)
@@ -920,6 +922,53 @@ async def get_branch_support(
     except Exception:
         logger.exception("Erro ao ler suporte de ramo do projeto '%s'", project_name)
         raise HTTPException(status_code=500, detail="Erro ao ler suporte de ramo.")
+
+    resultado["projeto"] = project_name
+    return resultado
+
+
+@app.get("/api/tree/{project_name}/methodological-support")
+async def get_methodological_support(
+    project_name: str,
+    alinhador: Optional[str] = Query(
+        None,
+        description="Restringe o universo a um alinhador (ex.: 'mafft'). Omitido, usa todos os pipelines em disco.",
+    ),
+):
+    """Suporte metodológico por clado — a outra metade de M3 (M3.3/M3.4).
+
+    Complementa `/branch-support`: aquela rota mede robustez **amostral**
+    (bootstrap, dentro de um pipeline); esta mede robustez **metodológica**
+    (`sup(b) = |pipelines que recuperam b| / M`, `03-metricas §4.1`) — quantos
+    pipelines diferentes (alinhador × método de inferência) concordam no mesmo
+    clado. As duas métricas são ortogonais por construção: um clado pode ter
+    bootstrap máximo e suporte metodológico baixo, e é exatamente essa
+    discordância que o argumento do artigo mede (`make main-result`).
+
+    `clade_id` usa a mesma identidade canônica (D3/D5) de `/branch-support`,
+    `metadata.json`, FPMax e Neo4j — o cliente cruza as duas rotas por esse
+    campo para mostrar bootstrap e suporte metodológico lado a lado do mesmo
+    ramo.
+    """
+    dir_trees = resolve_within(PROJECTS_ROOT, project_name, "out", "Trees")
+    if not os.path.isdir(dir_trees):
+        raise HTTPException(status_code=404, detail="Diretório de árvores não encontrado")
+
+    try:
+        # TreeSet/StabilityAnalyzer são CPU-bound (M4.10): fora do loop.
+        resultado = await asyncio.to_thread(
+            ler_suporte_metodologico_do_projeto, dir_trees, alinhador
+        )
+    except ValueError:
+        logger.warning(
+            "Alinhador '%s' não encontrado no projeto '%s'", alinhador, project_name
+        )
+        raise HTTPException(status_code=404, detail="Alinhador não encontrado neste projeto.")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Erro ao ler suporte metodológico do projeto '%s'", project_name)
+        raise HTTPException(status_code=500, detail="Erro ao ler suporte metodológico.")
 
     resultado["projeto"] = project_name
     return resultado

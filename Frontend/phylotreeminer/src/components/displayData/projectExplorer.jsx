@@ -35,6 +35,7 @@ import TreeComparisonViewer from "../analysis/TreeComparisonViewer";
 import TreePatternAnalysis from "../analysis/TreePatternAnalysis";
 import CQLExecutor from "../CQLExecutor";
 import PhylogeneticInsights from "../analysis/Tree/PhylogeneticInsights";
+import MethodologicalSupport from "../analysis/MethodologicalSupport";
 import MetadataViewer from "./utils/MetadataViewer";
 import PaginatedJsonViewer from "./utils/PaginatedJsonViewer";
 
@@ -493,6 +494,8 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
           <div style={{ ...viewerContainerStyle, marginTop: 16 }}>
             <Space direction="vertical" style={{ width: "100%" }}>
               <TreePatternAnalysis projectName={selectedProject} />
+
+              <MethodologicalSupport projectName={selectedProject} />
 
               <PhylogeneticInsights
                 projectName={selectedProject}
