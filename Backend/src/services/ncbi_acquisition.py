@@ -7,6 +7,13 @@ import tempfile
 from typing import List, Dict, Optional
 import json
 
+# D23/DEC-082: mesma regra de preferência RefSeq/GenBank da aquisição de
+# `BioComp_UFF/workflow/workflow_dataAcquisition.py` — reusada, não
+# reimplementada. Importável no escopo do módulo porque `app.py` só importa
+# esta classe depois de `PATH_BASE_WORKFLOW` entrar no `sys.path` (ver
+# comentário "D23/DEC-082" em `app.py`, junto de suporte_de_ramo/suporte_metodologico).
+from workflow.utils.ncbi_accession import eh_refseq
+
 class NCBIAcquisition:
     def __init__(self, email: str, work_dir: str, data_root: str):
         """
@@ -245,12 +252,15 @@ class NCBIAcquisition:
         Processa as sequências com os filtros especificados.
         """
         processed = []
-        seen_seqs = set()
-        
+        # str(seq) maiúscula -> índice em `processed`. Era um `set` (só
+        # sabia dizer "já vi"); precisa ser dict para D23/DEC-082 poder
+        # relabelar a posição certa quando o duplicado é o par RefSeq/GenBank.
+        indice_por_sequencia = {}
+
         for rec in records:
             if initial_min_length and len(rec.seq) < initial_min_length:
                 continue
-            
+
             if utr5_end is not None and utr3_start is not None:
                 try:
                     cds_features = [f for f in rec.features if f.type == 'CDS']
@@ -262,29 +272,46 @@ class NCBIAcquisition:
                         rec = new_rec
                 except Exception as e:
                     self.logger.warning(f"Erro ao remover UTRs para {rec.id}: {e}")
-            
+
             if refined_min_length and len(rec.seq) < refined_min_length:
                 continue
-            
+
             seq_str = str(rec.seq).upper()
-            if self._is_duplicate(seq_str, seen_seqs, similarity_threshold):
+            indice_existente = self._indice_duplicata(seq_str, indice_por_sequencia, similarity_threshold)
+            if indice_existente is not None:
+                # D23/DEC-082: mesma sequência já vista (por similaridade).
+                # RefSeq prevalece sobre GenBank, relabelando NA POSIÇÃO em
+                # que o sobrevivente por ordem de chegada já está — o
+                # conjunto não é reordenado (opção (A) do DEC-082).
+                sobrevivente = processed[indice_existente]
+                if eh_refseq(rec.id) and not eh_refseq(sobrevivente.id):
+                    self.logger.info(
+                        f"D23/DEC-082: {rec.id} (RefSeq) substitui "
+                        f"{sobrevivente.id} (GenBank) na posição {indice_existente} "
+                        "— mesma sequência, RefSeq preferido."
+                    )
+                    processed[indice_existente] = rec
+                    indice_por_sequencia[seq_str] = indice_existente
                 continue
-            
-            seen_seqs.add(seq_str)
+
+            indice_por_sequencia[seq_str] = len(processed)
             processed.append(rec)
-        
+
         return processed
 
-    def _is_duplicate(self, seq_str, seen_seqs, similarity_threshold):
+    def _indice_duplicata(self, seq_str, indice_por_sequencia, similarity_threshold):
         """
-        Verifica se uma sequência é duplicada baseado no threshold de similaridade.
+        Mesma verificação de similaridade de sempre — mas devolve a POSIÇÃO
+        do registro já visto, não só True/False: D23/DEC-082 precisa saber
+        onde relabelar quando o duplicado é o par RefSeq/GenBank do mesmo
+        genoma.
         """
-        for existing_seq in seen_seqs:
-            matches = sum(1 for a, b in zip(seq_str, existing_seq) if a == b)
-            similarity = matches / min(len(seq_str), len(existing_seq))
+        for seq_vista, indice in indice_por_sequencia.items():
+            matches = sum(1 for a, b in zip(seq_str, seq_vista) if a == b)
+            similarity = matches / min(len(seq_str), len(seq_vista))
             if similarity >= similarity_threshold:
-                return True
-        return False
+                return indice
+        return None
     
     def _clean_filename(self, name: str) -> str:
         """Limpa o nome para uso em caminhos de arquivo."""

@@ -3027,6 +3027,77 @@ grep source/geo_loc_name/collection_date/host/strain em cada — tabela acima
 
 **Write-lock:** só este documento. Não toca `Backend/`, `Frontend/` nem `BioComp_UFF/`. **Reversível:** sim.
 
+### DEC-083 · 2026-09-04 · D23 — item 1 implementado: aquisição e a rota de gerar dataset via GenBank passam a preferir RefSeq, na posição de hoje
+
+**Gatilho:** pedido do usuário — "Corrija workflow_dataAquisition.py, e ajuste com base nisto a lógica responsável por gerar dataset via genbank (ui/back)... só e somente só [essa rota]", autorizando mexer em `Backend/` e `BioComp_UFF/` no mesmo lote, restrito a essa rota.
+
+#### Escopo — duas implementações da aquisição, uma decisão
+
+Há **duas** implementações de aquisição no repositório, e só uma delas é a rota "gerar dataset via GenBank" da UI:
+
+| Caminho | Onde | Rota |
+|---|---|---|
+| `workflow_dataAcquisition.py` (`filter_sequences`, `refine_dataset`) | `BioComp_UFF/` | script de experimento (CLI), usado por `workflow/experimentos/variola_li_2007.py` — é onde os conjuntos de *Variola* nasceram |
+| `NCBIAcquisition._process_sequences` | `Backend/src/services/ncbi_acquisition.py` | `pipelineConfigurator.jsx` → `POST /api/ncbi/download`/`download-accessions` — é o botão "gerar dataset" da UI |
+
+Uma **terceira** função com o mesmo defeito, `dataValidation.deduplicar_por_sequencia` (chamada por `TreeBuilderController._validate_and_prepare_fasta`), **não foi tocada** — é outra rota (rodar o pipeline de árvore sobre um FASTA já existente, não gerar um novo dataset), fora do pedido explícito ("só e somente só"). `workflow.tests.test_deduplicacao.test_ordem_do_arquivo_decide_o_sobrevivente` continua caracterizando o comportamento antigo ali, de propósito — é trabalho futuro, não deste lote.
+
+#### Formalização (a mesma para as duas rotas tocadas)
+
+Nova função `eh_refseq(accession)` em `BioComp_UFF/workflow/utils/ncbi_accession.py` — acesso RefSeq é `[A-Za-z]{1,3}_\d`, GenBank/INSDC nunca tem `_`. Reusada (não reimplementada) pelas duas rotas: `workflow_dataAcquisition.py` importa direto; `Backend/src/services/ncbi_acquisition.py` importa de `workflow.utils.ncbi_accession` — por isso o import de `NCBIAcquisition` em `app.py` moveu para depois de `sys.path.insert(PATH_BASE_WORKFLOW)` (mesmo padrão-comentário de `suporte_de_ramo`/`suporte_metodologico`, M3.1/M3.3).
+
+Em cada um dos três pontos de deduplicação por conteúdo tocados (`filter_sequences`, `refine_dataset`, `_process_sequences`), a estrutura `seen_seqs`/`seq_hashes` (um `set`, só sabia dizer "já vi") virou um dict `sequência → índice na lista de sobreviventes`. Quando um recém-chegado é duplicata e é RefSeq enquanto o que já ocupa a posição não é, o registro naquela posição é **substituído** (não movido, não reinserido) pelo RefSeq — é literalmente "relabelar na posição de hoje", a opção (A) do DEC-082.
+
+#### Achado incidental: `filter_sequences` nunca sobreviveu ao próprio `return`
+
+Lendo as linhas para aplicar a preferência, `del filtered` vinha imediatamente antes de `return filtered` — `UnboundLocalError` garantido, capturado pelo `except Exception` mais externo da própria função, que reescrevia `output_file` como **vazio** e devolvia `[]`. Reprovado com evidência mínima:
+
+```python
+>>> def repro():
+...     filtered = [1, 2, 3]
+...     try:
+...         del filtered
+...         return filtered
+...     except Exception as e:
+...         return f"CAUGHT: {type(e).__name__}: {e}"
+>>> repro()
+"CAUGHT: UnboundLocalError: cannot access local variable 'filtered' where it is not associated with a value"
+```
+
+Efeito em `run_workflow`: `filtered = self.filter_sequences(...)`; `if len(filtered) == 0: filtered_file = raw_file` — **sempre** caía nesse `if`, então `initial_min_length` nunca filtrou nada além do que `refine_dataset` (com `refined_min_length`) já filtrava depois. Corrigido junto, por estar nas mesmas linhas: `del` passa a apagar só o dicionário auxiliar, nunca a lista devolvida.
+
+#### Oráculo independente
+
+Não há oráculo de domínio aplicável (dendropy/ete3 respondem sobre topologia; isto é escolha de identidade de registro, não cálculo sobre árvore). O invariante verificável é **independência de ordem**: para o mesmo par duplicado, as duas ordens de chegada têm de convergir para o mesmo sobrevivente — o RefSeq. Verificado nas duas permutações dos dois pares conhecidos (Taterapox `NC_008291.1`/`DQ437594.1`, Camelpox `NC_003391.1`/`AF438165.1`), nas três funções, em `test_refseq_prevalece_independente_da_ordem` (BioComp_UFF e Backend).
+
+#### Casos-limite cobertos (testes novos)
+
+* RefSeq chega primeiro ou depois — mesmo sobrevivente nos dois casos.
+* Posição do grupo no conjunto não muda — só o rótulo (`test_posicao_nao_muda_so_o_rotulo`).
+* Duplicata sem nenhum RefSeq envolvido — continua valendo "primeira ocorrência", sem regressão do caminho comum.
+* Conjunto sem duplicata nenhuma — nada muda.
+* Substituição é anunciada em log (`D23/DEC-082: ... substitui ... — mesma sequência, RefSeq preferido`), para não repetir o silêncio que já foi defeito em D23 item 2.
+
+#### O que isto NÃO faz
+
+Não retroaciona nenhum artefato em disco: `metadata.json`, `dataset_final.fasta` e árvores de VARV-49/52/121/6 já gerados continuam com a composição antiga (D23 ainda descreve o estado desses artefatos). Só materializa quando alguém reexecuta `workflow_dataAcquisition.py` ou chama `/api/ncbi/download`/`download-accessions` de novo. Item 2 (`dataValidation.py`, já feito em DEC-050), item 3 (manifesto) e item 4 (outgroup declarado) da tabela de correção de D23 continuam pendentes — este lote fecha só o item 1, nas duas rotas pedidas.
+
+**Evidência de execução:**
+```
+cd BioComp_UFF && python -m unittest workflow.tests.test_stability workflow.tests.test_subtree_mining \
+  workflow.tests.test_tree_identity workflow.tests.test_rf_bipartition workflow.tests.test_manifest \
+  workflow.tests.test_rooting workflow.tests.test_taxonomy workflow.tests.test_aligners \
+  workflow.tests.test_external_tools workflow.tests.test_deduplicacao workflow.tests.test_data_acquisition_refseq
+  → Ran 184 tests, OK (150 da lista do CLAUDE.md + 9 de test_deduplicacao, inalterados + 7 novos)
+
+cd Backend && python -m pytest tests -q
+  → todos verdes (exit 0), inclui tests/unit/test_ncbi_acquisition_refseq.py (4 novos)
+
+make lint → débito reduzido (61/66 erros, 24/27 avisos), catraca não reprovou
+```
+
+**Write-lock:** `BioComp_UFF/workflow/workflow_dataAcquisition.py`, `BioComp_UFF/workflow/utils/ncbi_accession.py` (novo), `BioComp_UFF/workflow/tests/test_data_acquisition_refseq.py` (novo), `Backend/src/services/ncbi_acquisition.py`, `Backend/src/app.py` (só reordena um import), `Backend/tests/unit/test_ncbi_acquisition_refseq.py` (novo). Não toca `dataValidation.py`, `treeBuilderController.py`, `Frontend/` nem qualquer artefato em `BioComp_UFF/projects/**` ou `BioComp_UFF/data/**`. **Reversível:** sim — nada commitado ainda.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -3074,6 +3145,7 @@ Toda mudança na zona sagrada ([04-rigor-cientifico §1](04-rigor-cientifico.md)
 | D26 — `tree_config` não alcança o `TreeBuilder`; manifesto declara semente/threads pedidos, não executados | 2026-09-01 | **Não na topologia** — `--workers 1`/`-nt 1` (D17/D21) já fixam o que decide a árvore; o `N` de threads e a semente nunca divergiram na prática (todo experimento até hoje pediu o valor-padrão) | [DEC-060](#dec-060--2026-09-01--m71-fecha-ficha-de-chamada-por-método-achado-d26-e-e4-ganha-validação-de-oráculo). Confirmado lendo `treeBuilderController.py:803-849` (nenhuma das 4 chamadas avançadas repassa `tree_config`) e o `manifest.json` real de VARV-49 (`reproducibility` declara `raxml_threads:8, iqtree_threads:16`; a chamada usou os defaults 4/4). Achado de auditoria de código (M7.1), não de execução — nenhuma árvore recalculada | Não se aplica — nenhum número publicado envolvido; correção fica para lote futuro de M7 (fora do escopo de M7.1, que é só a ficha) |
 | E4 — VARV-121 como segunda réplica: NJ replica como mais sensível, UPGMA não replica exatamente | 2026-09-02 | **Não** — leitura exploratória de E4, nenhuma linha de código mudou | [DEC-062](#dec-062--2026-09-02--varv-121-reexecutado-e-validado-e4-ganha-a-segunda-réplica). Oráculo dendropy confere os 5 pares mafft×mafft_iterative de VARV-121 (Δ=0 contra `rf_matrix.csv`; 118=n−3 bipartições não triviais em ambos os alinhadores, sem polítoma). NJ é o método mais sensível à troca de alinhador nos dois conjuntos de *Variola* (0,1522 e 0,1949) — confirma a recomendação (i) do parecer de DEC-060. UPGMA não replica: no patamar dos métodos de caráter em VARV-49 (0,0217), sobe para perto do NJ em VARV-121 (0,1864) | **Pendente** — critério de sucesso de E4 ("replicar em ao menos 2 conjuntos") parcialmente satisfeito dentro de *Variola*; falta generalização entre espécies/regimes de contraste de alinhador e o rastreio mecanístico da matriz-Q (recomendação ii de DEC-060, não executada) |
 | M2.6/M2.7 — `expected.json` regenerado a partir da reexecução limpa, portão fecha em código 0 | 2026-09-02 | **Não** — o alvo (`mafft`+`mafft_iterative`) já estava correto desde DEC-050, só não regravado; nenhum número do artigo cita este fixture ainda | [DEC-063](#dec-063--2026-09-02--m2-fecha--expectedjson-regenerado-a-partir-da-reexecução-limpa-portão-em-código-0). `source_project` passa de `Variola_Yu_li_2007` (pré-M1) para `Variola_VARV49_reexec_20260901` (D25 corrigido, oráculo-validado em DEC-062). `target_M_size` 5→10; `present_pipelines` 8→10, sem os 4 `clustalo_*` contaminados que sobreviviam por o gerador nunca limpar `trees/` antes de copiar (corrigido). `make reference-check`: código 2 ("4 de 5, falta mafft_raxml") → **código 0**, 10 de 10 pipelines, 3 de 3 invariantes | **Aprovada** — coberta pelo pedido explícito de fechar M2 |
+| D23 item 1 — aquisição e a rota de gerar dataset via GenBank passam a preferir RefSeq | 2026-09-04 | **Ainda não em nenhum artefato publicado** — muda código de aquisição, não recalcula nada em disco | [DEC-083](#dec-083--2026-09-04--d23--item-1-implementado-aquisição-e-a-rota-de-gerar-dataset-via-genbank-passam-a-preferir-refseq-na-posição-de-hoje). Sem oráculo dendropy/ete3 aplicável (não é cálculo de árvore); invariante verificado é independência de ordem — as duas permutações dos dois pares conhecidos (Taterapox, Camelpox) convergem para o mesmo sobrevivente RefSeq nas duas rotas tocadas. `workflow.tests.test_deduplicacao` (a terceira implementação, `dataValidation.py`, rota do `TreeBuilderController`) **não foi alterado** — fora do pedido explícito, continua caracterizando "primeira ocorrência vence" nessa rota. Achado incidental corrigido junto: `filter_sequences` tinha `del filtered` antes de `return filtered`, `UnboundLocalError` sempre capturado pelo próprio `except`, `output_file` sempre reescrito vazio — `initial_min_length` nunca filtrava nada na prática | Não se aplica — nenhum número publicado envolvido ainda; materializa só quando algum conjunto for reaquisitado |
 
 ## Handoffs e relatórios
 
