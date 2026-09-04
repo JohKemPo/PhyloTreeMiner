@@ -45,9 +45,10 @@ async def test_rota_lista_todas_as_arvores_do_projeto(client, projeto_existe):
     metodos = {a["metodo"] for a in corpo["arvores"]}
     assert {"iqtree", "fasttree", "raxml", "nj_distance", "upgma_distance"} <= metodos
 
-    # A nota de não-comparabilidade acompanha a resposta inteira.
+    # A nota de não-comparabilidade acompanha a resposta inteira. Em inglês
+    # (convenção da UI) — só o texto exposto na tela, não a chave `nota`.
     assert corpo["comparabilidade"]["entre_metodos"] is False
-    assert "não são comparáveis" in corpo["comparabilidade"]["nota"].lower()
+    assert "not comparable" in corpo["comparabilidade"]["nota"].lower()
 
 
 async def test_metodo_sem_suporte_devolve_null_e_nao_zero(client, projeto_existe):

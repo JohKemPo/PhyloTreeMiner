@@ -19,7 +19,7 @@ const BRANCH_SUPPORT = {
   projeto: PROJETO,
   comparabilidade: {
     entre_metodos: false,
-    nota: "Os valores de suporte NÃO são comparáveis entre métodos de inferência.",
+    nota: "Support values are NOT comparable across inference methods.",
   },
   arvores: [
     {
@@ -93,7 +93,7 @@ describe("MethodologicalSupport (M3.3) — bootstrap e suporte metodológico lad
     // Clado 111: bootstrap 100, suporte metodológico 2/5 — a UI precisa
     // mostrar os dois números lado a lado, sem misturar escalas.
     expect(screen.getByText(/2\/5/)).toBeInTheDocument();
-    expect(screen.getByText(/discordante/i)).toBeInTheDocument();
+    expect(screen.getByText(/discordant/i)).toBeInTheDocument();
 
     // O braço sem bootstrap (nj_distance) não deve virar linha na tabela —
     // não há bootstrap nenhum para cruzar.
