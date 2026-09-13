@@ -325,7 +325,7 @@ T4 (frontend)         M4.21 ‖ M4.22 → M4.23 (após M4.1)
 #       no mesmo diretório de projeto: dois arquivos, uma conclusão em cada.
 ```
 
-### M5 — Estrutural (W4) ✅ Arq-A, Arq-C e Grafo implementados e verificados em 2026-09-13 — pendente só o commit
+### M5 — Estrutural (W4) ✅ Arq-A, Arq-C e Grafo fechados em 2026-09-13 (Arq-B em trilha própria)
 
 | Bloco | Itens | Trilha | Estado |
 |---|---|---|---|
@@ -334,7 +334,7 @@ T4 (frontend)         M4.21 ‖ M4.22 → M4.23 (após M4.1)
 | Arq-C | `services/http.js` + módulos por domínio; decompor `PhylogeneticTreeViewer`; React Query | T4 | ✅ [DEC-086](07-log-de-execucao.md) — `PhylogeneticTreeViewer` de 1096 para ~430 linhas; `localhost:8000` fora de `src/`; 43 testes (era 25) |
 | Grafo | Esquema versionado com migrações idempotentes (e o inverso de cada uma); catálogo de consultas predefinidas | T5 | ✅ [DEC-086](07-log-de-execucao.md) — idempotência provada nos dois sentidos (up/down), com `PROFILE` antes/depois |
 
-**Gate de M5:** nenhum golden snapshot **relevante** mudou com Arq-A/Arq-C/Grafo (`test_projects_listing` segue vermelho, mas por drift de projetos em disco pré-existente — confirmado 3x independentes antes de qualquer um destes três lotes, ver DEC-085/086) ✅; `docker compose up` sobe tudo ✅; `grep -rl "localhost:8000" Frontend/` **não** está vazio ao rodar o comando literal (bate em `.env.development`/`.env.production`, que é onde o valor deveria morar) — vazio em `src/`, que é o critério real do achado F-2 ✅; `make reference-check` verde ✅ ([DEC-086](07-log-de-execucao.md)). Arq-A, Arq-C e Grafo prontos; Arq-B segue aberto (trilha própria, sem gate bloqueante para os outros três). **Falta só commitar** para o marco se materializar no histórico.
+**Gate de M5:** nenhum golden snapshot **relevante** mudou com Arq-A/Arq-C/Grafo (`test_projects_listing` segue vermelho, mas por drift de projetos em disco pré-existente — confirmado 3x independentes antes de qualquer um destes três lotes, ver DEC-085/086) ✅; `docker compose up` sobe tudo, agora com o nginx cobrindo **todas** as rotas que o frontend chama (rotas de topo incluídas — [DEC-087](07-log-de-execucao.md)) ✅; `grep -rl "localhost:8000" Frontend/` vazio em `src/` (as duas exceções de F-8 chamam host diferente do próprio backend) ✅; `make reference-check` verde ✅. F-8 (header `X-User-ID` consistente) fecha com 2 exceções documentadas ([DEC-087](07-log-de-execucao.md)). Arq-A, Arq-C e Grafo **fechados e commitados**; Arq-B segue aberto em trilha própria, sem gate bloqueante para os outros três.
 
 > **Arq-B tem valor de processo além do técnico:** enquanto `app.py` for um monólito de 2 597 linhas (medido em 2026-09-01; ver M4), a trilha T2 é **serial** e é o gargalo de paralelismo do projeto inteiro ([§7 da arquitetura](09-arquitetura-de-agentes.md#7-paralelismo--seis-trilhas)). Quebrá-lo multiplica a vazão de todos os marcos seguintes.
 

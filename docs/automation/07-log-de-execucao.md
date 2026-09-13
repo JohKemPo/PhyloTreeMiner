@@ -3252,6 +3252,59 @@ Achados **não corrigidos nesta sessão**, aceitos como estão:
 
 **Write-lock:** disjunto entre os três agentes — Arq-A (`Backend/Dockerfile`, `Frontend/Dockerfile`, `nginx.conf`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.dockerignore`), Arq-C (`Frontend/phylotreeminer/src/**`, `vite.config.js`, `package.json`, `pnpm-lock.yaml`), Grafo (`Backend/src/graph_migrations/`, `Backend/src/graph_queries/`, `Backend/scripts/graph_migrate.py`, `Backend/src/routers/neo4j_router.py`, `docs/data-model/neo4j.md`). Nenhuma sobreposição de arquivo entre os três. **Reversível:** sim — nada commitado, `git checkout`/remoção dos arquivos novos desfaz tudo.
 
+### DEC-087 · 2026-09-13 · M5 fecha de vez — nginx cobre as rotas de topo, frontend migra para caminho relativo, F-8 fecha
+
+**Gatilho:** pedido do usuário, na sequência de DEC-086 — cobrir no nginx as rotas de topo que faltavam, migrar as chamadas para caminho relativo e fechar F-8 (header `X-User-ID` consistente em todo `fetch` para o próprio backend), commitando tudo de forma organizada.
+
+#### 1. Cobertura de rota no nginx + caminho relativo — feito diretamente, sem agente
+
+Levantei com `grep '@app\.(get|post|...)'` em `Backend/src/app.py` todas as rotas de topo sem prefixo `/api`: `/browse`, `/dataFolders`, `/file`, `/inputs_data`, `/projects` (+ `/status`, `/details`, `/{nome}`, `/{nome}/can-rerun`, `/{nome}/rerun`, `/{nome}/run`), `/upload-data`, `/uploaded-data`. Nenhuma estava coberta pelo `nginx.conf` de Arq-A (só `/api/` e `/ws/`) — exatamente o bloqueio que Arq-C tinha registrado em DEC-086. Um único `location` por regex (`^/(browse|dataFolders|file|inputs_data|projects|upload-data|uploaded-data)(/.*)?$`) cobre as duas formas de cada rota; `proxy_pass http://backend:8000;` sem caminho no destino preserva o URI original inteiro.
+
+`Frontend/phylotreeminer/.env.production` passou a ter `VITE_API_URL`/`VITE_WS_URL` **vazios** de propósito — `src/config.js` já caía em string vazia sem eles (essa parte já vinha pronta do lote de Arq-C), e string vazia vira caminho relativo em todo `fetch`/`WebSocket` (o `WebSocket` relativo é resolvido pelo próprio navegador contra a origem do documento, com `http→ws`/`https→wss`, então nem `wsUrl()` precisou de ajuste).
+
+**Verificado de ponta a ponta, contra os containers reais (não mock):**
+```
+docker compose build frontend && docker compose up -d frontend
+docker exec phylotree_frontend nginx -t                            → syntax ok, test successful
+curl .../8080/projects            → 200, idêntico byte a byte a curl .../8000/projects (diff vazio)
+curl .../8080/browse?path=         → 200
+curl .../8080/dataFolders          → 200
+curl .../8080/qualquer-rota-react  → 200 (SPA fallback intacto)
+grep -rl "localhost:8000" dist/assets/  → nada (bundle de produção limpo)
+```
+
+#### 2. F-8 — todo `fetch`/`WebSocket` ao próprio backend passa por `services/http.js`
+
+Retomado o agente de Arq-C (mesmo contexto da sessão anterior, evita rediscovery). Migrou 11 arquivos que ainda faziam `fetch` cru sobre `API_URL`/`WS_URL` para `httpGet`/`httpPost`/`httpPut`/`httpDelete`/`wsUrl`: `CQLExecutor.jsx`, `projectsGallery.jsx` (+ `new WebSocket` → `wsUrl()`), `projectExplorer.jsx`, `projectsTableView.jsx`, `pipelineConfigurator.jsx`, `SystemHealth.jsx`, `TreePatternAnalysis.jsx`, `GraphVisualization.jsx`, `MethodologicalSupport.jsx`, `ProvenanceView.jsx`, `Tree/useLocalMetadataIndex.js`. `services/http.js` ganhou um ajuste: corpo já `string` (ex. `application/x-www-form-urlencoded` de `/api/ncbi/set-email`) passa direto, sem `JSON.stringify` (senão virava `"a=1"` em vez de `a=1`) — conferido que **só** esse chamador passa string, nenhum outro dependia do duplo-encode antigo.
+
+**Duas exceções deliberadas, não migradas, cada uma com comentário no próprio arquivo:**
+1. `GraphVisualization.checkConnectionStatus` (`/status`) decide o estado pelo **corpo** da resposta mesmo com `!response.ok` (mostra o aviso "Create an Instance" quando o Neo4j está fora do ar) — `httpGet` lançaria antes disso e escondia o aviso.
+2. `useGeocoding.getCoordinatesForCountryWithFallback` chama o Nominatim/OpenStreetMap, um terceiro — migrar vazaria `X-User-ID` (interno) para fora do próprio backend.
+
+**Verificado, com os containers reais, um endpoint por arquivo migrado** (tabela completa no relatório do agente — todos 200, inclusive `POST /api/cql/execute` e `POST /api/neo4j/graph` com `X-User-ID` chegando via header automático).
+
+#### 3. Revisão (`ptm-revisor-codigo`) — aprovado com ressalvas, corrigidas antes do commit
+
+- **Regressão de rótulo de erro em `pipelineConfigurator.jsx`** (achado real, média severidade): o padrão antigo era `if (data.success) {...} else { mensagem de erro específica }`; como `httpPost` agora lança em qualquer não-2xx, o `else` virou código morto e o `catch` rotulava **todo** erro do backend (500 em `/api/ncbi/search-species`, 400 em `/api/ncbi/download`) como "Connection error/Connection Error" — mentindo sobre a natureza do erro. Corrigido nos dois pontos com o padrão já usado em `projectsTableView.jsx`: `error.isNetworkError` distingue "não deu para contatar o backend" de "backend respondeu com erro", preservando a mensagem original (`"An error occurred while searching for species"`, `"Download Failed"`) com o detalhe do backend anexado.
+- **`nginx.conf` não estava commitado** quando eu disse que estava — corrigido comitando junto de `.env.production` (o segundo depende do primeiro para não quebrar produção).
+- **`node_modules/` na raiz do repo, não coberto por `.gitignore`** (achado colateral, baixa severidade): era só cache `.vite/` de 20K, de uma ferramenta rodada do diretório errado durante a sessão — removido, e `.gitignore` da raiz ganhou `node_modules/` (o do Frontend já tinha o seu próprio).
+- **`GraphVisualization.jsx`**: `httpGet(\`${API_URL}/predefined-queries\`)` (única chamada migrada que ainda montava URL manualmente, funcionando por acidente) → `httpGet('/api/neo4j/predefined-queries')`; header `X-User-ID` manual em `executeQuery` removido — `httpPost` já injeta o mesmo valor a partir do `localStorage`.
+- Achado de estilo (`projectsData0` em `projectsGallery.jsx`) registrado, não corrigido — não viola diretriz escrita.
+
+**Verificação final, depois de todas as correções:**
+```
+npm --prefix Frontend/phylotreeminer run test -- --run   → 11 arquivos, 43 testes
+npm --prefix Frontend/phylotreeminer run build             → build ok
+npm --prefix Frontend/phylotreeminer run lint:ratchet       → 59/66 erros, 22/27 avisos (mesmo nível, sem regressão)
+docker compose build frontend && up -d                       → rebuild ok, healthy
+curl .../8080/projects, /api/neo4j/predefined-queries         → 200
+grep raw fetch/WebSocket sobre API_URL/WS_URL fora de http.js → só as 2 exceções documentadas
+```
+
+**Gate de M5, revisitado:** `grep -rl "localhost:8000" Frontend/` agora vazio **até em `src/`** (as duas exceções chamam host diferente do próprio backend, não `localhost:8000`); as rotas de topo têm proxy; F-8 fecha com 2 exceções justificadas e documentadas em 3 lugares (código, teste, ledger). M5 está **fechado** nos quatro blocos que cabiam nesta rodada (Arq-A, Arq-C, Grafo — Arq-B é trilha própria, deliberadamente não tocada).
+
+**Write-lock:** nginx/relativo (`nginx.conf`, `Frontend/phylotreeminer/.env.production`, `.gitignore`); F-8 (`Frontend/phylotreeminer/src/services/http.js`, os 11 arquivos migrados, `__tests__/config.test.js`); doc (este documento). **Reversível:** sim — nada passou de dois commits (mais este), `git revert` desfaz qualquer um isoladamente.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
