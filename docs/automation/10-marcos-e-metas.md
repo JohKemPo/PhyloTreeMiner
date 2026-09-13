@@ -194,7 +194,7 @@ make reference-check
 
 ---
 
-## 5. M3 — Resultado principal
+## 5. M3 — Resultado principal ✅ FECHADO em 2026-09-13
 
 **Meta.** Levar à UI e ao manuscrito o contraste **bootstrap × robustez metodológica**, que é o argumento do artigo e hoje é jogado fora pelo pipeline.
 
@@ -202,23 +202,25 @@ make reference-check
 
 | # | Lote | Trilha |
 |---|---|---|
-| M3.1 | ◐ Propagar `confidence` do `.contree` ao Nexus, ao `metadata.json` e ao grafo — **metade `BioComp_UFF/` fechada** ([DEC-064](07-log-de-execucao.md)): FastTree/IQ-TREE já propagavam (achado M7.1), RAxML-NG confirmado propagando ao Nexus depois de M3.2. Falta a metade `Backend/`/`Frontend/` (metadata.json/grafo/UI) | T1 (feito) + T2/T4 (aberto) |
+| M3.1 | ✅ Propagar `confidence` do `.contree` ao Nexus, ao `metadata.json` e à API — `BioComp_UFF/` (FastTree/IQ-TREE/RAxML-NG, achado M7.1) e `Backend/` (`GET /branch-support`, [DEC-070](07-log-de-execucao.md)) fechados. **Residual, fora do gate:** propagação ao grafo Neo4j nunca foi implementada — na fila de triagem, candidata a M5/Grafo ([DEC-070](07-log-de-execucao.md), retomado em [DEC-085](07-log-de-execucao.md)) | T1 + T2 (feito) · Neo4j (aberto, não bloqueia) |
 | M3.2 | ✅ Habilitado `--bs-trees 1000` no RAxML-NG ([DEC-064](07-log-de-execucao.md)) — é FBP, não UFBoot, ver nota em D10/ficha de método. FastTree já produzia suporte local por padrão, sem precisar de mudança | T1 |
-| M3.3 | UI exibe, por clado, **bootstrap e suporte metodológico lado a lado** | T4 |
-| M3.4 | Regenerar as três tabelas cruzadas (VARV-49, VARV-52, VARV-121) por um comando | T3 |
+| M3.3 | ✅ UI exibe, por clado, **bootstrap e suporte metodológico lado a lado** ([DEC-081](07-log-de-execucao.md), UI em inglês em [DEC-084](07-log-de-execucao.md)) | T4 |
+| M3.4 | ✅ Regenerar as três tabelas cruzadas (VARV-49, VARV-52, VARV-121) por um comando ([DEC-069](07-log-de-execucao.md)/[DEC-080](07-log-de-execucao.md)) | T3 |
 
-**Gate de M3:**
+**Gate de M3 — executado e verde em 2026-09-13** ([DEC-085](07-log-de-execucao.md)):
 
 ```bash
 make main-result     # regenera as 3 tabelas UFBoot × suporte metodológico
+                      # → EXIT 0. "As duas afirmações do artigo se sustentam nos 3
+                      #   conjunto(s) principal(is) testado(s)."
 ```
 
-Assere as duas afirmações do artigo, quantificadas e replicadas:
+Assere as duas afirmações do artigo, quantificadas e replicadas (números medidos em 2026-09-13, ligeiramente diferentes da estimativa original desta tabela — ver DEC-085 para a tabela de diff completa):
 
-- **(i)** UFBoot = 100 não garante robustez: 35/86 (VARV-121), 13/27 (VARV-49), 14/30 (VARV-52) sobrevivem à troca de método.
-- **(ii)** UFBoot alto é necessário, não suficiente: **0 de 167** ramos com UFBoot ≥ 95 recuperado por um único pipeline.
+- **(i)** UFBoot = 100 não garante robustez: 14/30 (VARV-49), 15/28 (VARV-52), 33/77 (VARV-121) sobrevivem à troca de método.
+- **(ii)** UFBoot alto é necessário, não suficiente: **0 de 163** ramos com UFBoot ≥ 95 recuperado por um único pipeline nos 3 conjuntos.
 
-Mais: toda árvore ML em `out/Trees/` carrega suporte de ramo; Pearson recalculado (esperado 0,27–0,44).
+Mais: toda árvore ML em `out/Trees/` carrega suporte de ramo; Pearson recalculado (0,275/0,413, dentro da faixa esperada 0,27–0,44 exceto o arredondamento de VARV-121). **Reprodução incompleta, não bloqueante** (código 2 do alvo): `mafft_raxml`/`mafft_iterative_raxml` de VARV-49/VARV-121/VARV-6 são artefatos anteriores a DEC-064 e não têm FBP — materializa só com reexecução.
 
 ---
 

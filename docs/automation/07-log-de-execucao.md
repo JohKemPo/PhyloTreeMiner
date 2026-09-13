@@ -3125,6 +3125,43 @@ cd Frontend/phylotreeminer && pnpm vitest run src/__tests__/methodologicalSuppor
 
 **Write-lock:** `CLAUDE.md`, `docs/automation/07-log-de-execucao.md` (este documento), memórias do agente (`nada-de-commit-sem-pedido.md`, `commits-sem-coautor.md`, `push-autorizacao-por-pedido.md`, `MEMORY.md`). Frontend/Backend já commitados no item 1. **Reversível:** sim.
 
+### DEC-085 · 2026-09-13 · Regressão de merge (conflitos não resolvidos desde DEC-084) corrigida; **M3 fecha**
+
+**Gatilho:** sessão nova, sem atividade desde DEC-084 (2026-09-04). Ao levantar o estado do projeto, o merge que fechou DEC-084 (`b709a01`/`ed2e2fc`) apareceu como tendo deixado marcadores de conflito **commitados e não resolvidos** em dois arquivos: `Backend/src/app.py:51-61` (bloco de import de `NCBIAcquisition`, D23/DEC-082) e `Frontend/phylotreeminer/src/__tests__/methodologicalSupport.test.jsx:96-100` (`discordante` × `discordant`). Confirmado que isso quebrava a importação de `src.app` com `SyntaxError` — a suíte de backend inteira estava vermelha desde 2026-09-04 — e o arquivo de teste do frontend não parseava.
+
+O usuário já tinha resolvido manualmente os dois conflitos antes desta sessão terminar de investigar (mantendo o lado em inglês, `discordant`, coerente com a decisão de DEC-084 sobre UI). `Frontend/.../projectExplorer.jsx` já estava correto em `HEAD`; o `git status` sujo vinha de uma tentativa anterior de contornar o bug comentando o render de `<MethodologicalSupport>`, também já revertida pelo usuário.
+
+**Evidência de execução:**
+```
+git stash && pytest (import de src.app) → SyntaxError na linha do marcador >>>>>>> (confirma que HEAD estava quebrado)
+git stash pop
+python -c "import ast; ast.parse(open('Backend/src/app.py').read())" → sintaxe OK
+npm --prefix Frontend/phylotreeminer run test -- --run → 9 arquivos, 25 testes, todos passando
+pytest Backend/tests -q → só 1 falha, pré-existente e sem relação: golden 'projects_nomes'
+  diverge porque a lista de projetos em disco mudou (drift ambiental, não de código)
+```
+
+**Commit:** `92828b6` — "Fix | marcadores de conflito de merge não resolvidos em app.py e methodologicalSupport.test.jsx". Sem `Co-Authored-By` ([[commits-sem-coautor]]).
+
+**M3 fecha — gate executável confirmado, não só suíte verde.** Rodado o gate real do marco:
+
+```
+make main-result PY="conda run -n Phylotreeminer python"   → EXIT_MAKE=0
+  (i)  UFBoot=100 não garante robustez  → sustenta em VARV-49 (46,7%), VARV-52 (53,6%), VARV-121 (42,9%)
+  (ii) UFBoot alto é necessário, não suficiente → 0 de 163 ramos idiossincráticos nos 3 conjuntos
+  Veredito: "As duas afirmações do artigo se sustentam nos 3 conjunto(s) principal(is) testado(s)."
+  Código 2 (reprodução incompleta, não falha o portão — ver comentário do alvo no Makefile):
+    mafft_raxml e mafft_iterative_raxml de VARV-49/VARV-121/VARV-6 são artefatos
+    anteriores a DEC-064 e não têm suporte de ramo (FBP) — pendência já registrada,
+    só materializa com reexecução.
+```
+
+As quatro sub-tarefas já estavam implementadas (M3.1 em DEC-070, M3.2 em DEC-064, M3.3 em DEC-081/084, M3.4 em DEC-069/080); faltava confirmar que o gate sobrevivia ao merge que as consolidou, e confirmar. `10-marcos-e-metas.md` passa a marcar M3 como fechado.
+
+⚠️ **Residual não coberto pelo gate, deliberadamente fora do escopo desta entrada:** o terceiro braço de M3.1, "propagar `confidence` ao grafo Neo4j", continua **não implementado** (pendência explícita de DEC-070, item 2) — o gate de M3 (`make main-result`) não o exercita, só a UI e as tabelas. Registrado na fila de triagem para não se perder; candidato natural a entrar como item da trilha T5 (Grafo) de M5, já que ambos tocam o mesmo esquema de propriedade de clado.
+
+**Write-lock:** `Backend/src/app.py`, `Frontend/phylotreeminer/src/__tests__/methodologicalSupport.test.jsx`, `docs/automation/10-marcos-e-metas.md`, `docs/automation/07-log-de-execucao.md` (este documento). **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -3284,3 +3321,4 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-09-01 | Uma tentativa real de reexecutar VARV-49 (`projects/Variola_Yu_li_2007_M2/`, 3 tentativas no mesmo diretório) morreu com `ValueError: No records found in handle`: o cache de alinhamento (`STEP: Reusing Aligning...`) reaproveitou um `dataset_final_mafft_iterative.aln` vazio, deixado por uma tentativa anterior interrompida no meio da escrita. O braço `mafft` tinha completado (5 árvores); `mafft_iterative` nunca produziu nada. Generaliza o aviso já existente em `docs/skills/validar-workflow/SKILL.md` ("o workflow reaproveita árvore existente") para o alinhamento também, agora com evidência de log | `projects/Variola_Yu_li_2007_M2/out/outputs/log_setup_2026-08-27_bb3fcd1b784d.log:14-20` | pesquisa para o guia de reexecução | Documentado como armadilha operacional em [`13-guia-reexecucao-m2.md §2.1`](13-guia-reexecucao-m2.md#21-regra-operacional-que-já-derrubou-uma-tentativa-diretório-novo-sempre) — `Variola_Yu_li_2007_M2/` fica envenenado e não deve ser reaproveitado. Sem write-lock aberto; considerar um guard (não reusar `.aln` de 0 bytes) como item de M7 |
 | 2026-09-01 | `Backend/tests/data/reference/expected.json` (`target_M`) ainda declara `"aligners": ["mafft"]` e justifica a exclusão de Clustal Omega/MUSCLE pela medição de OOM que [DEC-050](#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir) **retratou** (Clustal é limite de tempo; MUSCLE 5.3 recusa por interface, não OOM). Com o alvo desatualizado, uma reexecução de VARV-49 com os dois braços do MAFFT nunca faz `reference_check.py --trees` devolver M completo — o braço `mafft_iterative` não entra em `alvo_nomes` | `Backend/tests/data/reference/expected.json` (`target_M`) | pesquisa para o guia de reexecução | **Bloqueia o fechamento de M2** — é zona sagrada (muda o invariante de gate); atualizar via `make reference-dataset` **depois** de corrigir `target_M` e registrar parecer próprio, não junto de outro lote |
 | 2026-09-03 | Um arquivo `PROVENIENCIA.md` (ou qualquer `.md` de proveniência) dentro do diretório de um dataset é lido pela etapa de input do workflow como mais um arquivo de sequência — a leitura varre o diretório sem filtrar por extensão/conteúdo. Contornado nesta sessão movendo o arquivo para fora do diretório do dataset (usuário, manual); não caracterizado a fundo | leitura de input do `BioComp_UFF/workflow` (etapa não localizada nesta sessão) | DEC-078 | **Triagem pendente** — mesma classe de risco de [D19](../science/02-defeitos-que-alteram-resultado.md#d19) (arquivo inesperado no diretório de dados contamina/quebra o pipeline silenciosamente); considerar filtro por extensão/whitelist como item de M7 |
+| 2026-09-03 | M3.1, terceira perna ("ao grafo"): propagação de `confidence`/`metrica`/`metodo` de suporte de ramo ao Neo4j nunca foi implementada — só Nexus/`metadata.json`/API/UI (M3.1 Backend, M3.3) existem | `Backend/src/suporte_de_ramo.py` (rota existe, não escreve no grafo) | DEC-070, achado retomado em DEC-085 | **Candidato a M5/Grafo** — mesmo esquema de propriedade de clado que a migração versionada de M5 vai tocar; não bloqueia o gate de M3 (`make main-result` não o exercita) |
