@@ -22,3 +22,4 @@ Um documento entra aqui quando responde a uma pergunta que vai voltar: *por que 
 | [R2](r2.md) | Limites de ferramenta não são propriedade da ferramenta — o que é do algoritmo e o que é da máquina | 2026-08-25 |
 | [R3](r3.md) | Por que o Deep Analysis precisava de bootstrap e suporte metodológico lado a lado (DEC-081) | 2026-09-04 |
 | [R4](r4.md) | O panorama da literatura de referência antes de M6: cinco achados que atravessam os seis dossiês de `docs/literatura/` | 2026-09-13 |
+| [R5](r5.md) | Temos um estudo nível Nature? Avaliação sem viés da contribuição de VARV/ZIKA ao estado da arte, com pesquisa externa | 2026-09-13 |
