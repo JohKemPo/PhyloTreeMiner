@@ -23,3 +23,4 @@ Um documento entra aqui quando responde a uma pergunta que vai voltar: *por que 
 | [R3](r3.md) | Por que o Deep Analysis precisava de bootstrap e suporte metodológico lado a lado (DEC-081) | 2026-09-04 |
 | [R4](r4.md) | O panorama da literatura de referência antes de M6: cinco achados que atravessam os seis dossiês de `docs/literatura/` | 2026-09-13 |
 | [R5](r5.md) | Temos um estudo nível Nature? Avaliação sem viés da contribuição de VARV/ZIKA ao estado da arte, com pesquisa externa | 2026-09-13 |
+| [R6](r6.md) | A implementação roda FPMax de verdade, ou calcula a mesma coisa por outro caminho? Por que a substituição é correta em `M` pequeno | 2026-09-13 |
