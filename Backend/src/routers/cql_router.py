@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException
-from src.services.neo4j_services import neo4j_service, Neo4jUnavailableError
+from fastapi import APIRouter, Depends, HTTPException
+from src.services.neo4j_services import get_neo4j_service, Neo4jUnavailableError
 from src.logging_conf import obter_logger
 import re
 
@@ -19,7 +19,7 @@ def _neo4j_indisponivel() -> HTTPException:
 
 
 @router.post("/execute")
-async def execute_cql(query_data: dict):
+async def execute_cql(query_data: dict, neo4j_service = Depends(get_neo4j_service)):
     """
     Executa um ou múltiplos comandos CQL
     """
@@ -55,7 +55,7 @@ async def execute_cql(query_data: dict):
         raise HTTPException(status_code=500, detail="Erro na execução da query.")
     
 @router.post("/execute-batch")
-async def execute_batch_cql(query_data: dict):
+async def execute_batch_cql(query_data: dict, neo4j_service = Depends(get_neo4j_service)):
     """
     Executa comandos CQL em lote para mitigar overhead de rede e transações.
     """

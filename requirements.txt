@@ -24,3 +24,4 @@ PyQt5==5.15.11
 python-dotenv==1.0.1
 psutil==5.9.8
 httpx==0.28.1
+pydantic-settings==2.15.0

@@ -10,6 +10,11 @@ import time
 
 import pytest
 
+from src import config as _config
+from src.services import tree_metadata_service as _tree_metadata_service
+from src.services import tree_compare_service as _tree_compare_service
+from src.services import pattern_analysis_service as _pattern_analysis_service
+
 
 def _bloqueia_por(segundos, retorno=None):
     def _lenta(*args, **kwargs):
@@ -29,7 +34,10 @@ async def _mede_latencia_concorrente(client, chamada_lenta_coro):
 
 
 async def test_compare_trees_nao_bloqueia_o_loop(client, app_module, monkeypatch):
-    monkeypatch.setattr(app_module, "_comparar_arvores_sync", _bloqueia_por(0.5, {"ok": True}))
+    # Arq-B/M5: `compare_trees` foi para routers/tree_router.py, que chama
+    # `tcs._comparar_arvores_sync` por acesso qualificado ao módulo de
+    # serviço — o isolamento é feito ali, não em `app_module`.
+    monkeypatch.setattr(_tree_compare_service, "_comparar_arvores_sync", _bloqueia_por(0.5, {"ok": True}))
 
     async def chamada():
         return await client.post("/api/tree/compare", json={"tree1": "x", "tree2": "y"})
@@ -39,7 +47,10 @@ async def test_compare_trees_nao_bloqueia_o_loop(client, app_module, monkeypatch
 
 
 async def test_pattern_analysis_nao_bloqueia_o_loop(client, app_module, monkeypatch):
-    monkeypatch.setattr(app_module, "_analisar_padroes_sync", _bloqueia_por(0.5, {"ok": True}))
+    # Arq-B/M5: `analyze_tree_patterns` foi para routers/tree_router.py, que
+    # chama `pas._analisar_padroes_sync` por acesso qualificado ao módulo de
+    # serviço — o isolamento é feito ali, não em `app_module`.
+    monkeypatch.setattr(_pattern_analysis_service, "_analisar_padroes_sync", _bloqueia_por(0.5, {"ok": True}))
 
     async def chamada():
         return await client.get("/api/tree/pattern-analysis/projeto-qualquer")
@@ -67,8 +78,8 @@ async def test_gen_plot_metadata_cache_nao_bloqueia_o_loop(client, app_module, m
     (tmp_path / projeto / "out" / "outputs" / "metadata.json").write_text("[]", encoding="utf-8")
     (outputs_dir / "arvore_anotada_final.png").write_bytes(b"\x89PNG\r\n")
 
-    monkeypatch.setattr(app_module, "PROJECTS_ROOT", str(tmp_path))
-    monkeypatch.setattr(app_module, "get_metadata_cache", _bloqueia_por(0.5, {"node_index": {}}))
+    monkeypatch.setattr(_config, "PROJECTS_ROOT", str(tmp_path))
+    monkeypatch.setattr(_tree_metadata_service, "get_metadata_cache", _bloqueia_por(0.5, {"node_index": {}}))
 
     async def chamada():
         return await client.get(f"/api/gen_plot/{projeto}")
@@ -82,13 +93,13 @@ async def test_build_metadata_index_nao_bloqueia_o_loop(client, app_module, monk
     metadata_path.write_text("[]", encoding="utf-8")
 
     monkeypatch.setattr(
-        app_module, "PROJECTS_ROOT", str(tmp_path.parent)
+        _config, "PROJECTS_ROOT", str(tmp_path.parent)
     )
     projeto_dir = tmp_path.parent / "projeto-qualquer" / "out" / "outputs"
     projeto_dir.mkdir(parents=True, exist_ok=True)
     (projeto_dir / "metadata.json").write_text("[]", encoding="utf-8")
 
-    monkeypatch.setattr(app_module, "get_metadata_cache", _bloqueia_por(0.5, {"insights": {}}))
+    monkeypatch.setattr(_tree_metadata_service, "get_metadata_cache", _bloqueia_por(0.5, {"insights": {}}))
 
     async def chamada():
         return await client.get("/api/tree/projeto-qualquer/insights")
@@ -113,29 +124,36 @@ def test_render_annotated_tree_nao_e_chamado_via_to_thread():
     `tests/unit/test_tree_plot.py::test_fora_da_main_thread_levanta_assertion_em_vez_de_crashar`.
     Esta varredura fica como checagem estática barata do caso direto, não
     como a única linha de defesa.
+
+    Arq-B/M5: `generate_tree_plot` (o único chamador de `render_annotated_tree`)
+    saiu de `app.py` para `routers/tree_router.py` — a varredura teria ficado
+    vazia (e o teste, um falso-positivo silencioso) se continuasse apontando
+    só para app.py; por isso os dois arquivos entram na varredura.
     """
     import ast
     import pathlib
 
-    caminho = pathlib.Path(__file__).resolve().parents[2] / "src" / "app.py"
-    tree = ast.parse(caminho.read_text(encoding="utf-8"), filename=str(caminho))
+    raiz_src = pathlib.Path(__file__).resolve().parents[2] / "src"
+    arquivos = [raiz_src / "app.py", raiz_src / "routers" / "tree_router.py"]
 
     ofensores = []
-    for node in ast.walk(tree):
-        alvo_thread = (
-            isinstance(node, ast.Call)
-            and (
-                getattr(node.func, "attr", "") in {"to_thread", "run_in_executor"}
-                or getattr(node.func, "id", "") == "to_thread"
+    for caminho in arquivos:
+        tree = ast.parse(caminho.read_text(encoding="utf-8"), filename=str(caminho))
+        for node in ast.walk(tree):
+            alvo_thread = (
+                isinstance(node, ast.Call)
+                and (
+                    getattr(node.func, "attr", "") in {"to_thread", "run_in_executor"}
+                    or getattr(node.func, "id", "") == "to_thread"
+                )
             )
-        )
-        if not alvo_thread:
-            continue
-        for arg in node.args:
-            if isinstance(arg, ast.Name) and arg.id == "render_annotated_tree":
-                ofensores.append(node.lineno)
+            if not alvo_thread:
+                continue
+            for arg in node.args:
+                if isinstance(arg, ast.Name) and arg.id == "render_annotated_tree":
+                    ofensores.append(f"{caminho.name}:{node.lineno}")
 
     assert ofensores == [], (
-        f"render_annotated_tree passado a to_thread/run_in_executor em app.py:{ofensores} "
+        f"render_annotated_tree passado a to_thread/run_in_executor em {ofensores} "
         "— Qt crasha fora da main thread (B4, ver docstring deste teste)"
     )

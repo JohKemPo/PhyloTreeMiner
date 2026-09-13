@@ -2,6 +2,7 @@
 import pytest
 
 import src.seguranca as seguranca_module
+from src import config as _config
 
 
 @pytest.fixture(autouse=True)
@@ -17,7 +18,9 @@ def limite_baixo_e_isolado(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def data_root_isolado(app_module, tmp_path, monkeypatch):
-    monkeypatch.setattr(app_module, "DATA_ROOT", str(tmp_path))
+    # Arq-B/M5: `/upload-data` foi para routers/input_data_router.py, que lê
+    # DATA_ROOT via `cfg.DATA_ROOT` (acesso qualificado a `src.config`).
+    monkeypatch.setattr(_config, "DATA_ROOT", str(tmp_path))
 
 
 async def test_upload_data_429_apos_n_mais_1(client):

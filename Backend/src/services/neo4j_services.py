@@ -1,12 +1,11 @@
-from neo4j import AsyncGraphDatabase 
-import os
-from dotenv import load_dotenv
+from neo4j import AsyncGraphDatabase
 import pathlib
 from typing import List, Dict, Any, Tuple
 from neo4j.graph import Node, Relationship, Path
 
+from src.config import get_settings
+
 env_path = pathlib.Path(__file__).resolve().parents[3] / ".env"
-load_dotenv(dotenv_path=env_path)
 
 class Neo4jUnavailableError(Exception):
     """Levantada quando uma operação é pedida com o driver desconectado.
@@ -19,9 +18,10 @@ class Neo4jUnavailableError(Exception):
 
 class Neo4jService:
     def __init__(self, uri: str = None, username: str = None, password: str = None):
-        self.uri = uri or os.getenv('NEO4J_URI', 'bolt://localhost:7687')
-        self.username = username or os.getenv('NEO4J_USERNAME', 'neo4j')
-        self.password = password or os.getenv('NEO4J_PASSWORD')
+        settings = get_settings()
+        self.uri = uri or settings.neo4j_uri
+        self.username = username or settings.neo4j_username
+        self.password = password or settings.neo4j_password
         self.driver = None
         self.connected = False
         if not self.password:
@@ -178,3 +178,18 @@ class Neo4jService:
             return False
 
 neo4j_service = Neo4jService()
+
+
+def get_neo4j_service() -> Neo4jService:
+    """Provider de DI (Arq-B/M5): routers recebem o serviço por
+    `Depends(get_neo4j_service)` em vez de importar o singleton global
+    diretamente — `neo4j_router.py`, `cql_router.py` e `cql_batch_router.py`
+    já foram convertidos.
+
+    Continua devolvendo o MESMO singleton de módulo, não um novo por
+    requisição: o driver do neo4j é uma conexão de longa duração, gerida pelo
+    `lifespan` de `app.py` (`connect()`/`close()`), não algo para abrir e
+    fechar por requisição. O que muda é o ponto de acesso — call sites
+    recebem por injeção, não por import direto —, não o ciclo de vida.
+    """
+    return neo4j_service

@@ -13,10 +13,23 @@ import json
 
 import pytest
 
+import importlib
+
+from src import config as _config
+# Ver nota em test_limites_entrada.py: `routers/__init__.py` sombreia o nome
+# `input_data_router` com o objeto `APIRouter`; `importlib.import_module`
+# busca direto em `sys.modules`, sem passar pelo `__dict__` do pacote.
+_input_data_router = importlib.import_module("src.routers.input_data_router")
+
 
 @pytest.fixture
 def projeto_json(tmp_path, app_module, monkeypatch):
-    """Um projeto de mentira com um JSON de cada forma."""
+    """Um projeto de mentira com um JSON de cada forma.
+
+    Arq-B/M5: `/api/file/paginated` e `/file` foram para
+    `routers/input_data_router.py`, que lê `PROJECTS_ROOT` via `cfg.PROJECTS_ROOT`
+    (acesso qualificado a `src.config`, em tempo de chamada) — o isolamento é
+    feito ali, não em `app_module` (ver comentário em src/config.py)."""
     raiz = tmp_path / "projetos"
     saida = raiz / "proj" / "out" / "outputs"
     saida.mkdir(parents=True)
@@ -30,7 +43,7 @@ def projeto_json(tmp_path, app_module, monkeypatch):
                                          encoding="utf-8")
     (saida / "vazio.json").write_text("", encoding="utf-8")
 
-    monkeypatch.setattr(app_module, "PROJECTS_ROOT", str(raiz))
+    monkeypatch.setattr(_config, "PROJECTS_ROOT", str(raiz))
     return raiz
 
 
@@ -100,7 +113,7 @@ class TestPreviaPaginada:
                                                          app_module, monkeypatch):
         """"Grande demais" precisa ser um erro próprio: um `f.read()` num
         metadata.json de 3,2 GB derruba o processo."""
-        monkeypatch.setattr(app_module, "MAX_JSON_INLINE_BYTES", 10)
+        monkeypatch.setattr(_input_data_router, "MAX_JSON_INLINE_BYTES", 10)
         r = await client.get("/api/file/paginated",
                              params={"path": "proj/out/outputs/manifest.json"})
         assert r.status_code == 413
@@ -127,7 +140,7 @@ class TestLeituraDireta:
 
     async def test_arquivo_grande_e_recusado_antes_de_ler(self, client, projeto_json,
                                                           app_module, monkeypatch):
-        monkeypatch.setattr(app_module, "MAX_JSON_INLINE_BYTES", 10)
+        monkeypatch.setattr(_input_data_router, "MAX_JSON_INLINE_BYTES", 10)
         r = await client.get("/file", params={"path": "proj/out/outputs/manifest.json"})
         assert r.status_code == 413
         assert "paginated" in r.json()["detail"]

@@ -11,6 +11,8 @@ custou metade do delineamento dos experimentos de *Variola*.
 """
 import pytest
 
+from src import config as _config
+
 
 class TestBiblioteca:
     async def test_lista_a_biblioteca_de_alinhadores(self, client):
@@ -50,7 +52,9 @@ def dados(tmp_path, app_module, monkeypatch):
     # Uma sequência acima do limite do Clustal Omega (20 kb).
     (longo / "dataset_final.fasta").write_text(
         ">a\n" + "ACGT" * 10_000 + "\n>b\n" + "ACGT" * 10_000 + "\n", encoding="utf-8")
-    monkeypatch.setattr(app_module, "DATA_ROOT", str(raiz))
+    # Arq-B/M5: `/api/aligners/viability` foi para routers/aligners_router.py,
+    # que lê DATA_ROOT via `cfg.DATA_ROOT` (acesso qualificado a `src.config`).
+    monkeypatch.setattr(_config, "DATA_ROOT", str(raiz))
     return raiz
 
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
-from ..services.neo4j_services import neo4j_service, Neo4jUnavailableError
+from ..services.neo4j_services import get_neo4j_service, Neo4jUnavailableError
 from ..logging_conf import obter_logger
 from ..seguranca import exigir_admin
 from ..graph_queries.catalogo import obter_catalogo
@@ -36,7 +36,7 @@ async def get_user_id(x_user_id: str = Header(...)):
     return x_user_id
 
 @router.get("/status")
-async def get_connection_status():
+async def get_connection_status(neo4j_service = Depends(get_neo4j_service)):
     """Verifica o status da conexão com Neo4j."""
     return {
         'connected': neo4j_service.connected,
@@ -45,7 +45,7 @@ async def get_connection_status():
     }
 
 @router.post("/connect", dependencies=[Depends(exigir_admin)])
-async def set_connection(details: ConnectionDetails):
+async def set_connection(details: ConnectionDetails, neo4j_service = Depends(get_neo4j_service)):
     """
     Configura e testa uma nova conexão com o banco de dados Neo4j.
     """
@@ -64,11 +64,15 @@ async def set_connection(details: ConnectionDetails):
         )
 
 @router.post("/query")
-async def execute_cypher_query(cypher_query: CypherQuery, user_id: str = Depends(get_user_id)):
+async def execute_cypher_query(
+    cypher_query: CypherQuery,
+    user_id: str = Depends(get_user_id),
+    neo4j_service = Depends(get_neo4j_service),
+):
     """Executa uma consulta Cypher personalizada."""
-    
+
     cypher_query.parameters['user_id'] = user_id
-    
+
     if not cypher_query.query.strip():
         raise HTTPException(status_code=400, detail="Consulta não fornecida")
     try:
@@ -83,7 +87,11 @@ async def execute_cypher_query(cypher_query: CypherQuery, user_id: str = Depends
         raise HTTPException(status_code=500, detail="Erro ao executar a consulta.")
 
 @router.post("/graph")
-async def get_graph_data(cypher_query: CypherQuery, user_id: str = Depends(get_user_id)):
+async def get_graph_data(
+    cypher_query: CypherQuery,
+    user_id: str = Depends(get_user_id),
+    neo4j_service = Depends(get_neo4j_service),
+):
     """Retorna dados do grafo para visualização."""
     try:
         cypher_query.parameters['user_id'] = user_id

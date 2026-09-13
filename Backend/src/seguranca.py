@@ -2,13 +2,20 @@
 
 `exigir_admin` (M4.4) protege rotas de reconfiguração (S-5/DEC-004).
 `limitar_taxa` (M4.7) limita anônimos nas rotas de escrita (S-5/DEC-004).
+`resolve_within` (M4.?) barra path traversal; usado por várias rotas em
+`app.py` e, a partir de Arq-B/M5, também pelos routers extraídos — mora aqui
+(e não em `services/`) porque levanta `HTTPException`.
+`fechar_se_origem_nao_permitida` (M4.5) reaproveita a allowlist de CORS para
+o handshake de WebSocket, que `CORSMiddleware` não cobre.
 """
 import os
 import secrets
 import time
 from typing import Dict, Optional, Tuple
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Header, HTTPException, Request, WebSocket
+
+from src.config import get_settings, ALLOWED_ORIGINS
 
 
 async def exigir_admin(x_admin_token: Optional[str] = Header(default=None)):
@@ -27,7 +34,7 @@ async def exigir_admin(x_admin_token: Optional[str] = Header(default=None)):
     para derrubar a rota administrativa. `.encode()` para UTF-8 nunca levanta
     para nenhum `str` de entrada, então a comparação em bytes é total.
     """
-    admin_token = os.getenv("ADMIN_TOKEN")
+    admin_token = get_settings().admin_token
     if not admin_token or not x_admin_token:
         raise HTTPException(status_code=401, detail="Token de administrador ausente ou inválido.")
     if not secrets.compare_digest(x_admin_token.encode("utf-8"), admin_token.encode("utf-8")):
@@ -76,3 +83,35 @@ def limitar_taxa(chave: str):
             )
 
     return dependency
+
+
+def resolve_within(base: str, *parts: str) -> str:
+    """Resolve base/parts e garante que o resultado permanece dentro de base.
+
+    Movido de `app.py` (Arq-B/M5), literal — nenhuma condição mudou."""
+    base = os.path.abspath(base)
+    target = os.path.abspath(os.path.join(base, *parts))
+    try:
+        if os.path.commonpath([base, target]) != base:
+            raise HTTPException(status_code=403, detail="Acesso negado: caminho fora do diretório permitido.")
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Acesso negado: caminho fora do diretório permitido.")
+    return target
+
+
+async def fechar_se_origem_nao_permitida(websocket: WebSocket) -> bool:
+    """M4.5: reaproveita a allowlist de CORS para o handshake de WebSocket.
+
+    `CORSMiddleware` não se aplica a WebSocket; sem esta checagem, qualquer
+    origem se conecta. Fecha com 1008 (policy violation) antes de aceitar.
+    Devolve True se a conexão foi fechada.
+
+    Movido de `app.py` (Arq-B/M5): `/ws/progress/{project}` (agora em
+    routers/execution_router.py) e `/ws/system-performance` (ainda em
+    app.py) precisam do MESMO teste — daqui os dois.
+    """
+    origin = websocket.headers.get("origin")
+    if origin not in ALLOWED_ORIGINS:
+        await websocket.close(code=1008)
+        return True
+    return False

@@ -9,12 +9,21 @@ import json
 
 import pytest
 
+from src import config as _config
+
 
 @pytest.fixture
 def projeto_descartavel(tmp_path, app_module, monkeypatch):
     """Um projeto mínimo, num `PROJECTS_ROOT` isolado em `tmp_path` — a rota
     apaga de verdade (`shutil.rmtree`), e não deve ser exercitada contra o
-    diretório real de projetos."""
+    diretório real de projetos.
+
+    Arq-B/M5: `DELETE /projects/{nome}` foi para `routers/execution_router.py`,
+    que lê `PROJECTS_ROOT` por acesso qualificado ao módulo (`cfg.PROJECTS_ROOT`,
+    em tempo de chamada) em vez de `from src.config import PROJECTS_ROOT` — por
+    isso o isolamento agora é feito em `src.config`, não em `app_module` (ver
+    comentário em src/config.py sobre a convenção). `app_module.PROJECTS_ROOT`
+    continua existindo e sendo usado pelas rotas que ainda moram em app.py."""
     raiz = tmp_path / "projetos"
     nome = "projeto_descartavel"
     caminho = raiz / nome
@@ -23,7 +32,7 @@ def projeto_descartavel(tmp_path, app_module, monkeypatch):
         json.dumps({"run_id": "x", "started_at_utc": None, "finished_at_utc": None}),
         encoding="utf-8")
 
-    monkeypatch.setattr(app_module, "PROJECTS_ROOT", str(raiz))
+    monkeypatch.setattr(_config, "PROJECTS_ROOT", str(raiz))
     return nome, caminho
 
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from src.services.cql_batch_service import CQLBatchRequest, get_cql_batch_service
-from src.services.neo4j_services import neo4j_service
+from src.services.neo4j_services import get_neo4j_service
 from src.seguranca import limitar_taxa
 
 router = APIRouter()
@@ -12,7 +12,8 @@ NEO4J_RETRY_AFTER_SECONDS = "30"
 async def execute_cql_batch(
     background_tasks: BackgroundTasks,
     request: CQLBatchRequest,
-    cql_batch_service = Depends(get_cql_batch_service)
+    cql_batch_service = Depends(get_cql_batch_service),
+    neo4j_service = Depends(get_neo4j_service),
 ):
     # Falha cedo: sem conexão, não há por que agendar a tarefa em background
     # só para ela falhar bloco a bloco (M4.1).

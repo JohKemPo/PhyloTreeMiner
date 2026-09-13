@@ -5,14 +5,13 @@ só uma mensagem genérica em `detail=`. Ver docs/automation/10-marcos-e-metas.m
 M4.2 — vazar `str(e)` numa resposta HTTP é o defeito S-4.
 """
 import logging
-import os
 
-_NIVEL_PADRAO = "INFO"
+from src.config import get_settings
 
 
 def configurar_logging() -> None:
     """Configura o `logging` raiz uma única vez, por variável de ambiente `LOG_LEVEL`."""
-    nivel = os.getenv("LOG_LEVEL", _NIVEL_PADRAO).upper()
+    nivel = get_settings().log_level.upper()
     logging.basicConfig(
         level=getattr(logging, nivel, logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",

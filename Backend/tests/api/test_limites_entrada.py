@@ -4,16 +4,34 @@ import zipfile
 
 import pytest
 
+import importlib
+
+from src import config as _config
+# `routers/__init__.py` faz `from .input_data_router import router as input_data_router`,
+# o que sombreia `src.routers.input_data_router` (o MÓDULO) com o objeto
+# `APIRouter` no namespace do pacote `src.routers` — tanto `from src.routers
+# import input_data_router` quanto `import src.routers.input_data_router as x`
+# resolvem essa sombra (a forma "as" com nome pontuado também encadeia
+# atributos). `importlib.import_module` busca direto em `sys.modules`, sem
+# passar pelo `__dict__` do pacote.
+_input_data_router = importlib.import_module("src.routers.input_data_router")
+
 
 @pytest.fixture(autouse=True)
 def data_root_isolado(app_module, tmp_path, monkeypatch):
-    """`/upload-data` grava em `DATA_ROOT` — nunca no `BioComp_UFF/data` real."""
-    monkeypatch.setattr(app_module, "DATA_ROOT", str(tmp_path))
+    """`/upload-data` grava em `DATA_ROOT` — nunca no `BioComp_UFF/data` real.
+
+    Arq-B/M5: a rota foi para `routers/input_data_router.py`, que lê
+    `DATA_ROOT` via `cfg.DATA_ROOT` (acesso qualificado a `src.config`, em
+    tempo de chamada) — o isolamento é feito ali, não em `app_module`."""
+    monkeypatch.setattr(_config, "DATA_ROOT", str(tmp_path))
 
 
 @pytest.mark.security
 async def test_upload_acima_do_teto_de_bytes_413(client, app_module, monkeypatch):
-    monkeypatch.setattr(app_module, "MAX_UPLOAD_BYTES", 10)
+    # `MAX_UPLOAD_BYTES` é constante de módulo em routers/input_data_router.py
+    # (computada uma vez, como já era em app.py) — patch aqui, não em app_module.
+    monkeypatch.setattr(_input_data_router, "MAX_UPLOAD_BYTES", 10)
     conteudo = b">seq1\nACGTACGTACGT\n"
     r = await client.post(
         "/upload-data",
@@ -25,7 +43,7 @@ async def test_upload_acima_do_teto_de_bytes_413(client, app_module, monkeypatch
 
 @pytest.mark.security
 async def test_upload_acima_do_teto_de_arquivos_413(client, app_module, monkeypatch):
-    monkeypatch.setattr(app_module, "MAX_UPLOAD_FILES", 1)
+    monkeypatch.setattr(_input_data_router, "MAX_UPLOAD_FILES", 1)
     arquivos = [("files", (f"seq{i}.fasta", b">s\nACGT\n", "text/plain")) for i in range(2)]
     r = await client.post("/upload-data", data={"name": "projeto-teste"}, files=arquivos)
     assert r.status_code == 413
@@ -55,7 +73,7 @@ async def test_multiplos_zips_honestos_somam_acima_do_teto_400(client, app_modul
     fica sob o teto — mas juntos excedem. Antes da correção, cada ZIP
     reiniciava `bytes_descomprimidos_reais` em 0 e todos passavam com 200.
     """
-    monkeypatch.setattr(app_module, "MAX_UPLOAD_BYTES", 3000)
+    monkeypatch.setattr(_input_data_router, "MAX_UPLOAD_BYTES", 3000)
 
     arquivos = []
     for i in range(3):
