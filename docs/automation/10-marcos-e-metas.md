@@ -325,16 +325,16 @@ T4 (frontend)         M4.21 ‖ M4.22 → M4.23 (após M4.1)
 #       no mesmo diretório de projeto: dois arquivos, uma conclusão em cada.
 ```
 
-### M5 — Estrutural (W4) ✅ Arq-A, Arq-C e Grafo fechados em 2026-09-13 (Arq-B em trilha própria)
+### M5 — Estrutural (W4) ✅ FECHADO em 2026-09-13 — Arq-A, Arq-B, Arq-C e Grafo, os quatro blocos
 
 | Bloco | Itens | Trilha | Estado |
 |---|---|---|---|
 | Arq-A | `Dockerfile` de backend (micromamba, `QT_QPA_PLATFORM=offscreen`) e frontend (build → nginx com fallback SPA + proxy `/api`, `/ws`); compose full-stack; `conda-lock` | T3 | ✅ Dockerfiles/compose verificados de ponta a ponta (`docker compose up` com os 3 serviços saudáveis). `conda-lock.yml` trava só a parte conda do `environment.yml` — decisão do usuário: a ferramenta não segue `-r arquivo.txt` dentro de `pip:`, e duplicar a lista de pacotes Python ali reintroduziria D5 ([DEC-086](07-log-de-execucao.md)) |
-| Arq-B | Quebrar `app.py` em `config`/`logging_conf`/`routers/*`/`services/*`; DI em vez de singleton Neo4j | T2 | Inalterado nesta rodada (mantido estável de propósito); parcialmente iniciado em sessões anteriores (`routers/`, `services/` já existem, `app.py` ainda com ~2 900 linhas) |
+| Arq-B | Quebrar `app.py` em `config`/`logging_conf`/`routers/*`/`services/*`; DI em vez de singleton Neo4j | T2 | ✅ [DEC-088](07-log-de-execucao.md) — `app.py` de 2917 para **156 linhas, 0 rotas**; zona sagrada (RF/quartet, FPMax) confirmada idêntica por comparação AST função a função contra o estado anterior; DI do Neo4j via `Depends(get_neo4j_service)` nos 3 routers que o usam. Achado real e pré-existente registrado na fila de triagem (`ncbi_router.py:207`, C-2), não corrigido — refatoração pura |
 | Arq-C | `services/http.js` + módulos por domínio; decompor `PhylogeneticTreeViewer`; React Query | T4 | ✅ [DEC-086](07-log-de-execucao.md) — `PhylogeneticTreeViewer` de 1096 para ~430 linhas; `localhost:8000` fora de `src/`; 43 testes (era 25) |
 | Grafo | Esquema versionado com migrações idempotentes (e o inverso de cada uma); catálogo de consultas predefinidas | T5 | ✅ [DEC-086](07-log-de-execucao.md) — idempotência provada nos dois sentidos (up/down), com `PROFILE` antes/depois |
 
-**Gate de M5:** nenhum golden snapshot **relevante** mudou com Arq-A/Arq-C/Grafo (`test_projects_listing` segue vermelho, mas por drift de projetos em disco pré-existente — confirmado 3x independentes antes de qualquer um destes três lotes, ver DEC-085/086) ✅; `docker compose up` sobe tudo, agora com o nginx cobrindo **todas** as rotas que o frontend chama (rotas de topo incluídas — [DEC-087](07-log-de-execucao.md)) ✅; `grep -rl "localhost:8000" Frontend/` vazio em `src/` (as duas exceções de F-8 chamam host diferente do próprio backend) ✅; `make reference-check` verde ✅. F-8 (header `X-User-ID` consistente) fecha com 2 exceções documentadas ([DEC-087](07-log-de-execucao.md)). Arq-A, Arq-C e Grafo **fechados e commitados**; Arq-B segue aberto em trilha própria, sem gate bloqueante para os outros três.
+**Gate de M5 — os quatro blocos, fechado:** nenhum golden snapshot **relevante** mudou (`test_projects_listing` segue vermelho, mas por drift de projetos em disco pré-existente — confirmado repetidas vezes, inclusive depois de Arq-B, ver DEC-085/086/088) ✅; `docker compose up` sobe tudo, com o nginx cobrindo **todas** as rotas que o frontend chama ✅; `grep -rl "localhost:8000" Frontend/` vazio em `src/` (as duas exceções de F-8 chamam host diferente do próprio backend) ✅; `make reference-check` verde ✅; F-8 fecha com 2 exceções documentadas ([DEC-087](07-log-de-execucao.md)); Arq-B fecha `app.py` em 156 linhas, 0 rotas, zona sagrada confirmada intocada por comparação AST ([DEC-088](07-log-de-execucao.md)).
 
 > **Arq-B tem valor de processo além do técnico:** enquanto `app.py` for um monólito de 2 597 linhas (medido em 2026-09-01; ver M4), a trilha T2 é **serial** e é o gargalo de paralelismo do projeto inteiro ([§7 da arquitetura](09-arquitetura-de-agentes.md#7-paralelismo--seis-trilhas)). Quebrá-lo multiplica a vazão de todos os marcos seguintes.
 
@@ -353,11 +353,11 @@ T4 (frontend)         M4.21 ‖ M4.22 → M4.23 (após M4.1)
 
 **Gate de M6:** o checklist completo de [`04-rigor-cientifico §6`](04-rigor-cientifico.md#6-checklist-de-artefato-para-submissão-gate-de-w7); e **nenhuma afirmação do manuscrito sem evidência rastreável no ledger**.
 
-**Definição de sucesso do [plano mestre §2](01-plano-mestre.md), hoje 2 de 5** (atualizado em 2026-09-02, com o fechamento de M2 — condições 4 e 5 exigem M6, ainda não iniciado):
+**Definição de sucesso do [plano mestre §2](01-plano-mestre.md), hoje 2 de 5** (atualizado em 2026-09-13, com o fechamento de M5 — condições 4 e 5 exigem M6, ainda não iniciado):
 
 | # | Condição | Fecha em | Estado |
 |---|---|---|---|
-| 1 | `git clone --recursive` + um comando → stack de pé | M5 | aberto |
+| 1 | `git clone --recursive` + um comando → stack de pé | M5 | ◐ `docker compose up` sobe neo4j+backend+frontend saudáveis e testados nesta máquina ([DEC-086](07-log-de-execucao.md)/[DEC-087](07-log-de-execucao.md)) — **não verificado ainda em clone limpo** (sem cache de build, sem `.env` pré-existente); falta esse teste antes de marcar satisfeita |
 | 2 | `pytest` + testes do front verdes, cobrindo endpoints e núcleo científico | M0 | ✅ satisfeita |
 | 3 | Dataset de referência versionado reproduz os números publicados | **M2** | ✅ satisfeita ([DEC-063](07-log-de-execucao.md)) |
 | 4 | Está escrito que dados a ferramenta trata, com que base legal e por quanto tempo | M0.7 + M6 | aberto (falta M6) |

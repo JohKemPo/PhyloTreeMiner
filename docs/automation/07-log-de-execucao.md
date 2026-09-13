@@ -3305,6 +3305,71 @@ grep raw fetch/WebSocket sobre API_URL/WS_URL fora de http.js → só as 2 exce�
 
 **Write-lock:** nginx/relativo (`nginx.conf`, `Frontend/phylotreeminer/.env.production`, `.gitignore`); F-8 (`Frontend/phylotreeminer/src/services/http.js`, os 11 arquivos migrados, `__tests__/config.test.js`); doc (este documento). **Reversível:** sim — nada passou de dois commits (mais este), `git revert` desfaz qualquer um isoladamente.
 
+### DEC-088 · 2026-09-13 · Arq-B fecha — `app.py` de 2917 para 156 linhas, 0 rotas; M5 fecha por completo
+
+**Gatilho:** pedido do usuário — "despache e finalize Arq-B", o único bloco de M5 que faltava. Despachado `ptm-backend-core`, retomado duas vezes (checkpoint intermediário depois de duas fatias; depois um corte por limite de sessão da própria ferramenta, bem no fim, retomado às 07:19 quando o limite resetou).
+
+#### O maior lote da sessão — progressão de `app.py`
+
+| Fatia | Linhas antes → depois | Rotas antes → depois |
+|---|---|---|
+| (a) `config.py` | 2917 → 2884 | 34 → 33 |
+| (b) sistema (prova de conceito router+service) | 2884 → 2363 | 33 → 25 |
+| (c) projeto/execução | 2363 → 1896 | 25 → 17 |
+| (d) árvore (metadata/compare/pattern-analysis) | 1896 → 1124 | 17 → 15 |
+| (e) dados de entrada (browse/file/upload) | 1124 → 525 | 15 → 8 |
+| (f) NCBI/aligners/ws-performance + DI Neo4j | 525 → **156** | 8 → **0** |
+
+**Protocolo seguido em cada fatia** (regra 4 do CLAUDE.md): golden/caracterização escrito **antes** de mover toda rota sem cobertura, provado vermelho de propósito (uma quebra confirmada, revertida) antes de aceitar como característica de regressão; `pytest Backend/tests -q` depois de cada fatia; containerizado e testado com `curl` real a cada corte. Novos: `test_system_routes.py`, `test_execution_routes.py`, `test_input_data_routes.py`, `test_tree_metadata_routes.py`.
+
+#### Mapa função antiga → módulo novo
+
+- **Config:** `src/config.py` (novo) — `pydantic-settings`, mesmos valores-padrão dos `os.getenv` originais (CORS, admin token, log level, credenciais Neo4j, tetos de upload/JSON, `NCBI_RETMAX_MAXIMO`, caminhos derivados). `get_settings()` **sem** `lru_cache`, de propósito documentado (`test_admin_token.py` faz `monkeypatch.setenv/delenv` por caso; cache teria congelado o primeiro valor).
+- **Sistema:** `routers/system_router.py` + `services/system_service.py` (`HEAD /`, `/api/system/health`, `/ws/system-performance`).
+- **Execução:** `routers/execution_router.py` + `services/execution_service.py` + `services/workflow_runtime.py` (run/rerun/can-rerun/delete/listar, `stream_workflow_output`, `ProgressConnectionManager`).
+- **Árvore:** `routers/tree_router.py` + `services/tree_metadata_service.py` + `services/tree_compare_service.py` (**zona sagrada** — RF/quartet) + `services/pattern_analysis_service.py` (**zona sagrada** — FPMax).
+- **Dados de entrada:** `routers/input_data_router.py` + `services/browse_service.py` + `services/json_preview_service.py` + `services/upload_service.py` (tetos M4.6 movidos literalmente).
+- **NCBI:** as 5 rotas que faltavam foram para `routers/ncbi_router.py` (mesmo prefixo `/api/ncbi` das que já lá moravam).
+- **Alinhadores:** `routers/aligners_router.py` (novo, não pertencia a nenhum módulo existente).
+- **DI do Neo4j:** `services/neo4j_services.py` ganhou `get_neo4j_service()`; `neo4j_router.py`/`cql_router.py`/`cql_batch_router.py` passam a receber por `Depends(get_neo4j_service)`. O singleton em si continua existindo — é uma conexão de longa duração gerida pelo `lifespan`, não algo para recriar por requisição; o que mudou é o ponto de acesso dos routers.
+
+#### Verificação da zona sagrada — feita pelo Revisor, não por leitura
+
+Comparação **AST função a função** entre `git show HEAD:Backend/src/app.py` (estado anterior) e `services/tree_compare_service.py`/`services/pattern_analysis_service.py`: nenhuma divergência de cálculo em 19 + 4 funções — só espaço em branco e uma única mudança de container (`PROJECTS_ROOT` global → parâmetro `projects_root`, autorizado pelo escopo). O limiar D4, a lógica de `support`, os cortes de robustez: intocados.
+
+#### Achado real (bug), registrado para a fila de triagem, não corrigido
+
+`GET /inputs_data` ignora o parâmetro `path` (sempre lista `PATH_BASE_WORKFLOW/data`) e calcula `path` de cada item relativo a `PROJECTS_ROOT` mesmo para itens sob `DATA_ROOT` (diretórios irmãos). Preservado fielmente na extração (confirmado pelo Revisor: cópia literal do comportamento anterior, nem corrigido nem piorado sem querer); caracterizado em `test_inputs_data_ignora_o_parametro_path` e no docstring de `browse_service.listar_inputs_data`.
+
+#### Revisão (`ptm-revisor-codigo`) — aprovado com ressalvas, todas corrigidas antes do commit
+
+Nenhum bloqueador nos itens de risco (zona sagrada, DI, convenção de config, reexportações de compatibilidade, bug preservado). As ressalvas eram todas da mesma classe — **varreduras de segurança AST que escaneavam só `app.py` viraram vacuamente verdes** depois que as 34 rotas saíram dele — e foram corrigidas nesta sessão, não deixadas para depois:
+
+- **`test_contrato_erros.py` (C-2)**: só olhava `app.py`. Reapontado para `app.py` + `routers/*.py` + `services/*.py` (mesmo padrão já usado em `test_cpu_bound_to_thread.py`). Achou um ofensor real e **pré-existente**: `ncbi_router.py:207`, `get_ncbi_info`, um `except Exception` engolindo `HTTPException(404)` em 500 — confirmado byte a byte idêntico ao `app.py` anterior (não é regressão deste lote). Registrado como resultado esperado do teste (não suprimido) e vai para a fila de triagem como achado de bug pré-existente.
+- **`test_path_safety.py::test_startswith_fraco_nao_sobrevive_em_app` (S-2)**: `resolve_within` já morava em `seguranca.py` desde M4, não em `app.py` — o teste nunca olhou o lugar certo. Reapontado para varrer `src/` inteiro.
+- **`test_cors.py::test_cors_vem_de_variavel_de_ambiente` (S-3)**: conferia a string `"CORS_ORIGINS"` no texto-fonte de `app_module` — sobrevivia só por um comentário, não pela lógica real (que está em `config.py`). Reescrito como teste comportamental: `monkeypatch.setenv` + `Settings().allowed_origins` reflete, sem depender de onde o código mora.
+- **`test_vazamento_de_erro.py` (S-4)**: `ARQUIVOS_VARRIDOS` só citava `cql_batch_service.py` por nome dentro de `services/`. Ampliado para `glob("*.py")` no diretório inteiro — pega `upload_service.py`, `tree_compare_service.py`, `pattern_analysis_service.py` e qualquer serviço futuro, sem precisar lembrar de adicionar à mão.
+- **`system_router.py`**: única inconsistência de convenção encontrada — `from src.config import PROJECTS_ROOT` (import ávido) em vez do padrão `from src import config as cfg; cfg.PROJECTS_ROOT` (qualificado, alcançável por `monkeypatch`) que todo outro router novo já seguia. Corrigido, sem teste afetado hoje (nenhum isola `PROJECTS_ROOT` para essa rota ainda), mas evita a armadilha para quem escrever esse teste depois.
+
+Achados de estilo não corrigidos, aceitos como estão: mensagem do 413 de upload usa `get_settings().max_upload_bytes` em vez do valor efetivamente patcheado (já documentado no próprio arquivo).
+
+**Evidência de execução (minha, depois de todos os ajustes de revisão):**
+```
+python -m py_compile <todos os arquivos tocados>          → limpo
+pytest Backend/tests -q                                     → só test_projects_listing (drift pré-existente)
+pytest Backend/tests/api/test_contrato_erros.py -q           → 30 passed (era 1 arquivo, virou parametrizado)
+pytest Backend/tests/api/test_vazamento_de_erro.py -q        → 25 passed
+pytest Backend/tests/unit/test_path_safety.py -q             → 8 passed
+pytest Backend/tests/api/test_cors.py -q                      → 2 passed
+docker compose build backend && up -d                          → healthy
+curl /, /api/system/health, /projects, /api/aligners,
+     /api/ncbi/email, /dataFolders, /api/tree/metadata/...     → todos com o status esperado, logs limpos
+```
+
+**Gate de M5, fechado por completo:** os quatro blocos (Arq-A, Arq-C, Grafo, Arq-B) estão implementados e verificados. `app.py` é hoje só criação do app, CORS, `lifespan` (Neo4j + serviço de lote CQL) e `include_router` — o alvo de `docs/agents/03-backend-core.md §Camadas`.
+
+**Write-lock:** Arq-B principal (`Backend/src/app.py`, `Backend/src/config.py`, `Backend/src/schemas.py`, `Backend/src/seguranca.py`, `Backend/src/logging_conf.py`, `Backend/src/routers/*`, `Backend/src/services/*`, `requirements.txt`, os golden novos, os testes de API que o agente adaptou); revisão de segurança (`test_contrato_erros.py`, `test_path_safety.py`, `test_cors.py`, `test_vazamento_de_erro.py`, `system_router.py`); doc (este documento). **Reversível:** sim — nada commitado ainda nesta entrada.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -3465,3 +3530,4 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-09-01 | `Backend/tests/data/reference/expected.json` (`target_M`) ainda declara `"aligners": ["mafft"]` e justifica a exclusão de Clustal Omega/MUSCLE pela medição de OOM que [DEC-050](#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir) **retratou** (Clustal é limite de tempo; MUSCLE 5.3 recusa por interface, não OOM). Com o alvo desatualizado, uma reexecução de VARV-49 com os dois braços do MAFFT nunca faz `reference_check.py --trees` devolver M completo — o braço `mafft_iterative` não entra em `alvo_nomes` | `Backend/tests/data/reference/expected.json` (`target_M`) | pesquisa para o guia de reexecução | **Bloqueia o fechamento de M2** — é zona sagrada (muda o invariante de gate); atualizar via `make reference-dataset` **depois** de corrigir `target_M` e registrar parecer próprio, não junto de outro lote |
 | 2026-09-03 | Um arquivo `PROVENIENCIA.md` (ou qualquer `.md` de proveniência) dentro do diretório de um dataset é lido pela etapa de input do workflow como mais um arquivo de sequência — a leitura varre o diretório sem filtrar por extensão/conteúdo. Contornado nesta sessão movendo o arquivo para fora do diretório do dataset (usuário, manual); não caracterizado a fundo | leitura de input do `BioComp_UFF/workflow` (etapa não localizada nesta sessão) | DEC-078 | **Triagem pendente** — mesma classe de risco de [D19](../science/02-defeitos-que-alteram-resultado.md#d19) (arquivo inesperado no diretório de dados contamina/quebra o pipeline silenciosamente); considerar filtro por extensão/whitelist como item de M7 |
 | 2026-09-03 | M3.1, terceira perna ("ao grafo"): propagação de `confidence`/`metrica`/`metodo` de suporte de ramo ao Neo4j nunca foi implementada — só Nexus/`metadata.json`/API/UI (M3.1 Backend, M3.3) existem | `Backend/src/suporte_de_ramo.py` (rota existe, não escreve no grafo) | DEC-070, achado retomado em DEC-085 | **Candidato a M5/Grafo** — mesmo esquema de propriedade de clado que a migração versionada de M5 vai tocar; não bloqueia o gate de M3 (`make main-result` não o exercita) |
+| 2026-09-13 | `get_ncbi_info` engole `HTTPException(404)` num `except Exception` genérico, devolvendo 500 onde deveria devolver 404 — pré-existente, idêntico byte a byte ao que já estava em `app.py` antes de Arq-B; só ficou visível porque a varredura de C-2 (`test_contrato_erros.py`) foi reapontada de `app.py` (156 linhas, 0 rotas depois de Arq-B) para `routers/*.py`+`services/*.py` e passou a alcançar o arquivo pela primeira vez | `Backend/src/routers/ncbi_router.py:207` | Revisor de Arq-B (DEC-088) | **Achado real, não corrigido** — é bug de contrato HTTP (C-2), fora do escopo de uma refatoração estrutural pura; corrigir é lote curto e independente |
