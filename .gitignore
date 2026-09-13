@@ -5,6 +5,12 @@
 .vscode/*
 __pycache__/*
 
+# Achado M5/DEC-087: um `node_modules/` apareceu na raiz (cache `.vite/` de
+# uma ferramenta rodada do diretório errado) sem estar coberto aqui — só o
+# `Frontend/phylotreeminer/.gitignore` cobria o dele. Removido; isto evita
+# recorrência em qualquer nível do repo.
+node_modules/
+
 projects/
 Utils/
 *.log
