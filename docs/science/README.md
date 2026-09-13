@@ -16,6 +16,7 @@ Complementa — não substitui — a [auditoria de engenharia](../audit/README.m
 | [`04-agenda-de-pesquisa.md`](04-agenda-de-pesquisa.md) | **O que rodar em seguida** e por quê: 9 experimentos priorizados, com hipótese, delineamento e critério de sucesso. | Autor |
 | [`05-grafo-neo4j.md`](05-grafo-neo4j.md) | O que o grafo contém de fato, o que ele responde hoje, e o modelo mínimo para que responda a perguntas científicas. | [A12](../agents/12-neo4j-grafo.md) |
 | [`07-gargalos-e-rotas.md`](07-gargalos-e-rotas.md) | **Custo medido de cada método, limites conhecidos e rotas de execução.** O que acontece quando um alinhador ou método de inferência não serve — e por que a política é avisar, não bloquear |
+| [`09-fronteira-de-pesquisa.md`](09-fronteira-de-pesquisa.md) | **Para onde expandir.** Organismos/datasets promissores (mpox, influenza H5N1, vigilância em esgoto), fronteira metodológica (redes reticuladas, alternativas a bootstrap) e otimização (GPU/BEAGLE, escalabilidade) — com fontes externas, não intuição interna |
 
 ## Como reproduzir os números
 
