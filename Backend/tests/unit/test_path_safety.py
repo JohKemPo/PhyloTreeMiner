@@ -52,13 +52,22 @@ def test_irmao_com_prefixo_comum_e_recusado(resolve_within, tmp_path):
 
 
 @pytest.mark.security
-def test_startswith_fraco_nao_sobrevive_em_app(app_module):
-    """Nenhum caminho de contenção deve usar a comparação de prefixo."""
-    import inspect
-    fonte = inspect.getsource(app_module)
+def test_startswith_fraco_nao_sobrevive_em_app():
+    """Nenhum caminho de contenção deve usar a comparação de prefixo.
+
+    Arq-B (M5) moveu as rotas de app.py (156 linhas hoje) para
+    routers/*.py e services/*.py, e `resolve_within` em si já morava em
+    `seguranca.py` desde M4 — vigiar só `app_module` deixava este portão
+    vazio e vacuamente verde (achado do Revisor, DEC-088). Varre o
+    diretório `src/` inteiro, não um módulo só.
+    """
+    import pathlib
+
+    src_dir = pathlib.Path(__file__).resolve().parents[1] / "src"
     ofensores = [
-        linha.strip()
-        for linha in fonte.splitlines()
+        f"{caminho.relative_to(src_dir)}:{i}: {linha.strip()}"
+        for caminho in sorted(src_dir.rglob("*.py"))
+        for i, linha in enumerate(caminho.read_text(encoding="utf-8").splitlines(), start=1)
         if ".startswith(PROJECTS_ROOT" in linha and not linha.strip().startswith("#")
     ]
     assert ofensores == [], (

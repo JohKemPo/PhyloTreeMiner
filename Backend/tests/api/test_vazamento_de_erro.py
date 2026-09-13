@@ -16,7 +16,13 @@ BACKEND_DIR = pathlib.Path(__file__).resolve().parents[2]
 ARQUIVOS_VARRIDOS = [
     BACKEND_DIR / "src" / "app.py",
     *sorted((BACKEND_DIR / "src" / "routers").glob("*.py")),
-    BACKEND_DIR / "src" / "services" / "cql_batch_service.py",
+    # Arq-B (M5): a lógica de negócio que levanta HTTPException saiu de
+    # app.py para src/services/*.py — a varredura precisa acompanhar, senão
+    # vira falso-positivo silencioso (achado do Revisor, DEC-088).
+    *sorted(
+        p for p in (BACKEND_DIR / "src" / "services").glob("*.py")
+        if p.name != "__init__.py"
+    ),
 ]
 
 
