@@ -27,7 +27,7 @@ import { STATUS_MAP, VALID_STATUSES } from "../../constants/executionStatus";
 import ProjectsCardsView from "./projectsCardsView";
 import ProjectsTableView from "./projectsTableView";
 import { useNavigate } from "react-router-dom";
-import { API_URL, WS_URL } from "../../config";
+import { httpGet, httpPost, wsUrl } from "../../services/http";
 
 const ProjectGallery = ({ onProjectSelect }) => {
   const [projects, setProjects] = useState([]);
@@ -51,26 +51,21 @@ const ProjectGallery = ({ onProjectSelect }) => {
   const fetchJobsData = useCallback(async (isBackgroundRefresh = false) => {
     if (!isBackgroundRefresh) setIsLoading(true);
     try {
-      const [projectsRes, statusRes] = await Promise.all([
-        fetch(`${API_URL}/projects`),
-        fetch(`${API_URL}/projects/status`),
+      const [projectsData0, statusData] = await Promise.all([
+        httpGet("/projects"),
+        httpGet("/projects/status"),
       ]);
-      if (!projectsRes.ok || !statusRes.ok)
-        throw new Error("Failed to load job data.");
 
-      let projectsData = await projectsRes.json();
-      const statusData = await statusRes.json();
-
+      let projectsData = projectsData0;
 
       if (projectsData.length > 0) {
         const projectNames = projectsData.map((p) => p.name);
-        const detailsRes = await fetch(`${API_URL}/projects/details`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(projectNames),
-        });
-
-        const detailsData = detailsRes.ok ? await detailsRes.json() : {};
+        // Igual ao `detailsRes.ok ? ... : {}` de antes: os detalhes são um
+        // extra (progresso/passo atual) — se essa chamada falhar, o resto da
+        // tabela continua de pé em vez de quebrar a tela inteira.
+        const detailsData = await httpPost("/projects/details", projectNames).catch(
+          () => ({}),
+        );
 
         projectsData = projectsData.map((p) => ({
           ...p,
@@ -117,7 +112,7 @@ const ProjectGallery = ({ onProjectSelect }) => {
       }
 
       // console.log(`Conectando ao WebSocket para o projeto: ${projectName}`);
-      const socket = new WebSocket(`${WS_URL}/ws/progress/${projectName}`);
+      const socket = new WebSocket(wsUrl(`/ws/progress/${projectName}`));
       socketsRef.current[projectName] = socket;
 
       socket.onmessage = (event) => {

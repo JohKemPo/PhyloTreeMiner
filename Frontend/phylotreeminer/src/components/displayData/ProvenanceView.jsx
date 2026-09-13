@@ -37,7 +37,7 @@ import {
 } from "@ant-design/icons";
 
 import { STATUS_MAP, formatarDuracao } from "../../constants/executionStatus";
-import { API_BASE_URL } from "../../services/dataServices";
+import { httpGet, httpPost } from "../../services/http";
 import JsonViewer from "./utils/JsonViewer";
 
 const { Title, Text, Paragraph } = Typography;
@@ -166,28 +166,28 @@ const ProvenanceView = ({ projectName }) => {
     setSemManifesto(false);
 
     try {
-      const detailsRes = await fetch(`${API_BASE_URL}/projects/details`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify([projectName]),
-      });
-      const detailsData = detailsRes.ok ? await detailsRes.json() : {};
+      // Igual a `detailsRes.ok ? ... : {}` de antes: sem detalhes, a tela
+      // segue sem eles em vez de virar erro.
+      const detailsData = await httpPost("/projects/details", [
+        projectName,
+      ]).catch(() => ({}));
       setDetails(detailsData[projectName] || null);
 
       const manifestPath = `${projectName}/out/outputs/manifest.json`;
-      const manifestRes = await fetch(
-        `${API_BASE_URL}/api/file/paginated?path=${encodeURIComponent(manifestPath)}&index=0`,
-      );
-
-      if (manifestRes.status === 404) {
-        setSemManifesto(true);
-        setManifest(null);
-      } else if (!manifestRes.ok) {
-        const corpo = await manifestRes.json().catch(() => ({}));
-        throw new Error(corpo.detail || `HTTP ${manifestRes.status}`);
-      } else {
-        const resultado = await manifestRes.json();
+      try {
+        const resultado = await httpGet(
+          `/api/file/paginated?path=${encodeURIComponent(manifestPath)}&index=0`,
+        );
         setManifest(resultado.content);
+      } catch (err) {
+        // 404 é um estado de UI próprio ("sem manifesto"), não um erro —
+        // qualquer outro status continua indo para o catch de fora.
+        if (err.status === 404) {
+          setSemManifesto(true);
+          setManifest(null);
+        } else {
+          throw err;
+        }
       }
       setAtualizadoEm(new Date());
     } catch (error) {

@@ -24,10 +24,9 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { formatarDuracao } from "../../constants/executionStatus";
-import { API_URL } from "../../config";
+import { httpGet, httpPost, httpDelete } from "../../services/http";
 
 const { Text } = Typography;
-const API_BASE_URL = API_URL;
 
 const ProjectsTableView = ({
   projects,
@@ -66,10 +65,7 @@ const ProjectsTableView = ({
 
   const handleRerunProject = async (projectName) => {
     try {
-      const checkResponse = await fetch(
-        `${API_BASE_URL}/projects/${projectName}/can-rerun`,
-      );
-      const checkData = await checkResponse.json();
+      const checkData = await httpGet(`/projects/${projectName}/can-rerun`);
 
       if (!checkData.can_rerun) {
         message.warning(`Não é possível reexecutar: ${checkData.reason}`);
@@ -82,22 +78,18 @@ const ProjectsTableView = ({
     setRerunLoading((prev) => ({ ...prev, [projectName]: true }));
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/projects/${projectName}/rerun`,
-        {
-          method: "POST",
-        },
-      );
-
-      if (response.ok) {
-        message.success(`Projeto ${projectName} está sendo reexecutado!`);
-        onRefresh();
-      } else {
-        const errorData = await response.json();
-        message.error(`Erro ao reexecutar: ${errorData.detail}`);
-      }
+      await httpPost(`/projects/${projectName}/rerun`);
+      message.success(`Projeto ${projectName} está sendo reexecutado!`);
+      onRefresh();
     } catch (error) {
-      message.error("Erro de conexão ao reexecutar projeto");
+      // `ApiError.isNetworkError` distingue "não deu para nem contatar o
+      // backend" (mensagem antiga) de "backend respondeu com erro" — mesma
+      // distinção que `catch` vs. `!response.ok` fazia antes.
+      if (error.isNetworkError) {
+        message.error("Erro de conexão ao reexecutar projeto");
+      } else {
+        message.error(`Erro ao reexecutar: ${error.detail || error.message}`);
+      }
     } finally {
       setRerunLoading((prev) => ({ ...prev, [projectName]: false }));
     }
@@ -125,21 +117,15 @@ const ProjectsTableView = ({
       onOk: async () => {
         setDeleteLoading((prev) => ({ ...prev, [projectName]: true }));
         try {
-          const response = await fetch(
-            `${API_BASE_URL}/projects/${projectName}`,
-            { method: "DELETE" },
-          );
-          if (response.ok) {
-            message.success(`Project "${projectName}" deleted.`);
-            onRefresh?.();
-          } else {
-            const errorData = await response.json().catch(() => ({}));
-            message.error(
-              errorData.detail || `Error ${response.status} while deleting project`,
-            );
-          }
+          await httpDelete(`/projects/${projectName}`);
+          message.success(`Project "${projectName}" deleted.`);
+          onRefresh?.();
         } catch (error) {
-          message.error("Connection error while deleting project");
+          if (error.isNetworkError) {
+            message.error("Connection error while deleting project");
+          } else {
+            message.error(error.detail || error.message);
+          }
         } finally {
           setDeleteLoading((prev) => ({ ...prev, [projectName]: false }));
         }

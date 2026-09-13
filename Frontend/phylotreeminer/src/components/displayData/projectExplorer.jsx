@@ -38,7 +38,7 @@ import PhylogeneticInsights from "../analysis/Tree/PhylogeneticInsights";
 import MethodologicalSupport from "../analysis/MethodologicalSupport";
 import MetadataViewer from "./utils/MetadataViewer";
 import PaginatedJsonViewer from "./utils/PaginatedJsonViewer";
-import { API_URL } from "../../config";
+import { httpGet, httpPost } from "../../services/http";
 
 const { Option } = Select;
 
@@ -79,9 +79,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
 
       setIsLoading(true);
       try {
-        const response = await fetch(`${API_URL}/projects`);
-        if (!response.ok) throw new Error("Falha ao buscar projetos.");
-        const data = await response.json();
+        const data = await httpGet("/projects");
         setProjects(data);
       } catch (err) {
         setError(err.message);
@@ -98,12 +96,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(
-        `${API_URL}/browse?path=${encodeURIComponent(path)}`,
-      );
-      if (!response.ok) throw new Error("Failed to fetch content.");
-
-      const data = await response.json();
+      const data = await httpGet(`/browse?path=${encodeURIComponent(path)}`);
       directoryContentRef.current = { path, data };
       setDirectoryContent(data);
     } catch (err) {
@@ -131,17 +124,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
         }
       }
 
-      const response = await fetch(`${API_URL}/api/owid/metadata/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) throw new Error("Failed to fetch metadata.");
-
-      const data = await response.json();
+      const data = await httpPost("/api/owid/metadata/", payload);
       setDadosOWID(data);
     } catch (err) {
       setError(err.message);
@@ -250,18 +233,13 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
     setModalTruncationInfo(null);
 
     try {
-      const response = await fetch(
-        `${API_URL}/file?path=${encodeURIComponent(item.path)}`,
+      // `raw: true`: o corpo pode ser imagem (blob) ou texto que precisa ser
+      // inspecionado cru quando o JSON vem truncado — `httpGet` já lança
+      // `ApiError` com o `detail` do backend se a resposta não for `ok`.
+      const response = await httpGet(
+        `/file?path=${encodeURIComponent(item.path)}`,
+        { raw: true },
       );
-      if (!response.ok) {
-        // O backend manda o motivo real em `detail` (ex.: "arquivo grande
-        // demais, limite 8 MB") — sem isto, todo erro virava o mesmo
-        // "Failed to load" genérico, e não dava para saber o porquê.
-        const errorBody = await response.json().catch(() => null);
-        throw new Error(
-          errorBody?.detail || `Erro ${response.status}: ${response.statusText}`,
-        );
-      }
 
       if (response.headers.get("content-type")?.startsWith("image/")) {
         const blob = await response.blob();
@@ -353,26 +331,9 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
     setModalContentType("comparison");
 
     try {
-      const [tree1Response, tree2Response] = await Promise.all([
-        fetch(
-          `${API_URL}/file?path=${encodeURIComponent(
-            selectedItems[0].path,
-          )}`,
-        ),
-        fetch(
-          `${API_URL}/file?path=${encodeURIComponent(
-            selectedItems[1].path,
-          )}`,
-        ),
-      ]);
-
-      if (!tree1Response.ok || !tree2Response.ok) {
-        throw new Error("Failed to load trees for comparison");
-      }
-
       const [tree1Data, tree2Data] = await Promise.all([
-        tree1Response.json(),
-        tree2Response.json(),
+        httpGet(`/file?path=${encodeURIComponent(selectedItems[0].path)}`),
+        httpGet(`/file?path=${encodeURIComponent(selectedItems[1].path)}`),
       ]);
 
       const initialContent = {
@@ -385,22 +346,10 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
 
       setModalContent(initialContent);
 
-      const compareResponse = await fetch(`${API_URL}/api/tree/compare`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tree1: tree1Data.content,
-          tree2: tree2Data.content,
-        }),
+      const comparisonResult = await httpPost("/api/tree/compare", {
+        tree1: tree1Data.content,
+        tree2: tree2Data.content,
       });
-
-      if (!compareResponse.ok) {
-        throw new Error("Failed to compare trees");
-      }
-
-      const comparisonResult = await compareResponse.json();
 
       setModalContent((prev) => ({
         ...prev,

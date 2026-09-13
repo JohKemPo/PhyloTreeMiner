@@ -27,7 +27,7 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
 } from "@ant-design/icons";
-import { API_URL } from "../../config";
+import { httpGet } from "../../services/http";
 
 const { Title, Text } = Typography;
 
@@ -39,11 +39,7 @@ const SystemHealth = () => {
   const fetchHealthData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/system/health`);
-      if (!response.ok) {
-        throw new Error("Falha ao carregar dados de saúde do sistema");
-      }
-      const data = await response.json();
+      const data = await httpGet("/api/system/health");
       setHealthData(data);
       setError(null);
     } catch (err) {

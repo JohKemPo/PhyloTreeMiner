@@ -36,7 +36,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import AlignerSelect from "./AlignerSelect";
-import { API_URL } from "../../config";
+import { httpGet, httpPost } from "../../services/http";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -78,10 +78,7 @@ const PipelineConfigurator = () => {
 
   const fetchFoldersData = async () => {
     try {
-      const response = await fetch(`${API_URL}/dataFolders`);
-      if (!response.ok) throw new Error("Falha ao carregar dados.");
-
-      const json = await response.json();
+      const json = await httpGet("/dataFolders");
       const folders = Array.isArray(json) ? json : [];
       setDataFolders(
         folders.map((folder) => ({
@@ -96,8 +93,7 @@ const PipelineConfigurator = () => {
 
   const fetchNcbiEmail = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/ncbi/email`);
-      const data = await response.json();
+      const data = await httpGet("/api/ncbi/email");
       setNcbiEmail(data.email);
     } catch (error) {
       console.error("Error loading NCBI email:", error);
@@ -115,40 +111,36 @@ const PipelineConfigurator = () => {
     });
 
     try {
-      const response = await fetch(`${API_URL}/api/ncbi/search-species`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, retmax: 10 }),
+      const data = await httpPost("/api/ncbi/search-species", {
+        query,
+        retmax: 10,
       });
 
-      const data = await response.json();
-
-      if (data.success) {
-        if (data.species.length > 0) {
-          setSearchResults(data.species);
-          messageInfo.success({
-            content: `Found ${data.species.length} species.`,
-            key,
-            duration: 3,
-          });
-        } else {
-          messageInfo.info({
-            content: "No species found with that query.",
-            key,
-            duration: 3,
-          });
-          setSearchResults([]);
-        }
-      } else {
-        messageInfo.error({
-          content: "An error occurred while searching for species.",
+      if (data.species.length > 0) {
+        setSearchResults(data.species);
+        messageInfo.success({
+          content: `Found ${data.species.length} species.`,
           key,
-          duration: 5,
+          duration: 3,
         });
+      } else {
+        messageInfo.info({
+          content: "No species found with that query.",
+          key,
+          duration: 3,
+        });
+        setSearchResults([]);
       }
     } catch (error) {
+      // `httpPost` lança em qualquer resposta não-2xx — o backend só devolve
+      // `success: true`, então `data.success` nunca chega falso aqui; o erro
+      // do backend (ex. HTTPException 500) cai neste catch, não no `else`
+      // que existia antes. `isNetworkError` distingue "não deu para contatar
+      // o backend" de "backend respondeu com erro" (ver projectsTableView.jsx).
       messageInfo.error({
-        content: `Connection error: ${error.message}`,
+        content: error.isNetworkError
+          ? `Connection error: ${error.message}`
+          : `An error occurred while searching for species: ${error.detail || error.message}`,
         key,
         duration: 5,
       });
@@ -187,57 +179,50 @@ const PipelineConfigurator = () => {
         }
       });
 
-      const response = await fetch(`${API_URL}/api/ncbi/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const data = await httpPost("/api/ncbi/download", payload);
+
+      console.log(data);
+      messageInfo.success({
+        content: (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              textAlign: "left",
+            }}
+          >
+            <span style={{ fontWeight: "bold", fontSize: "1.1em" }}>
+              Download Successful!
+            </span>
+            <span>
+              <strong>Species:</strong> {data.data?.species}
+            </span>
+            <span>
+              <strong>Sequences Processed:</strong> {data.data.count}
+            </span>
+            <span>
+              <strong>Saved to Folder:</strong> {data.data?.species}
+            </span>
+          </div>
+        ),
+        key: "ncbi-download",
+        duration: 5,
       });
 
-      const data = await response.json();
-
-      if (data.success) {
-        console.log(data);
-        messageInfo.success({
-          content: (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "4px",
-                textAlign: "left",
-              }}
-            >
-              <span style={{ fontWeight: "bold", fontSize: "1.1em" }}>
-                Download Successful!
-              </span>
-              <span>
-                <strong>Species:</strong> {data.data?.species}
-              </span>
-              <span>
-                <strong>Sequences Processed:</strong> {data.data.count}
-              </span>
-              <span>
-                <strong>Saved to Folder:</strong> {data.data?.species}
-              </span>
-            </div>
-          ),
-          key: "ncbi-download",
-          duration: 5,
-        });
-
-        setNcbiModalVisible(false);
-        ncbiForm.resetFields();
-        fetchFoldersData();
-      } else {
-        messageInfo.error({
-          content: `Download Failed: ${data?.detail}`,
-          key: "ncbi-download",
-          duration: 5,
-        });
-      }
+      setNcbiModalVisible(false);
+      ncbiForm.resetFields();
+      fetchFoldersData();
     } catch (error) {
+      // `httpPost` lança em qualquer resposta não-2xx — o backend levanta
+      // HTTPException(400, detail=...) na falha, então isto já não é o
+      // `else` de `data.success` (dead code depois da migração para
+      // `http.js`). `isNetworkError` distingue "não deu para contatar o
+      // backend" de "backend respondeu com erro" (ver projectsTableView.jsx).
       messageInfo.error({
-        content: `Connection Error: ${error?.message}`,
+        content: error.isNetworkError
+          ? `Connection Error: ${error.message}`
+          : `Download Failed: ${error.detail || error.message}`,
         key: "ncbi-download",
         duration: 5,
       });
@@ -356,23 +341,9 @@ const PipelineConfigurator = () => {
 
     // console.log(`Iniciando Workflow para o projeto '${projectName}' com os seguintes dados:`, JSON.stringify(finalPayload, null, 2));
     try {
-      const response = await fetch(
-        `${API_URL}/projects/${projectName}/run`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ configs: finalPayload }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.detail || `Erro do servidor: ${response.status}`
-        );
-      }
+      await httpPost(`/projects/${projectName}/run`, {
+        configs: finalPayload,
+      });
 
       messageInfo.success(
         "Workflow iniciado! Acompanhe o progresso na página de projetos."
@@ -397,16 +368,7 @@ const PipelineConfigurator = () => {
     });
 
     try {
-      const response = await fetch(`${API_URL}/upload-data`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Falha no upload");
-      }
-
-      const result = await response.json();
+      const result = await httpPost("/upload-data", formData);
       messageInfo.success(
         `Upload realizado! ${result.total_sequences} sequências processadas.`
       );
@@ -1077,14 +1039,19 @@ const PipelineConfigurator = () => {
                         onChange={(e) => setNcbiEmail(e.target.value)}
                         onBlur={async () => {
                           try {
-                            await fetch(`${API_URL}/api/ncbi/set-email`, {
-                              method: "POST",
-                              headers: {
-                                "Content-Type":
-                                  "application/x-www-form-urlencoded",
+                            // Corpo form-urlencoded, não JSON — `httpPost`
+                            // só serializa em JSON quando o corpo não é
+                            // string nem FormData (ver services/http.js).
+                            await httpPost(
+                              "/api/ncbi/set-email",
+                              `email=${encodeURIComponent(ncbiEmail)}`,
+                              {
+                                headers: {
+                                  "Content-Type":
+                                    "application/x-www-form-urlencoded",
+                                },
                               },
-                              body: `email=${encodeURIComponent(ncbiEmail)}`,
-                            });
+                            );
                             messageInfo.success("Email updated!");
                           } catch (error) {
                             messageInfo.error("Error updating email.");

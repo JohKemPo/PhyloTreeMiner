@@ -74,7 +74,11 @@ export async function request(path, options = {}) {
 
   let finalBody = body;
   const ehFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-  if (body !== undefined && !ehFormData) {
+  // Corpo já serializado (ex.: `application/x-www-form-urlencoded`) passa
+  // direto — só objetos viram JSON. Sem isto, uma string virava `"a=1"`
+  // (JSON de string), não `a=1`.
+  const jaSerializado = ehFormData || typeof body === 'string';
+  if (body !== undefined && !jaSerializado) {
     if (!finalHeaders['Content-Type']) finalHeaders['Content-Type'] = 'application/json';
     finalBody = JSON.stringify(body);
   }

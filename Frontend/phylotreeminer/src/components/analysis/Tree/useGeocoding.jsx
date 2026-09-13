@@ -195,6 +195,13 @@ const getCoordinatesForCountryWithFallback = async (country) => {
   }
 
   try {
+    // Fora do escopo de F-8/services/http.js de propósito: este endpoint é o
+    // Nominatim (OpenStreetMap), terceiro — não o nosso backend. `httpGet`
+    // anexaria `X-User-ID` a uma chamada de terceiro, vazando identificador
+    // interno para fora (o oposto do que a governança pede). Também é onde
+    // F-9 já aponta o problema de fundo: geocoding deveria sair do cliente
+    // e ir para o backend, com cache e rate-limit — não apenas trocar de
+    // wrapper de fetch.
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(country)}&limit=1`
     );

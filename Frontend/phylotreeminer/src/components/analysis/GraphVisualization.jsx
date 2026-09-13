@@ -35,6 +35,7 @@ import PhylogeneticQueriesDocumentation from "../../pages/docs/PhylogeneticQueri
 import { useNotification } from "../../contexts/NotificationContext";
 import { useUser } from "../../contexts/UserContext";
 import { API_URL as BACKEND_URL } from "../../config";
+import { httpGet, httpPost } from "../../services/http";
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -142,6 +143,14 @@ const GraphVisualization = () => {
   const API_URL = `${BACKEND_URL}/api/neo4j`;
 
   const checkConnectionStatus = async () => {
+    // Fora do escopo de F-8 de propósito: este endpoint decide o estado pelo
+    // CORPO da resposta (`data.connected`), não pelo status HTTP — lê o JSON
+    // mesmo quando `!response.ok`, porque é assim que mostra o aviso "Create
+    // an Instance" no cenário em que o Neo4j está fora do ar (justamente o
+    // caso que esta tela existe para cobrir). `httpGet` lança `ApiError` em
+    // qualquer não-2xx e suprimiria esse aviso; migrar exigiria uma opção
+    // nova em `services/http.js` (ex.: não lançar em erro), não só trocar a
+    // chamada — deixado de fora deste lote.
     try {
       const response = await fetch(`${API_URL}/status`);
       const data = await response.json();
@@ -187,10 +196,7 @@ const GraphVisualization = () => {
   useEffect(() => {
     const loadPredefinedQueries = async () => {
       try {
-        const response = await fetch(`${API_URL}/predefined-queries`);
-        if (!response.ok)
-          throw new Error("Falha ao buscar consultas predefinidas");
-        const data = await response.json();
+        const data = await httpGet("/api/neo4j/predefined-queries");
         if (data.success) {
           setPredefinedQueries(data.queries);
         }
@@ -343,18 +349,7 @@ const GraphVisualization = () => {
   const handleConnectionUpdate = async (values) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/neo4j/connect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Falha ao conectar");
-      }
-
-      const data = await response.json();
+      const data = await httpPost("/api/neo4j/connect", values);
       notification.success({ message: data.message });
       setIsConfigModalVisible(false);
       checkConnectionStatus();
@@ -453,22 +448,9 @@ const GraphVisualization = () => {
 
     try {
       const endpoint = isGraphQuery ? "/api/neo4j/graph" : "/api/neo4j/query";
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-User-ID": userId },
-        body: JSON.stringify({ query: finalQuery }),
-      });
-      if (!response.ok) {
-        if (response.status === 503) {
-          const errorData = await response.json().catch(() => ({}));
-          setServiceUnavailable({
-            message: errorData.message || "Neo4j indisponível no momento.",
-          });
-          return;
-        }
-        throw new Error(`Erro na API: ${response.statusText}`);
-      }
-      const data = await response.json();
+      // `httpPost` já injeta `X-User-ID` a partir do mesmo `localStorage` que
+      // `userId` espelha (ver services/http.js) — não precisa repassar aqui.
+      const data = await httpPost(endpoint, { query: finalQuery });
       if (data.success) {
         if (isGraphQuery) {
           setGraphData(data.data || { nodes: [], edges: [] });
@@ -479,6 +461,15 @@ const GraphVisualization = () => {
         throw new Error(data.detail || "A resposta da API indicou um erro.");
       }
     } catch (error) {
+      // `ApiError.isServiceUnavailable` é `status === 503` — o banner de
+      // Neo4j indisponível (M4.23) que `erro503.test.jsx` cobre; qualquer
+      // outro erro continua indo para o Modal genérico.
+      if (error.isServiceUnavailable) {
+        setServiceUnavailable({
+          message: error.message || "Neo4j indisponível no momento.",
+        });
+        return;
+      }
       Modal.error({
         title: "Erro ao Executar Consulta",
         content: error.message,

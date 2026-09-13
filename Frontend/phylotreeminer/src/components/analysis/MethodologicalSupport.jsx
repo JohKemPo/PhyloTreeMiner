@@ -13,7 +13,7 @@ import {
   Typography,
 } from "antd";
 
-import { API_BASE_URL } from "../../services/dataServices";
+import { httpGet } from "../../services/http";
 
 const { Text, Paragraph } = Typography;
 
@@ -44,15 +44,9 @@ const MethodologicalSupport = ({ projectName }) => {
       setLoading(true);
       setError(null);
       try {
-        const respBootstrap = await fetch(
-          `${API_BASE_URL}/api/tree/${projectName}/branch-support`,
+        const dadosBootstrap = await httpGet(
+          `/api/tree/${projectName}/branch-support`,
         );
-        if (!respBootstrap.ok) {
-          throw new Error(
-            `Falha ao buscar suporte de ramo (HTTP ${respBootstrap.status})`,
-          );
-        }
-        const dadosBootstrap = await respBootstrap.json();
         if (cancelado) return;
         setBootstrap(dadosBootstrap);
 
@@ -66,11 +60,16 @@ const MethodologicalSupport = ({ projectName }) => {
 
         const porAlinhador = {};
         for (const alinhador of alinhadores) {
-          const resp = await fetch(
-            `${API_BASE_URL}/api/tree/${projectName}/methodological-support?alinhador=${encodeURIComponent(alinhador)}`,
-          );
-          if (!resp.ok) continue;
-          porAlinhador[alinhador] = await resp.json();
+          try {
+            // Mesma tolerância de antes (`if (!resp.ok) continue`): um
+            // alinhador sem suporte metodológico calculado não derruba os
+            // outros que já responderam.
+            porAlinhador[alinhador] = await httpGet(
+              `/api/tree/${projectName}/methodological-support?alinhador=${encodeURIComponent(alinhador)}`,
+            );
+          } catch {
+            /* segue para o próximo alinhador */
+          }
         }
         if (!cancelado) setSuporteMetodologicoPorAlinhador(porAlinhador);
       } catch (err) {

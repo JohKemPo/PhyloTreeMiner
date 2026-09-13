@@ -31,7 +31,7 @@ import {
 import { useNotification } from "../contexts/NotificationContext";
 import { useUser } from "../contexts/UserContext";
 import { useNavigate } from "react-router-dom";
-import { API_URL } from "../config";
+import { httpPost } from "../services/http";
 
 const { Title, Text } = Typography;
 const { Dragger } = Upload;
@@ -189,30 +189,13 @@ const CQLExecutor = ({
     );
 
     try {
-      const response = await fetch(`${API_URL}/api/cql/execute`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: commandToExecute,
-          parameters: {},
-          user_id: userId,
-        }),
+      const result = await httpPost("/api/cql/execute", {
+        query: commandToExecute,
+        parameters: {},
+        user_id: userId,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 503) {
-          const err = new Error(
-            errorData.message || "Neo4j indisponível no momento.",
-          );
-          err.isNeo4jUnavailable = true;
-          throw err;
-        }
-        throw new Error(errorData.detail || `HTTP ${response.status}`);
-      }
-
       setNeo4jUnavailable(null);
-      const result = await response.json();
 
       setCqlBlocks((prev) => {
         const newBlocks = [...prev];
@@ -250,8 +233,12 @@ const CQLExecutor = ({
     } catch (error) {
       console.error(`Retry failed for command ${commandIndex + 1}:`, error);
 
-      if (error.isNeo4jUnavailable) {
-        setNeo4jUnavailable({ message: error.message });
+      // `httpPost` já lança `ApiError`; `isServiceUnavailable` é `status === 503`
+      // (era `err.isNeo4jUnavailable` marcado manualmente antes do F-8).
+      if (error.isServiceUnavailable) {
+        setNeo4jUnavailable({
+          message: error.message || "Neo4j indisponível no momento.",
+        });
       }
 
       setExecutionDetails((prev) =>
@@ -530,30 +517,13 @@ const CQLExecutor = ({
     try {
       abortControllerRef.current = new AbortController();
 
-      const response = await fetch(`${API_URL}/api/cql/execute-batch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          queries: currentChunk,
-          user_id: userId,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 503) {
-          const err = new Error(
-            errorData.message || "Neo4j indisponível no momento.",
-          );
-          err.isNeo4jUnavailable = true;
-          throw err;
-        }
-        throw new Error(errorData.detail || `HTTP ${response.status}`);
-      }
+      const result = await httpPost(
+        "/api/cql/execute-batch",
+        { queries: currentChunk, user_id: userId },
+        { signal: abortControllerRef.current.signal },
+      );
 
       setNeo4jUnavailable(null);
-      const result = await response.json();
 
       // setExecutionDetails((prev) =>
       //   prev.map((detail, idx) =>
@@ -644,8 +614,10 @@ const CQLExecutor = ({
         error.message,
       );
 
-      if (error.isNeo4jUnavailable) {
-        setNeo4jUnavailable({ message: error.message });
+      if (error.isServiceUnavailable) {
+        setNeo4jUnavailable({
+          message: error.message || "Neo4j indisponível no momento.",
+        });
       }
 
       // setExecutionDetails((prev) =>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { API_URL } from "../../../config";
+import { httpGet } from "../../../services/http";
 import { acessoBase } from "./newickParser";
 
 /**
@@ -23,8 +23,7 @@ export function useLocalMetadataIndex(projectName) {
       return undefined;
     }
     let cancelado = false;
-    fetch(`${API_URL}/api/tree/${projectName}/search-nodes`)
-      .then((r) => (r.ok ? r.json() : []))
+    httpGet(`/api/tree/${projectName}/search-nodes`)
       .then((linhas) => {
         if (cancelado) return;
         const mapa = new Map();
