@@ -209,6 +209,8 @@ async def get_ncbi_info(request_data: NCBIInfoRequest):
         if "error" in info:
             raise HTTPException(status_code=404, detail=info["error"])
         return info
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Erro ao buscar informações NCBI (id='%s')", request_data.identifier)
         raise HTTPException(status_code=500, detail="Erro ao buscar informações no NCBI.")

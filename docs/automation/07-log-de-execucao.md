@@ -3370,6 +3370,30 @@ curl /, /api/system/health, /projects, /api/aligners,
 
 **Write-lock:** Arq-B principal (`Backend/src/app.py`, `Backend/src/config.py`, `Backend/src/schemas.py`, `Backend/src/seguranca.py`, `Backend/src/logging_conf.py`, `Backend/src/routers/*`, `Backend/src/services/*`, `requirements.txt`, os golden novos, os testes de API que o agente adaptou); revisão de segurança (`test_contrato_erros.py`, `test_path_safety.py`, `test_cors.py`, `test_vazamento_de_erro.py`, `system_router.py`); doc (este documento). **Reversível:** sim — nada commitado ainda nesta entrada.
 
+### DEC-089 · 2026-09-13 · C-2: `ncbi_router.py::get_ncbi_info` para de engolir `HTTPException(404)`
+
+**Gatilho:** pedido explícito do usuário — "corrija o bug reportado pelo revisor", o achado de DEC-088 que tinha sido deliberadamente deixado na fila de triagem (fora do escopo da refatoração pura de Arq-B).
+
+**A correção.** `get_ncbi_info` (`Backend/src/routers/ncbi_router.py:207`) levanta `HTTPException(404)` quando `fetch_ncbi_info_sync` devolve `{'error': ...}`, mas o `except Exception:` logo abaixo capturava essa mesma exceção (toda `HTTPException` também é uma `Exception`) e a substituía por 500 — exatamente o padrão que os outros três handlers do mesmo arquivo (`/download`, `/download-accessions`, `/search-species`) já evitavam com `except HTTPException: raise` antes do `except Exception:` genérico. Uma linha, mesmo padrão já em uso três vezes no mesmo arquivo.
+
+**Teste de regressão:** `test_ncbi_info_sequencia_nao_encontrada_devolve_404_e_nao_500` (novo, em `test_contrato_erros.py`) — `monkeypatch` em `fetch_ncbi_info_sync` (via `importlib.import_module`, porque `routers/__init__.py` reexporta o nome `ncbi_router` como o objeto `APIRouter`, não o módulo) forçando o caminho de "não encontrado"; confirma 404, não 500.
+
+`test_contrato_erros.py::test_nenhum_try_engole_httpexception` deixa de ter a exceção `esperados = {"get_ncbi_info (linha 207)"}` para `ncbi_router.py` — volta a ser `assert ofensores == []` para todo arquivo varrido, sem exceção.
+
+**Evidência de execução:**
+```
+pytest Backend/tests/api/test_contrato_erros.py -q   → 31 passed (era 30 antes do teste novo)
+pytest Backend/tests -q                                → só test_projects_listing (drift pré-existente)
+docker compose build backend && up -d                     → healthy
+curl -X POST .../api/ncbi/info -d '{"identifier":"NC_000000_..._xyz"}'
+  → {"detail":"Sequência não encontrada no NCBI"}, STATUS:404
+  (chamada real ao NCBI/Entrez, não mockada — confirma o comportamento de ponta a ponta)
+```
+
+**Δ em métrica publicada:** nenhum — é rota de busca de metadado sob demanda, não cálculo científico.
+
+**Write-lock:** `Backend/src/routers/ncbi_router.py`, `Backend/tests/api/test_contrato_erros.py`, `docs/automation/07-log-de-execucao.md` (este documento). **Reversível:** sim.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
@@ -3530,4 +3554,4 @@ Achados que agentes encontraram e **não** corrigiram, conforme a regra de escop
 | 2026-09-01 | `Backend/tests/data/reference/expected.json` (`target_M`) ainda declara `"aligners": ["mafft"]` e justifica a exclusão de Clustal Omega/MUSCLE pela medição de OOM que [DEC-050](#dec-050--2026-08-27--d1-fecha-m2-chega-a-7-de-7--e-o-fator-alinhador-passa-a-existir) **retratou** (Clustal é limite de tempo; MUSCLE 5.3 recusa por interface, não OOM). Com o alvo desatualizado, uma reexecução de VARV-49 com os dois braços do MAFFT nunca faz `reference_check.py --trees` devolver M completo — o braço `mafft_iterative` não entra em `alvo_nomes` | `Backend/tests/data/reference/expected.json` (`target_M`) | pesquisa para o guia de reexecução | **Bloqueia o fechamento de M2** — é zona sagrada (muda o invariante de gate); atualizar via `make reference-dataset` **depois** de corrigir `target_M` e registrar parecer próprio, não junto de outro lote |
 | 2026-09-03 | Um arquivo `PROVENIENCIA.md` (ou qualquer `.md` de proveniência) dentro do diretório de um dataset é lido pela etapa de input do workflow como mais um arquivo de sequência — a leitura varre o diretório sem filtrar por extensão/conteúdo. Contornado nesta sessão movendo o arquivo para fora do diretório do dataset (usuário, manual); não caracterizado a fundo | leitura de input do `BioComp_UFF/workflow` (etapa não localizada nesta sessão) | DEC-078 | **Triagem pendente** — mesma classe de risco de [D19](../science/02-defeitos-que-alteram-resultado.md#d19) (arquivo inesperado no diretório de dados contamina/quebra o pipeline silenciosamente); considerar filtro por extensão/whitelist como item de M7 |
 | 2026-09-03 | M3.1, terceira perna ("ao grafo"): propagação de `confidence`/`metrica`/`metodo` de suporte de ramo ao Neo4j nunca foi implementada — só Nexus/`metadata.json`/API/UI (M3.1 Backend, M3.3) existem | `Backend/src/suporte_de_ramo.py` (rota existe, não escreve no grafo) | DEC-070, achado retomado em DEC-085 | **Candidato a M5/Grafo** — mesmo esquema de propriedade de clado que a migração versionada de M5 vai tocar; não bloqueia o gate de M3 (`make main-result` não o exercita) |
-| 2026-09-13 | `get_ncbi_info` engole `HTTPException(404)` num `except Exception` genérico, devolvendo 500 onde deveria devolver 404 — pré-existente, idêntico byte a byte ao que já estava em `app.py` antes de Arq-B; só ficou visível porque a varredura de C-2 (`test_contrato_erros.py`) foi reapontada de `app.py` (156 linhas, 0 rotas depois de Arq-B) para `routers/*.py`+`services/*.py` e passou a alcançar o arquivo pela primeira vez | `Backend/src/routers/ncbi_router.py:207` | Revisor de Arq-B (DEC-088) | **Achado real, não corrigido** — é bug de contrato HTTP (C-2), fora do escopo de uma refatoração estrutural pura; corrigir é lote curto e independente |
+| 2026-09-13 | `get_ncbi_info` engole `HTTPException(404)` num `except Exception` genérico, devolvendo 500 onde deveria devolver 404 — pré-existente, idêntico byte a byte ao que já estava em `app.py` antes de Arq-B; só ficou visível porque a varredura de C-2 (`test_contrato_erros.py`) foi reapontada de `app.py` (156 linhas, 0 rotas depois de Arq-B) para `routers/*.py`+`services/*.py` e passou a alcançar o arquivo pela primeira vez | `Backend/src/routers/ncbi_router.py:207` | Revisor de Arq-B (DEC-088) | ✅ **corrigido** ([DEC-089](#dec-089--2026-09-13--c-2-ncbi_routerpyget_ncbi_info-para-de-engolir-httpexception404)) |

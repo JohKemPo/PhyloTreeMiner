@@ -49,14 +49,7 @@ def test_nenhum_try_engole_httpexception(caminho):
             dono = max((f for f in funcs if f[0] <= node.lineno),
                        key=lambda f: f[0], default=(0, "?"))
             ofensores.append(f"{dono[1]} (linha {node.lineno})")
-    # ncbi_router.py:get_ncbi_info engole HTTPException(404) num
-    # `except Exception` — pré-existente (idêntico em app.py antes de
-    # Arq-B), fora do alcance da varredura antiga porque a rota nem
-    # existia em app.py na forma vigiada. Achado real, registrado na fila
-    # de triagem do ledger (DEC-088); não corrigido aqui porque este lote
-    # é refatoração pura, não conserto de bug.
-    esperados = {"get_ncbi_info (linha 207)"} if caminho.name == "ncbi_router.py" else set()
-    assert set(ofensores) == esperados, (
+    assert ofensores == [], (
         "try/except Exception sem `except HTTPException: raise` em "
         f"{caminho.name}:\n  " + "\n  ".join(ofensores)
     )
@@ -78,3 +71,27 @@ async def test_projeto_inexistente_devolve_404_e_nao_500(client, rota):
 async def test_erro_nao_vaza_caminho_do_servidor(client):
     r = await client.get("/api/tree/projeto-que-nao-existe/insights")
     assert "/home/" not in r.text and "Traceback" not in r.text
+
+
+async def test_ncbi_info_sequencia_nao_encontrada_devolve_404_e_nao_500(client, monkeypatch):
+    """Regressão: `get_ncbi_info` (routers/ncbi_router.py) engolia o
+    HTTPException(404) num `except Exception` genérico — achado do Revisor
+    de Arq-B (DEC-088), corrigido a pedido do usuário. `fetch_ncbi_info_sync`
+    devolve `{'error': ...}` quando o NCBI não acha a sequência; sem a
+    correção, isso virava 500 em vez de 404."""
+    # `from src.routers import ncbi_router` traria o objeto `APIRouter`
+    # (routers/__init__.py reexporta `router` sob esse nome), não o módulo —
+    # `importlib.import_module` busca direto em `sys.modules` (mesmo padrão
+    # de test_limites_entrada.py/test_previa_de_json.py).
+    import importlib
+    ncbi_router = importlib.import_module("src.routers.ncbi_router")
+
+    monkeypatch.setattr(
+        ncbi_router,
+        "fetch_ncbi_info_sync",
+        lambda identifier: {"error": "Sequência não encontrada no NCBI"},
+    )
+    r = await client.post("/api/ncbi/info", json={"identifier": "NC_000000_inexistente"})
+    assert r.status_code == 404, (
+        f"devolveu {r.status_code}; sequência ausente é 404, não erro de servidor"
+    )
