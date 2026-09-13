@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional
 from ..services.neo4j_services import neo4j_service, Neo4jUnavailableError
 from ..logging_conf import obter_logger
 from ..seguranca import exigir_admin
+from ..graph_queries.catalogo import obter_catalogo
 
 router = APIRouter()
 logger = obter_logger(__name__)
@@ -98,39 +99,11 @@ async def get_graph_data(cypher_query: CypherQuery, user_id: str = Depends(get_u
     
 @router.get("/predefined-queries")
 async def get_predefined_queries():
-    """Retorna uma lista de consultas pré-definidas para o frontend."""
-    queries = {
-        'all_trees': {
-            'name': 'All Trees',
-            'description': 'List all nodes with the label Tree.',
-            'type': 'graph',
-            'query': 'MATCH (n:Tree) RETURN n LIMIT 25'
-        },
-        'all_subtrees': {
-            'name': 'All Subtrees',
-            'description': 'List all nodes with the label Subtree.',
-            'type': 'graph',
-            'query': 'MATCH (n:Subtree) RETURN n LIMIT 25'
-        },
-        'full_graph_pattern': {
-            'name': 'Complete Pattern (Graph)',
-            'description': 'Shows the pattern Tree -> Subtree -> Metadata -> Feature -> Qualifier.',
-            'type': 'graph',
-            # Ajustada para mostrar a profundidade do novo modelo até os Qualifiers
-            'query': 'MATCH path = (t:Tree)-[:HAS_SUBTREE]->(s:Subtree)-[:HAS_METADATA]->(m:Metadata)-[:HAS_FEATURE]->(f:Feature)-[:HAS_QUALIFIER]->(q:Qualifier) RETURN path LIMIT 5'
-        },
-        'frequence_geograph': {
-            'name': 'Frequency by location',
-            'description': 'Table with frequencies by location based on Qualifier nodes.',
-            'type': 'query',
-            # Ajustada para navegar pelos nós Feature e Qualifier em vez de ler JSON
-            'query': '''
-                MATCH (m:Metadata)-[:HAS_FEATURE]->(f:Feature)-[:HAS_QUALIFIER]->(q:Qualifier)
-                WHERE q.key = "geo_loc_name"
-                UNWIND q.value AS location
-                RETURN location, count(*) AS freq
-                ORDER BY freq DESC
-            '''
-        }
-    }
-    return {"success": True, "queries": queries}
+    """Retorna uma lista de consultas pré-definidas para o frontend.
+
+    Fonte única do catálogo: `graph_queries/catalogo.py` (M5/Grafo) — lá cada
+    consulta carrega também parâmetros, plano de execução esperado e teto de
+    resultado, para quem for auditar ou reperfilar. Este endpoint devolve só
+    o subconjunto que o frontend já consumia, sem mudar o contrato.
+    """
+    return {"success": True, "queries": obter_catalogo()}

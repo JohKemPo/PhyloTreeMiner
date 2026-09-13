@@ -109,11 +109,145 @@ O nome está tomado pela coisa errada. Quando [D10](../science/02-defeitos-que-a
 
 ## 7. Fila de trabalho de T5, em ordem
 
-1. **Constraints de unicidade** — pré-requisito de tudo o mais; sem elas o `MERGE` não tem em que se apoiar.
-2. **Índices de propriedade justificados por `PROFILE`** — medir antes e depois, não adivinhar.
-3. **Ingest transacional por lote com `MERGE`** — é o que estanca a duplicação.
-4. **Separação de credenciais** + `$user_id` parametrizado (M4).
-5. **Decidir o destino do label `Support`** antes de M3.1.
-6. **Esquema versionado** com migrações idempotentes e o inverso de cada uma (M5).
+1. **Constraints de unicidade** — pré-requisito de tudo o mais; sem elas o `MERGE` não tem em que se apoiar. **Correção de 2026-09-13, ver §8:** a formulação original deste item ("constraint de unicidade em `Tree.uid`, `Subtree.uid`") estava errada — introspecção contra dados reais mostrou que `uid` nessas duas labels é chave de **partição** (todos os nós de um usuário carregam o mesmo valor), não identidade de entidade. Uma constraint de unicidade ali é inviável por construção. Fica como item futuro achar/criar a chave de identidade real (`Tree.name` já serve; `Subtree.name` não — G1/G2).
+2. **Índices de propriedade justificados por `PROFILE`** — medir antes e depois, não adivinhar. **Feito parcialmente em 2026-09-13**, ver §8 (migração `0001` e `0002`).
+3. **Ingest transacional por lote com `MERGE`** — é o que estanca a duplicação. Ainda aberto.
+4. **Separação de credenciais** + `$user_id` parametrizado (M4). Ainda aberto (M4.13/M4.14, ver ledger DEC-061).
+5. **Decidir o destino do label `Support`** antes de M3.1. Ainda aberto.
+6. **Esquema versionado** com migrações idempotentes e o inverso de cada uma (M5). **Feito em 2026-09-13**, ver §8.
 
 > Nenhum destes itens bloqueia M1, M2 ou M3. O grafo é a trilha paralela mais folgada do projeto.
+
+---
+
+## 8. Esquema versionado (M5/Grafo, 2026-09-13)
+
+Mecanismo leve, sem framework: `Backend/src/graph_migrations/NNNN_slug.up.cql` +
+`NNNN_slug.down.cql`, cada um idempotente (`IF NOT EXISTS` / `IF EXISTS`).
+O que já foi aplicado é rastreado **no próprio banco**, como nó
+`(:SchemaMigration {id, applied_at})` — não em arquivo local, porque o
+esquema pertence ao banco e precisa sobreviver a reconectar em outra máquina.
+
+Runner: `Backend/scripts/graph_migrate.py {status|up|down}`.
+
+```bash
+python scripts/graph_migrate.py status
+python scripts/graph_migrate.py up
+python scripts/graph_migrate.py down --target 0002_indice_qualifier_key
+```
+
+### 8.1 Migração 0001 — índices de partição por `uid`
+
+Introspecção real (não a suposição de §7 item 1) mostrou:
+
+```
+Tree.uid    -> 1 valor distinto para 10 nós   (chave de partição do usuário)
+Subtree.uid -> 1 valor distinto para 9524 nós (idem)
+Tree.uid nulo: 0 · Subtree.uid nulo: 0
+```
+
+Ou seja: `uid` em `Tree`/`Subtree` não é identidade de entidade, é a chave
+estrangeira do dono copiada em cada nó — a recomendação anterior deste
+documento (§3, "constraint de unicidade em Tree.uid, Subtree.uid") estava
+errada e foi escrita sem checar os valores reais. Correção: **índice
+não-único** nas duas labels — o que P-3 realmente pede ("índices em `uid`") —
+e uma constraint de unicidade só onde há identidade de entidade de verdade:
+`User.uid` (um usuário = um uid; hoje 1 nó, zero risco de violação).
+
+```cypher
+CREATE CONSTRAINT user_uid_unico IF NOT EXISTS FOR (u:User) REQUIRE u.uid IS UNIQUE;
+CREATE INDEX tree_uid_idx IF NOT EXISTS FOR (t:Tree) ON (t.uid);
+CREATE INDEX subtree_uid_idx IF NOT EXISTS FOR (s:Subtree) ON (s.uid);
+```
+
+`PROFILE MATCH (s:Subtree) WHERE s.uid = $uid RETURN count(s)`:
+
+| | operador inicial | `db hits` |
+|---|---|---:|
+| antes | `NodeByLabelScan` + `Filter` | 9 525 + 9 524 = 19 049 |
+| depois | `NodeIndexSeek` | 9 525 |
+
+`PROFILE MATCH (t:Tree) WHERE t.uid = $uid RETURN count(t)`: `NodeByLabelScan`+`Filter` (11+10=21 db hits) → `NodeIndexSeek` (11 db hits). No demo (1 usuário só) o ganho absoluto é modesto — a query some com o `Filter` porque o índice já resolve a igualdade — mas a mudança estrutural é o que importa: com múltiplos usuários, `NodeByLabelScan` cresceria com o total de árvores/subárvores de *todo mundo*; `NodeIndexSeek` cresce só com o do usuário filtrado.
+
+Compatibilidade com o ingest verificada (ver §8.3): `MERGE (u:User {uid: ...})` em `BioComp_UFF/workflow/utils/neo4jProcessing.py:47` continua funcionando sob a constraint nova porque é `MERGE`, não `CREATE`; `Tree`/`Subtree` usam `CREATE` mas os índices ali são não-únicos, então nunca rejeitam escrita.
+
+**Inverso testado:** `down --target 0001_indices_particao_uid` remove os 2 índices e a constraint; `up` de novo os recria. Confirmado nesta sessão (evidência em `docs/automation/07-log-de-execucao.md`, entrada desta tarefa).
+
+### 8.2 Migração 0002 — índice de propriedade em `Qualifier.key`
+
+`Qualifier` é a label mais populosa (2 684 376 nós). A consulta `frequence_geograph`
+do catálogo (§9) filtra `WHERE q.key = "geo_loc_name"`.
+
+```cypher
+CREATE INDEX qualifier_key_idx IF NOT EXISTS FOR (q:Qualifier) ON (q.key);
+```
+
+`PROFILE` da consulta completa (instância local, dados reais do demo):
+
+| | operador inicial | `db hits` no nó raiz | `db hits` na árvore inteira |
+|---|---|---:|---:|
+| antes | `NodeByLabelScan(:Qualifier)` | 2 684 377 | ≈ 7,8 M |
+| depois | `NodeIndexSeek(:Qualifier(key))` | 153 031 | ≈ 2,3 M |
+
+A consulta deixou de varrer os 2,68 M nós `Qualifier` inteiros antes de
+descartar os que não são `geo_loc_name`; o que sobra de custo (as duas
+etapas de `Expand(All)` para `Feature`→`Metadata`) é inerente ao padrão de
+travessia, não a este índice.
+
+**Inverso testado:** `down --target 0002_indice_qualifier_key` remove o índice;
+`PROFILE` volta a mostrar `NodeByLabelScan` com os mesmos 2 684 377 `db hits`
+de antes — confirmado nesta sessão. `up` de novo o recria.
+
+### 8.3 Prova de idempotência
+
+```
+$ python scripts/graph_migrate.py up      # 1ª vez
+aplicando 0001_indices_particao_uid (3 statement(s))...
+aplicando 0002_indice_qualifier_key (1 statement(s))...
+
+$ python scripts/graph_migrate.py up      # 2ª vez
+nada a aplicar — todas as migrações locais já estão registradas no banco
+```
+
+`SHOW CONSTRAINTS`/`SHOW INDEXES` antes e depois da 2ª execução: **2
+constraints, 7 índices** nos dois momentos — nenhuma duplicata. Testado
+ainda um caso mais forte: apagando os nós `(:SchemaMigration)` (simulando
+perda do rastreamento) e rodando `up` de novo, os `CREATE CONSTRAINT
+IF NOT EXISTS`/`CREATE INDEX IF NOT EXISTS` rodaram contra objetos já
+existentes sem erro e sem duplicar — a contagem continuou 2/7. A
+idempotência não depende só do rastreamento; o próprio CQL de cada migração
+já é seguro para rodar duas vezes.
+
+### 8.4 Não incluído nesta rodada
+
+- **Constraints de unicidade em `Metadata`/`Qualifier`/`Subtree`** — a
+  duplicação de conteúdo (§3) e a falta de identidade estável em `Subtree`
+  (metade dos nós chama-se `"metadata"`) tornam qualquer constraint ali
+  fadada a falhar contra o dado real hoje. Pré-requisito: consertar o ingest
+  para `MERGE` com chave de identidade (fila item 3, ainda aberta).
+- **Índice em `Qualifier.value`** — tipo misto (string/lista) e nenhuma
+  consulta hoje o filtra isoladamente; não há evidência para justificá-lo.
+- **Migrações de segurança** (M4.13-M4.20: `$user_id` parametrizado,
+  credenciais separadas, allowlist de procedures, `LIMIT` obrigatório) —
+  milestone diferente, deliberadamente fora do escopo deste lote.
+
+---
+
+## 9. Catálogo de consultas predefinidas
+
+Fonte: `Backend/src/graph_queries/catalogo.py`. Consumido por
+`GET /api/neo4j/predefined-queries` (`neo4j_router.py`), que devolve o
+subconjunto `name`/`description`/`type`/`query` para o seletor da página de
+exploração do grafo no frontend (`GraphVisualization.jsx`). O módulo também
+guarda, por consulta, `parametros`, `plano_esperado` (medido com `PROFILE`) e
+`teto_resultado` — não expostos na API, para quem for auditar ou reperfilar.
+
+| Chave | Tipo | Teto | Plano medido |
+|---|---|---:|---|
+| `all_trees` | grafo | 25 | `NodeByLabelScan(:Tree)` + `Limit` — 11 db hits |
+| `all_subtrees` | grafo | 25 | `NodeByLabelScan(:Subtree)` + `Limit` — 26 db hits (o `LIMIT` evita varrer os 9524) |
+| `full_graph_pattern` | grafo | 5 | `NodeByLabelScan(:Tree)` + 4× `Expand(All)`/`Filter` + `Limit` — 135 db hits |
+| `frequence_geograph` | tabela | — (agregação total, não listagem) | `NodeIndexSeek(:Qualifier(key))` depois da migração `0002` — ver §8.2 |
+
+Nenhuma das quatro é nova — todas já existiam, inline, no roteador; este
+lote só as centralizou e documentou o plano de execução real de cada uma.
