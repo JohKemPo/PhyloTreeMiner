@@ -93,11 +93,7 @@ describe("MethodologicalSupport (M3.3) — bootstrap e suporte metodológico lad
     // Clado 111: bootstrap 100, suporte metodológico 2/5 — a UI precisa
     // mostrar os dois números lado a lado, sem misturar escalas.
     expect(screen.getByText(/2\/5/)).toBeInTheDocument();
-<<<<<<< HEAD
-    expect(screen.getByText(/discordante/i)).toBeInTheDocument();
-=======
     expect(screen.getByText(/discordant/i)).toBeInTheDocument();
->>>>>>> 099c0ae286e0c61aa7a6fd1475fc073447864cb7
 
     // O braço sem bootstrap (nj_distance) não deve virar linha na tabela —
     // não há bootstrap nenhum para cruzar.
