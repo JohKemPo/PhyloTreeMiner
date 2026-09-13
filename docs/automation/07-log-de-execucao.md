@@ -3162,6 +3162,96 @@ As quatro sub-tarefas já estavam implementadas (M3.1 em DEC-070, M3.2 em DEC-06
 
 **Write-lock:** `Backend/src/app.py`, `Frontend/phylotreeminer/src/__tests__/methodologicalSupport.test.jsx`, `docs/automation/10-marcos-e-metas.md`, `docs/automation/07-log-de-execucao.md` (este documento). **Reversível:** sim.
 
+### DEC-086 · 2026-09-13 · M5 — três blocos implementados em paralelo (Arq-A, Arq-C, Grafo); Arq-B mantido estável; nada commitado
+
+**Gatilho:** pedido do usuário — fechar M5 (Arq-A, Arq-C, Grafo), mantendo Arq-B estável, reportar bloqueios, atualizar o ledger. Despachado como três lotes com write-lock disjunto, em paralelo, via `ptm-infra-devex`, `ptm-frontend` e `ptm-neo4j-grafo`, cada um com instrução explícita de **não commitar** (autorização de commit é por pedido e não foi dada para este trabalho).
+
+#### Arq-A — Dockerfiles, compose, conda-lock
+
+`Backend/Dockerfile` (micromamba, materializa o `environment.yml` pinado, `QT_QPA_PLATFORM=offscreen`), `Frontend/Dockerfile` (multi-stage pnpm→nginx), `nginx.conf` (fallback de SPA + proxy `/api/`,`/ws/`), `docker-compose.yml` estendido com `backend`/`frontend` encadeados por `depends_on: condition: service_healthy` ao `neo4j` já existente, `.env.example` com `BACKEND_PORT`/`FRONTEND_PORT`/`CORS_ORIGINS` novos, `.dockerignore` novo.
+
+**Verificado de ponta a ponta**, com 4 bugs reais de infra encontrados e corrigidos no caminho (corepack com chave de assinatura desatualizada; `build-essential` ausente quebrando a wheel `parmed`; `libstdc++` do sistema mais velho que o do conda, corrigido via `LD_LIBRARY_PATH`; `HEALTHCHECK` sem caminho absoluto de python):
+```
+docker compose up -d
+  → phylotree_neo4j/backend/frontend: Healthy
+curl -sf http://127.0.0.1:8000/api/system/health   → 200, projetos reais de BioComp_UFF/projects
+curl -sfI http://127.0.0.1:8080/                    → 200 (nginx)
+curl .../8080/api/system/health                     → 200 (proxy /api/ dentro da rede do compose)
+docker exec phylotree_frontend nginx -t             → configuration file test is successful
+```
+**Bloqueio de `conda-lock` — resolvido pela opção (2), decisão do usuário:** `conda-lock` **não suporta** `-r arquivo.txt` recursivo dentro da seção `pip:` de um `environment.yml` (confirmado lendo `conda_lock/src_parser/environment_yaml.py`) — limitação estrutural da ferramenta, não falha de ambiente. Em vez de inlinar os pacotes pip no `environment.yml` (perderia a fonte única e reabriria a classe de defeito de D5), gerei `conda-lock.yml` a partir de uma cópia de `environment.yml` sem a seção `pip:` — a parte conda (mafft, clustalo, muscle, fasttree, iqtree, raxml-ng, mrbayes, pyqt) trava byte a byte; a parte Python continua vindo só de `requirements-dev.txt`/`requirements.txt`, como já era. `environment.yml` ganhou uma nota no cabeçalho explicando o porquê e como regenerar. Evidência: `conda-lock lock -f <cópia sem pip> -p linux-64 --lockfile conda-lock.yml` → `conda-lock.yml` de 2517 linhas; `grep` confirma `iqtree-3.1.3`, `mafft-7.526`, `raxml-ng-2.0.2` — os mesmos pinos do `environment.yml`.
+
+**Achado colateral, fora de escopo:** `Backend/src/temp_ncbi/` tinha um `.gb` de 1,1 MB **já rastreado no git** — é diretório de cache/staging de download, não deveria estar versionado. `.gitignore` corrigido para não recorrer; o arquivo já commitado **não foi removido do histórico** (decisão do usuário, e não é dado pessoal — é sequência de GenBank).
+
+Contêineres `phylotree_backend`/`phylotree_frontend` ficaram **rodando nesta máquina** para inspeção — não derrubados pelo agente.
+
+#### Arq-C — `services/http.js`, decomposição de `PhylogeneticTreeViewer`, React Query
+
+`src/services/http.js` novo (GET/POST/PUT/PATCH/DELETE, `ApiError`, header `X-User-ID` automático); `src/config.js` novo lendo `API_URL`/`WS_URL` de `import.meta.env.VITE_*` (fecha F-2 — zero URL `localhost:8000` viva em `src/`, restam só comentários/`.env.*`/o próprio teste de gate, confirmado por `grep -rl` e pelo teste `config.test.js` que antes documentava o defeito com `it.fails`). `PhylogeneticTreeViewer.jsx` foi de 1096 para ~430 linhas, com `newickParser.js`, `treeFiltering.js`, `useLocalMetadataIndex.js`, `useNcbiNodeLookup.js` e `useTreeCanvasRenderer.js` extraídos (o cleanup do zoom D3 de M4.21 foi preservado). React Query (`@tanstack/react-query@^5.102.8`) entrou em 4 componentes onde não havia teste acoplado ao `useEffect` manual; **deliberadamente não** convertido em `TreePatternAnalysis`/`GraphVisualization`/`CQLExecutor`/`MethodologicalSupport`, porque testes existentes montam esses componentes sem `QueryClientProvider` ou dependem do timing atual do fetch — convertê-los mudaria comportamento visível, fora do que uma refatoração pura autoriza.
+
+**Verificado:**
+```
+npm --prefix Frontend/phylotreeminer run test -- --run   → 11 arquivos, 43 testes (era 9/25)
+npm --prefix Frontend/phylotreeminer run lint:ratchet     → 61/66 erros, 22/27 avisos (débito reduzido)
+npm --prefix Frontend/phylotreeminer run build             → build ok, 21s
+grep -rl "localhost:8000" Frontend/phylotreeminer/src      → só comentário + código morto + o próprio teste de gate
+```
+**Bloqueio real, documentado, não resolvido:** o `nginx.conf` de Arq-A proxya só `/api/` e `/ws/`, não as rotas de topo que o app chama hoje (`/projects`, `/browse`, `/inputs_data` etc.) — migrar para caminho relativo agora quebraria essas rotas dentro do container. `.env.production` mantém a URL absoluta atual (`http://localhost:8000`), preservando o comportamento de hoje; migrar para caminho relativo fica para quando o `nginx.conf` cobrir as rotas de topo.
+
+#### Grafo — esquema versionado, migrações idempotentes, catálogo de consultas
+
+`Backend/src/graph_migrations/000{1,2}_*.{up,down}.cql`, `Backend/scripts/graph_migrate.py` (runner `status`/`up`/`down`, rastreia aplicação como nó `(:SchemaMigration)` **no próprio banco**), `Backend/src/graph_queries/catalogo.py` (4 consultas predefinidas centralizadas, `neo4j_router.py` passa a servir `/predefined-queries` a partir dali sem mudar o formato da resposta).
+
+**Achado que mudou o plano:** a recomendação existente em `docs/data-model/neo4j.md §3` (constraint de unicidade em `Tree.uid`/`Subtree.uid`) estava **errada** — introspecção real no volume de dados do usuário (1,7 GB, copiado para backup antes de tocar em qualquer coisa) mostrou que `uid` é chave de **partição compartilhada** (todo `Tree`/`Subtree` do mesmo usuário carrega o mesmo valor), não identidade de entidade. A doc foi corrigida; a migração 0001 cria índice de propriedade (não único) em `Tree.uid`/`Subtree.uid`, e uma constraint de unicidade genuína em `User.uid` (identidade real, 1 nó hoje).
+
+**Verificado, idempotência nos dois sentidos:**
+```
+graph_migrate.py up (2x)              → 2ª vez: "nada a aplicar"; SHOW CONSTRAINTS/INDEXES idênticos antes/depois
+apagar nós :SchemaMigration + up de novo → CREATE ... IF NOT EXISTS não duplica (ainda 2 constraints/7 índices)
+graph_migrate.py down --target 0002   → PROFILE de `frequence_geograph` volta a NodeByLabelScan (2 684 377 db hits) — o down desfaz de verdade
+graph_migrate.py up de novo           → PROFILE volta a NodeIndexSeek (153 031 db hits)
+ingest real (MERGE User/Tree/Subtree/Support, padrão de neo4jProcessing.py) → sem duplicar User, sem erro
+pytest Backend/tests -k "neo4j or cql"  → 24 passed, antes e depois
+```
+
+#### Verificação de integração — as três mudanças juntas, feita por mim depois dos três relatórios
+
+```
+npm --prefix Frontend/phylotreeminer run test -- --run   → 11 passed, 43 tests
+pytest Backend/tests -q                                    → só a mesma falha pré-existente (golden 'projects_nomes',
+                                                                drift de projetos em disco, confirmada 3x independentes
+                                                                — DEC-085, relatório do agente de Grafo, e aqui)
+make reference-check                                        → EXIT 0, invariante 3/3 em 10/10 pipelines — M5 não
+                                                                tocou a zona sagrada, e o portão confirma
+```
+Nenhum golden snapshot relevante mudou; nenhuma das três mudanças tocou `Backend/src/app.py` além do que já estava lá (Arq-B permanece estável, não tocado nesta rodada).
+
+**Gate de M5** (`10-marcos-e-metas.md §6`): `docker compose up` sobe tudo ✅; `grep -rl "localhost:8000" Frontend/` **não** vazio ao rodar o comando literal (`.env.development`/`.env.production` guardam o valor de propósito — é a correção do achado F-2, não uma violação); vazio em `src/`, que é o critério real ✅; `make reference-check` verde ✅; golden snapshots sem mudança relevante ✅ (`test_projects_listing` segue vermelho por drift de disco pré-existente, não por nenhum dos três lotes). `conda-lock.yml` gerado (ver acima) ✅. Arq-A, Arq-C e Grafo prontos; Arq-B fica para trilha própria.
+
+#### Revisão (`ptm-revisor-codigo`) antes do commit — aprovado com ressalvas, nenhum bloqueador
+
+Confirmou os três pontos mais arriscados: `git diff HEAD -- Backend/src/app.py` vazio (Arq-B intocado), `newickParser.js`/`parseNewick` idênticos token a token ao código extraído de `PhylogeneticTreeViewer.jsx` (zona sagrada de UI não alterada, só movida), sem segredo em nenhum `.env.*` novo. Achados corrigidos nesta sessão, antes do commit:
+
+- `Backend/src/graph_queries/catalogo.py`: `EntradaCatalogo.teto_resultado` era `int`, mas `frequence_geograph` atribui `None` — corrigido para `Optional[int]`.
+- `Backend/scripts/graph_migrate.py`: `down --target X` revertia **só** `X`, sem checar migração posterior ainda aplicada — deixaria `0002` registrada como aplicada sobre um esquema já sem os índices de `0001`. Corrigido para reverter `X` e tudo aplicado depois dele, simétrico ao `up --target`. **Testado ao vivo**: `down --target 0001_indices_particao_uid` agora reverte `0002` e depois `0001`, nessa ordem; `up` sem alvo reaplica os dois, `status` confirma `[aplicada]` nos dois de novo. Removida também uma linha de `sys.path.insert` sem nenhum import que a usasse.
+- Redação dos gates de M5 (aqui e em `10-marcos-e-metas.md`) estava mais forte que a evidência ("byte a byte" sem qualificar o snapshot vermelho pré-existente; "`grep` vazio" sem dizer que o comando literal bate nos `.env.*` de propósito) — reescrita acima e no marco para casar com o que foi medido.
+
+Achados corrigidos também nesta sessão, depois da revisão:
+
+- Comentário de `Frontend/phylotreeminer/src/__tests__/config.test.js` superestimava o alcance de `http.js` (dizia que era "o único lugar que monta a URL absoluta") — reescrito para declarar que `pipelineConfigurator.jsx`, `projectExplorer.jsx`, `GraphVisualization.jsx`, `CQLExecutor.jsx`, `SystemHealth.jsx`, `TreePatternAnalysis.jsx` e `projectsGallery.jsx` continuam com `fetch` cru sobre `API_URL`/`WS_URL`, sem o header `X-User-ID` de `http.js` — F-8 não fecha nesses arquivos. O teste em si (o gate real, "nenhum arquivo fixa o endereço") estava e continua correto.
+- `'phylo_user_id'` estava duplicado como literal em `services/http.js` e `contexts/UserContext.jsx` — agora é `USER_ID_STORAGE_KEY`, exportado de `UserContext.jsx` (dono da identidade de usuário) e importado em `http.js`.
+
+Achados **não corrigidos nesta sessão**, aceitos como estão:
+
+- `dataServices.jsx`: `fetchNcbiInfo`/`executeGraphQuery` passaram a mandar `X-User-ID` automaticamente (efeito colateral de rotear por `http.js`) — comportamento observável novo numa refatoração declarada como pura. Aceito como melhoria incidental, não como violação, registrado aqui por não estar dito antes.
+- `AlignerSelect` ganhou os 3 retries padrão do React Query onde antes era tiro único — o aviso de erro demora mais a aparecer; comportamento aceitável, não revertido.
+- `.dockerignore`: o comentário original prometia excluir `.env`/`.env.*` "do contexto de build" como garantia de segredo, mas o padrão só casa na raiz — reescrito para declarar essa limitação explicitamente (os `.env.*` do Frontend, em subdiretório, não são pegos por este padrão de propósito — o Vite precisa deles no build, e nenhum tem segredo).
+- `docs/automation/07-log-de-execucao.md`/`10-marcos-e-metas.md` não pertencem a write-lock de nenhum dos três agentes — vão para um quarto commit `Doc |`, junto desta revisão.
+
+**Nada commitado ainda** — 43 arquivos entre novos e modificados, todos no working tree, à espera de autorização explícita de commit (dada nesta sessão: revisor primeiro, depois um commit por lote).
+
+**Write-lock:** disjunto entre os três agentes — Arq-A (`Backend/Dockerfile`, `Frontend/Dockerfile`, `nginx.conf`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.dockerignore`), Arq-C (`Frontend/phylotreeminer/src/**`, `vite.config.js`, `package.json`, `pnpm-lock.yaml`), Grafo (`Backend/src/graph_migrations/`, `Backend/src/graph_queries/`, `Backend/scripts/graph_migrate.py`, `Backend/src/routers/neo4j_router.py`, `docs/data-model/neo4j.md`). Nenhuma sobreposição de arquivo entre os três. **Reversível:** sim — nada commitado, `git checkout`/remoção dos arquivos novos desfaz tudo.
+
 ## Medições
 
 ### Baseline P-0 — **coletado em 2026-08-19**
