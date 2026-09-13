@@ -10,6 +10,14 @@
 # Os canais são conda-forge e bioconda, nessa ordem, e `defaults` fica de fora:
 # ele conflita com bioconda na resolução e exige licença para uso organizacional.
 #
+# `conda-lock.yml` (raiz) trava byte a byte só a parte conda deste arquivo —
+# a ferramenta `conda-lock` não segue `-r arquivo.txt` dentro de uma seção
+# `pip:` de `environment.yml` (limitação da ferramenta, não deste projeto).
+# A parte Python continua vindo só de `requirements-dev.txt`/`requirements.txt`,
+# de propósito (ver nota acima) — duplicá-la aqui reintroduziria D5. Para
+# regenerar: `conda-lock lock -f <este arquivo sem a seção pip> -p linux-64
+# --lockfile conda-lock.yml` (M5/Arq-A, DEC-086).
+#
 # **As versões são pinadas.** Sem pino, duas máquinas que rodam `make setup` em
 # datas diferentes recebem o que o canal tiver no dia — foi o que ocorreu entre a
 # máquina de desenvolvimento e a de validação (RAxML-NG 1.2.2 × 2.0.2, MUSCLE

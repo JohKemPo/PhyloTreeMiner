@@ -1,0 +1,38 @@
+# Contexto de build Docker. Mantém a imagem enxuta e evita que dado de
+# execução (potencialmente com dado pessoal, D-LGPD) ou segredo entre em
+# camada de imagem.
+
+.git/
+.gitmodules
+.github/
+
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+
+# Node — reinstalado dentro do container a partir do lockfile.
+**/node_modules/
+Frontend/phylotreeminer/dist/
+
+# Saída de execução, nunca insumo de build.
+BioComp_UFF/projects/
+Backend/src/temp_ncbi/
+projects/
+Utils/
+*.log
+neo4j_data/
+
+# Segredo na raiz do contexto (o `.env` deste diretório) — nunca no build.
+# Atenção: sem `**/`, o padrão só casa na raiz; `.env.development`/
+# `.env.production` do Frontend NÃO são pegos por aqui, e isso é proposital
+# (o Vite precisa deles no build) — nenhum dos dois tem segredo, só URL de
+# dev. Se um dia existir `.env` real com segredo fora da raiz, este padrão
+# não o protege: precisaria de `**/.env` com exceção explícita para os dois
+# do frontend.
+.env
+.env.*
+!.env.example
+
+# Documentação e automação não fazem parte de nenhuma imagem.
+docs/
+.claude/

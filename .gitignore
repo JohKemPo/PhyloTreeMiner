@@ -12,3 +12,9 @@ Utils/
 
 neo4j_data/*
 .env
+
+# Cache de download do NCBI (Backend/src/app.py, NCBI_WORK_DIR) — saída de
+# execução, não insumo. Havia um .gb de ~1.1MB já rastreado (Backend/src/temp_ncbi/
+# temp_unknown_species.gb); isto só impede recorrência — remover o já
+# rastreado exige `git rm --cached` explícito, fora deste lote.
+Backend/src/temp_ncbi/*

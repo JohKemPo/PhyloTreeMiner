@@ -31,3 +31,45 @@ services:
       - ./neo4j_data/data:/data
       - ./neo4j_data/logs:/logs
       - ./neo4j_data/plugins:/plugins
+
+  backend:
+    build:
+      context: .
+      dockerfile: Backend/Dockerfile
+    container_name: phylotree_backend
+    restart: unless-stopped
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    ports:
+      # Bind em loopback: o frontend hoje fala com o backend por
+      # http://localhost:8000 fixo no código (F-2/Arq-C, fora deste lote), o
+      # que exige a porta publicada no host — não é exposição pública nova.
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    environment:
+      # Endereço interno da rede do compose — não vem do .env, que documenta
+      # NEO4J_URI para quem roda o backend fora de container (bolt://localhost:7687).
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: ${NEO4J_USERNAME:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?defina NEO4J_PASSWORD no .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080}
+      NCBI_API_KEY: ${NCBI_API_KEY:-}
+      NCBI_EMAIL: ${NCBI_EMAIL:-}
+    volumes:
+      # Saída de execução: mesmo lugar que uma execução fora de container usa
+      # (BioComp_UFF/projects), para não duplicar dado grande e para que
+      # scripts/auditoria em BioComp_UFF/ enxerguem o resultado direto.
+      - ./BioComp_UFF/projects:/app/BioComp_UFF/projects
+      - ./Backend/src/temp_ncbi:/app/Backend/src/temp_ncbi
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Frontend/Dockerfile
+    container_name: phylotree_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8080}:80"
