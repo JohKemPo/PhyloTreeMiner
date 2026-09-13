@@ -27,6 +27,7 @@ import { STATUS_MAP, VALID_STATUSES } from "../../constants/executionStatus";
 import ProjectsCardsView from "./projectsCardsView";
 import ProjectsTableView from "./projectsTableView";
 import { useNavigate } from "react-router-dom";
+import { API_URL, WS_URL } from "../../config";
 
 const ProjectGallery = ({ onProjectSelect }) => {
   const [projects, setProjects] = useState([]);
@@ -46,15 +47,13 @@ const ProjectGallery = ({ onProjectSelect }) => {
 
   const socketsRef = useRef({});
 
-  const API_BASE_URL = "http://localhost:8000";
-  const WS_BASE_URL = "ws://localhost:8000";
 
   const fetchJobsData = useCallback(async (isBackgroundRefresh = false) => {
     if (!isBackgroundRefresh) setIsLoading(true);
     try {
       const [projectsRes, statusRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/projects`),
-        fetch(`${API_BASE_URL}/projects/status`),
+        fetch(`${API_URL}/projects`),
+        fetch(`${API_URL}/projects/status`),
       ]);
       if (!projectsRes.ok || !statusRes.ok)
         throw new Error("Failed to load job data.");
@@ -65,7 +64,7 @@ const ProjectGallery = ({ onProjectSelect }) => {
 
       if (projectsData.length > 0) {
         const projectNames = projectsData.map((p) => p.name);
-        const detailsRes = await fetch(`${API_BASE_URL}/projects/details`, {
+        const detailsRes = await fetch(`${API_URL}/projects/details`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(projectNames),
@@ -118,7 +117,7 @@ const ProjectGallery = ({ onProjectSelect }) => {
       }
 
       // console.log(`Conectando ao WebSocket para o projeto: ${projectName}`);
-      const socket = new WebSocket(`${WS_BASE_URL}/ws/progress/${projectName}`);
+      const socket = new WebSocket(`${WS_URL}/ws/progress/${projectName}`);
       socketsRef.current[projectName] = socket;
 
       socket.onmessage = (event) => {

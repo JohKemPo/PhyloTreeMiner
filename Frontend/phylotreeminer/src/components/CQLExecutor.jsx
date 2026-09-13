@@ -31,6 +31,7 @@ import {
 import { useNotification } from "../contexts/NotificationContext";
 import { useUser } from "../contexts/UserContext";
 import { useNavigate } from "react-router-dom";
+import { API_URL } from "../config";
 
 const { Title, Text } = Typography;
 const { Dragger } = Upload;
@@ -91,7 +92,6 @@ const CQLExecutor = ({
   const { addNotification, removeNotification, updateNotification } =
     useNotification();
 
-  const API_BASE_URL = "http://localhost:8000";
 
   // Substitui todo `setExecutionStats` direto: mantém executionStatsRef
   // sincronizado no mesmo instante, para leitura confiável fora de render
@@ -189,7 +189,7 @@ const CQLExecutor = ({
     );
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/cql/execute`, {
+      const response = await fetch(`${API_URL}/api/cql/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -530,7 +530,7 @@ const CQLExecutor = ({
     try {
       abortControllerRef.current = new AbortController();
 
-      const response = await fetch(`${API_BASE_URL}/api/cql/execute-batch`, {
+      const response = await fetch(`${API_URL}/api/cql/execute-batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

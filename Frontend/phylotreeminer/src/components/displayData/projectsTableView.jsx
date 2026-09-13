@@ -24,9 +24,10 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { formatarDuracao } from "../../constants/executionStatus";
+import { API_URL } from "../../config";
 
 const { Text } = Typography;
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = API_URL;
 
 const ProjectsTableView = ({
   projects,
@@ -66,7 +67,7 @@ const ProjectsTableView = ({
   const handleRerunProject = async (projectName) => {
     try {
       const checkResponse = await fetch(
-        `http://localhost:8000/projects/${projectName}/can-rerun`,
+        `${API_BASE_URL}/projects/${projectName}/can-rerun`,
       );
       const checkData = await checkResponse.json();
 
@@ -82,7 +83,7 @@ const ProjectsTableView = ({
 
     try {
       const response = await fetch(
-        `http://localhost:8000/projects/${projectName}/rerun`,
+        `${API_BASE_URL}/projects/${projectName}/rerun`,
         {
           method: "POST",
         },

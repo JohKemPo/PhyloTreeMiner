@@ -1,64 +1,20 @@
-export const API_BASE_URL = 'http://localhost:8000';
+import { API_URL, httpGet, httpPost } from './http';
 
-/**
- * Função genérica para tratar as requisições e erros.
- * @param {string} endpoint - O endpoint da API para fazer a requisição.
- * @returns {Promise<any>} - Retorna os dados em formato JSON.
- * @throws {Error} - Lança um erro se a requisição falhar.
- */
-async function fetchFromAPI(endpoint) {
-  try {
-    const response = await fetch(`${API_BASE_URL}/${endpoint}`);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error(`Error fetching from endpoint ${endpoint}:`, error);
-    throw error;
-  }
-}
+/** Mantido por compatibilidade — vários componentes importam `API_BASE_URL`
+ * daqui para montar URLs próprias (downloads, links). Fonte única: config.js. */
+export const API_BASE_URL = API_URL;
 
 /**
  * Busca a lista de projetos.
  */
-export const fetchProjects = () => {
-  return fetchFromAPI('projects');
-};
+export const fetchProjects = () => httpGet('projects');
 
 /**
  * Busca a lista de dados de entrada (input_data).
  */
-export const fetchInputData = () => {
-  return fetchFromAPI('inputs_data');
-};
+export const fetchInputData = () => httpGet('inputs_data');
 
-export const fetchNcbiInfo = async (identifier) => {
-  const response = await fetch(`${API_BASE_URL}/api/ncbi/info`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ identifier }),
-  });
-  if (!response.ok) {
-    throw new Error('Falha ao buscar dados do NCBI');
-  }
-  return response.json();
-};
+export const fetchNcbiInfo = (identifier) =>
+  httpPost('/api/ncbi/info', { identifier });
 
-export const executeGraphQuery = async (query) => {
-    const response = await fetch(`${API_BASE_URL}/api/neo4j/graph`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query }),
-    });
-    if (!response.ok) {
-        throw new Error('Falha ao executar consulta no grafo');
-    }
-    return response.json();
-}
+export const executeGraphQuery = (query) => httpPost('/api/neo4j/graph', { query });

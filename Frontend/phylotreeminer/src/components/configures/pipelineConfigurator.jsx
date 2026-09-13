@@ -36,6 +36,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import AlignerSelect from "./AlignerSelect";
+import { API_URL } from "../../config";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -74,11 +75,10 @@ const PipelineConfigurator = () => {
   const [ncbiForm] = Form.useForm();
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const API_BASE_URL = "http://localhost:8000";
 
   const fetchFoldersData = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/dataFolders`);
+      const response = await fetch(`${API_URL}/dataFolders`);
       if (!response.ok) throw new Error("Falha ao carregar dados.");
 
       const json = await response.json();
@@ -96,7 +96,7 @@ const PipelineConfigurator = () => {
 
   const fetchNcbiEmail = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ncbi/email`);
+      const response = await fetch(`${API_URL}/api/ncbi/email`);
       const data = await response.json();
       setNcbiEmail(data.email);
     } catch (error) {
@@ -115,7 +115,7 @@ const PipelineConfigurator = () => {
     });
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ncbi/search-species`, {
+      const response = await fetch(`${API_URL}/api/ncbi/search-species`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, retmax: 10 }),
@@ -187,7 +187,7 @@ const PipelineConfigurator = () => {
         }
       });
 
-      const response = await fetch(`${API_BASE_URL}/api/ncbi/download`, {
+      const response = await fetch(`${API_URL}/api/ncbi/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -357,7 +357,7 @@ const PipelineConfigurator = () => {
     // console.log(`Iniciando Workflow para o projeto '${projectName}' com os seguintes dados:`, JSON.stringify(finalPayload, null, 2));
     try {
       const response = await fetch(
-        `http://localhost:8000/projects/${projectName}/run`,
+        `${API_URL}/projects/${projectName}/run`,
         {
           method: "POST",
           headers: {
@@ -397,7 +397,7 @@ const PipelineConfigurator = () => {
     });
 
     try {
-      const response = await fetch(`${API_BASE_URL}/upload-data`, {
+      const response = await fetch(`${API_URL}/upload-data`, {
         method: "POST",
         body: formData,
       });
@@ -1077,7 +1077,7 @@ const PipelineConfigurator = () => {
                         onChange={(e) => setNcbiEmail(e.target.value)}
                         onBlur={async () => {
                           try {
-                            await fetch(`${API_BASE_URL}/api/ncbi/set-email`, {
+                            await fetch(`${API_URL}/api/ncbi/set-email`, {
                               method: "POST",
                               headers: {
                                 "Content-Type":

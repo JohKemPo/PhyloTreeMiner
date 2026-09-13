@@ -24,17 +24,17 @@ describe('configuração de endereço da API', () => {
     .filter((f) => /localhost:8000/.test(semComentarios(fs.readFileSync(f, 'utf8'))))
     .map((f) => path.relative(SRC, f))
 
-  // F-2 / Arq-C: 13 arquivos fixam http://localhost:8000. A aplicação não roda
-  // fora da máquina do autor. A correção é a trilha T4 do marco M5.
-  it.fails('nenhum arquivo fixa o endereço do backend', () => {
+  // F-2 / Arq-C, M5: corrigido — `src/config.js` lê `VITE_API_URL`/`VITE_WS_URL`
+  // do ambiente (`.env.development`/`.env.production`). Nenhum arquivo de
+  // `src/` fixa mais o literal `localhost:8000` — mas nem todo `fetch` passa
+  // por `services/http.js` ainda (alguns componentes seguem com `fetch` cru
+  // sobre `API_URL`/`WS_URL`, sem o header `X-User-ID` que `http.js` adiciona;
+  // ver DEC-086, F-8 continua aberto nesses arquivos).
+  it('nenhum arquivo fixa o endereço do backend', () => {
     expect(ofensores).toEqual([])
   })
 
-  it('o defeito está contido e não se espalhou', () => {
-    expect(ofensores.length).toBeLessThanOrEqual(13)
-  })
-
-  it.fails('o endereço do backend vem do ambiente', () => {
+  it('o endereço do backend vem do ambiente', () => {
     const usaEnv = arquivosFonte().some((f) =>
       /import\.meta\.env\.VITE_/.test(fs.readFileSync(f, 'utf8')),
     )

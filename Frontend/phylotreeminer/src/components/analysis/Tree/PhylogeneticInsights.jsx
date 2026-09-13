@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout, Spin, Alert, Table, Card, Button, Space, Tag } from "antd";
 import { ExportOutlined } from "@ant-design/icons";
 import GeographicDistribution from "./GeographicDistribution";
 import TemporalInsights from "./TemporalInsights";
 import OWIDAnalysisDashboard from "./OWIDAnalysisDashboard";
 import TableExporter from "../../../utils/TableExporter";
+import { httpGet } from "../../../services/http";
 
 const { Content } = Layout;
 
@@ -14,64 +16,26 @@ const PhylogeneticInsights = ({
   loading: parentLoading,
   error: parentError,
 }) => {
-  const [insightsData, setInsightsData] = useState(null);
-  const [isInsightsLoading, setIsInsightsLoading] = useState(false);
-  const [insightsError, setInsightsError] = useState(null);
-  const [sequences, setSequences] = useState([]);
-  const [isSequencesLoading, setIsSequencesLoading] = useState(false);
+  const {
+    data: insightsData,
+    isFetching: isInsightsLoading,
+    error: insightsErrorObj,
+  } = useQuery({
+    queryKey: ["tree-insights", projectName],
+    queryFn: () => httpGet(`/api/tree/${projectName}/insights`),
+    enabled: Boolean(projectName),
+  });
+  const insightsError = insightsErrorObj?.message || null;
 
-  useEffect(() => {
-    const fetchInsights = async () => {
-      if (!projectName) return;
-
-      setIsInsightsLoading(true);
-      setInsightsError(null);
-
-      try {
-        const response = await fetch(
-          `http://localhost:8000/api/tree/${projectName}/insights`,
-        );
-        if (!response.ok)
-          throw new Error("Falha ao buscar insights do projeto.");
-
-        const data = await response.json();
-        setInsightsData(data);
-      } catch (err) {
-        console.error("Erro ao carregar insights:", err);
-        setInsightsError(err.message);
-      } finally {
-        setIsInsightsLoading(false);
-      }
-    };
-
-    fetchInsights();
-  }, [projectName]);
-
-  useEffect(() => {
-    const fetchSequences = async () => {
-      if (!projectName) return;
-
-      setIsSequencesLoading(true);
-
-      try {
-        const idsResponse = await fetch(
-          `http://localhost:8000/api/tree/${projectName}/search-nodes`,
-        );
-        if (!idsResponse.ok)
-          throw new Error("Falha ao buscar IDs das sequências.");
-
-        const nodeIds = await idsResponse.json();
-
-        setSequences(nodeIds);
-      } catch (err) {
-        console.error("Erro na orquestração de sequências:", err);
-      } finally {
-        setIsSequencesLoading(false);
-      }
-    };
-
-    fetchSequences();
-  }, [projectName]);
+  const { data: sequencesData, isFetching: isSequencesLoading } = useQuery({
+    queryKey: ["tree-search-nodes", projectName],
+    queryFn: () => httpGet(`/api/tree/${projectName}/search-nodes`),
+    enabled: Boolean(projectName),
+  });
+  // `sequencesData || []` criaria um array novo a cada render enquanto a
+  // busca não resolve, invalidando a memoização de quem depende de
+  // `sequences` abaixo — por isso a referência estável vem de `useMemo`.
+  const sequences = useMemo(() => sequencesData || [], [sequencesData]);
 
   const metrics = insightsData?.metrics || {
     totalNodes: 0,

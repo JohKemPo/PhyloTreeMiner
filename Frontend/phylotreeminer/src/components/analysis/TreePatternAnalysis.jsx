@@ -26,6 +26,7 @@ import {
   ExportOutlined,
 } from "@ant-design/icons";
 import TableExporter from "../../utils/TableExporter";
+import { API_URL } from "../../config";
 
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
@@ -58,7 +59,7 @@ const TreePatternAnalysis = ({ projectName }) => {
       }
 
       const response = await fetch(
-        `http://localhost:8000/api/tree/pattern-analysis/${projectName}?rare_threshold=${rareThreshold}&robust_threshold=${robustThreshold}`,
+        `${API_URL}/api/tree/pattern-analysis/${projectName}?rare_threshold=${rareThreshold}&robust_threshold=${robustThreshold}`,
       );
       if (!response.ok) throw new Error("Failed to load analysis");
 

@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Alert, Select, Space, Tag, Tooltip, Typography } from "antd";
 import { InfoCircleOutlined, WarningOutlined } from "@ant-design/icons";
+import { httpGet } from "../../services/http";
 
 const { Text } = Typography;
 const { Option } = Select;
-
-const API_BASE_URL = "http://localhost:8000";
 
 /**
  * Escolha do alinhador múltiplo, com aviso de viabilidade.
@@ -23,35 +23,20 @@ const API_BASE_URL = "http://localhost:8000";
  * é o meio-termo que preserva as duas coisas.
  */
 const AlignerSelect = ({ value, onChange, datasetPath }) => {
-  const [alinhadores, setAlinhadores] = useState([]);
-  const [viabilidade, setViabilidade] = useState(null);
-  const [erro, setErro] = useState(null);
+  const { data: alinhadoresData, error: erroAlinhadores } = useQuery({
+    queryKey: ["aligners"],
+    queryFn: () => httpGet("/api/aligners"),
+    staleTime: 5 * 60 * 1000,
+  });
+  const alinhadores = alinhadoresData?.aligners || [];
+  const erro = erroAlinhadores?.message || null;
 
-  useEffect(() => {
-    let cancelado = false;
-    fetch(`${API_BASE_URL}/api/aligners`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => !cancelado && setAlinhadores(d.aligners || []))
-      .catch((e) => !cancelado && setErro(e.message));
-    return () => {
-      cancelado = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!datasetPath) {
-      setViabilidade(null);
-      return undefined;
-    }
-    let cancelado = false;
-    fetch(`${API_BASE_URL}/api/aligners/viability?path=${encodeURIComponent(datasetPath)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => !cancelado && setViabilidade(d))
-      .catch(() => !cancelado && setViabilidade(null));
-    return () => {
-      cancelado = true;
-    };
-  }, [datasetPath]);
+  const { data: viabilidade } = useQuery({
+    queryKey: ["aligners-viability", datasetPath],
+    queryFn: () =>
+      httpGet(`/api/aligners/viability?path=${encodeURIComponent(datasetPath)}`),
+    enabled: Boolean(datasetPath),
+  });
 
   const porChave = useMemo(() => {
     const mapa = {};

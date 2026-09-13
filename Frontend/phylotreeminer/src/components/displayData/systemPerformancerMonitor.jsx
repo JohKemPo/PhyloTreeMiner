@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Progress, Space, Typography, Tooltip } from 'antd';
 import { ApiOutlined } from '@ant-design/icons';
+import { wsUrl } from '../../services/http';
 const { Text } = Typography;
 
 const SystemPerformanceMonitor = () => {
@@ -13,7 +14,7 @@ const SystemPerformanceMonitor = () => {
             return;
         }
 
-        socket.current = new WebSocket('ws://localhost:8000/ws/system-performance');
+        socket.current = new WebSocket(wsUrl('/ws/system-performance'));
 
         socket.current.onopen = () => {
             setIsConnected(true);

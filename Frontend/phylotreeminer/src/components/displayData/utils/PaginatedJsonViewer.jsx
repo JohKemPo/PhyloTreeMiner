@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Card, Button, Spin, message, Alert } from "antd";
 import MetadataViewer from "./MetadataViewer";
 import JsonViewer from "./JsonViewer";
-
-const API_BASE_URL = "http://localhost:8000";
+import { httpGet } from "../../../services/http";
 
 /**
  * Abre um JSON do explorador de arquivos.
@@ -22,57 +22,43 @@ const API_BASE_URL = "http://localhost:8000";
  */
 const PaginatedJsonViewer = ({ filePath, fileName }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentData, setCurrentData] = useState(null);
-  const [totalItems, setTotalItems] = useState(1);
-  const [kind, setKind] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState(null);
 
   useEffect(() => {
     setCurrentIndex(0);
   }, [filePath]);
 
+  // O backend explica o motivo do erro no corpo (arquivo grande demais,
+  // índice fora dos limites, arquivo vazio) — `httpGet` já promove
+  // `detail`/`message` do corpo para `error.message` (ApiError).
+  const {
+    data: pagina,
+    isFetching: loading,
+    error,
+  } = useQuery({
+    queryKey: ["paginated-json", filePath, currentIndex],
+    queryFn: () =>
+      httpGet(
+        `/api/file/paginated?path=${encodeURIComponent(filePath)}&index=${currentIndex}`,
+      ),
+    enabled: Boolean(filePath),
+    retry: false,
+    // Mantém a página anterior visível (com o overlay de `Spin`) enquanto a
+    // próxima carrega — igual ao comportamento anterior, que só sobrescrevia
+    // `currentData` depois do fetch resolver.
+    placeholderData: keepPreviousData,
+  });
+
   useEffect(() => {
-    if (!filePath) return;
+    if (error) {
+      console.error("Erro ao buscar JSON:", error);
+      message.error(error.message);
+    }
+  }, [error]);
 
-    const fetchData = async () => {
-      setLoading(true);
-      setErro(null);
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}/api/file/paginated?path=${encodeURIComponent(filePath)}&index=${currentIndex}`,
-        );
-
-        if (!response.ok) {
-          // O backend explica o motivo — arquivo grande demais, índice fora dos
-          // limites, arquivo vazio. Repetir a mensagem dele é mais útil que
-          // inventar "falha ao carregar".
-          let detalhe = `HTTP ${response.status}`;
-          try {
-            const corpo = await response.json();
-            if (corpo?.detail) detalhe = corpo.detail;
-          } catch {
-            /* resposta sem corpo JSON */
-          }
-          throw new Error(detalhe);
-        }
-
-        const result = await response.json();
-        setCurrentData(result.content);
-        setTotalItems(result.totalItems ?? 1);
-        setKind(result.kind ?? null);
-      } catch (error) {
-        console.error("Erro ao buscar JSON:", error);
-        setErro(error.message);
-        setCurrentData(null);
-        message.error(error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [filePath, currentIndex]);
+  const currentData = pagina?.content ?? null;
+  const totalItems = pagina?.totalItems ?? 1;
+  const kind = pagina?.kind ?? null;
+  const erro = error?.message || null;
 
   if (loading && !currentData) {
     return (

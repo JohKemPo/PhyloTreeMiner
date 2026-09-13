@@ -27,6 +27,7 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
 } from "@ant-design/icons";
+import { API_URL } from "../../config";
 
 const { Title, Text } = Typography;
 
@@ -34,12 +35,11 @@ const SystemHealth = () => {
   const [healthData, setHealthData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const API_BASE_URL = "http://localhost:8000";
 
   const fetchHealthData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/system/health`);
+      const response = await fetch(`${API_URL}/api/system/health`);
       if (!response.ok) {
         throw new Error("Falha ao carregar dados de saúde do sistema");
       }

@@ -38,6 +38,7 @@ import PhylogeneticInsights from "../analysis/Tree/PhylogeneticInsights";
 import MethodologicalSupport from "../analysis/MethodologicalSupport";
 import MetadataViewer from "./utils/MetadataViewer";
 import PaginatedJsonViewer from "./utils/PaginatedJsonViewer";
+import { API_URL } from "../../config";
 
 const { Option } = Select;
 
@@ -70,7 +71,6 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
 
   const [showInfoAlert, setShowInfoAlert] = useState(true);
 
-  const API_BASE_URL = "http://localhost:8000";
   const directoryContentRef = useRef([]);
 
   useEffect(() => {
@@ -79,7 +79,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
 
       setIsLoading(true);
       try {
-        const response = await fetch(`${API_BASE_URL}/projects`);
+        const response = await fetch(`${API_URL}/projects`);
         if (!response.ok) throw new Error("Falha ao buscar projetos.");
         const data = await response.json();
         setProjects(data);
@@ -99,7 +99,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
     setError(null);
     try {
       const response = await fetch(
-        `${API_BASE_URL}/browse?path=${encodeURIComponent(path)}`,
+        `${API_URL}/browse?path=${encodeURIComponent(path)}`,
       );
       if (!response.ok) throw new Error("Failed to fetch content.");
 
@@ -131,7 +131,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
         }
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/owid/metadata/`, {
+      const response = await fetch(`${API_URL}/api/owid/metadata/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -251,7 +251,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/file?path=${encodeURIComponent(item.path)}`,
+        `${API_URL}/file?path=${encodeURIComponent(item.path)}`,
       );
       if (!response.ok) {
         // O backend manda o motivo real em `detail` (ex.: "arquivo grande
@@ -355,12 +355,12 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
     try {
       const [tree1Response, tree2Response] = await Promise.all([
         fetch(
-          `${API_BASE_URL}/file?path=${encodeURIComponent(
+          `${API_URL}/file?path=${encodeURIComponent(
             selectedItems[0].path,
           )}`,
         ),
         fetch(
-          `${API_BASE_URL}/file?path=${encodeURIComponent(
+          `${API_URL}/file?path=${encodeURIComponent(
             selectedItems[1].path,
           )}`,
         ),
@@ -385,7 +385,7 @@ const ProjectExplorer = ({ initialProjectName = null }) => {
 
       setModalContent(initialContent);
 
-      const compareResponse = await fetch(`${API_BASE_URL}/api/tree/compare`, {
+      const compareResponse = await fetch(`${API_URL}/api/tree/compare`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

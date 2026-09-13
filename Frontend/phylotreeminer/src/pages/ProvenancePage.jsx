@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, Empty, Select, Space, Typography } from "antd";
 import { useSearchParams } from "react-router-dom";
 
 import ProvenanceView from "../components/displayData/ProvenanceView";
-import { API_BASE_URL } from "../services/dataServices";
+import { fetchProjects } from "../services/dataServices";
 
 const { Title } = Typography;
 
@@ -16,15 +17,12 @@ const ProvenancePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const projetoNaUrl = searchParams.get("project");
 
-  const [projetos, setProjetos] = useState([]);
   const [selecionado, setSelecionado] = useState(projetoNaUrl || null);
 
-  useEffect(() => {
-    fetch(`${API_BASE_URL}/projects`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setProjetos)
-      .catch(() => setProjetos([]));
-  }, []);
+  const { data: projetos = [] } = useQuery({
+    queryKey: ["projects"],
+    queryFn: fetchProjects,
+  });
 
   useEffect(() => {
     if (projetoNaUrl) setSelecionado(projetoNaUrl);

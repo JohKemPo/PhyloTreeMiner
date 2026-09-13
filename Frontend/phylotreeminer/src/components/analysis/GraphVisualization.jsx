@@ -34,6 +34,7 @@ import JsonViewer from "./JsonViewer";
 import PhylogeneticQueriesDocumentation from "../../pages/docs/PhylogeneticQueriesDocumentation";
 import { useNotification } from "../../contexts/NotificationContext";
 import { useUser } from "../../contexts/UserContext";
+import { API_URL as BACKEND_URL } from "../../config";
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -138,7 +139,7 @@ const GraphVisualization = () => {
     },
   };
 
-  const API_URL = "http://localhost:8000/api/neo4j";
+  const API_URL = `${BACKEND_URL}/api/neo4j`;
 
   const checkConnectionStatus = async () => {
     try {
@@ -342,7 +343,7 @@ const GraphVisualization = () => {
   const handleConnectionUpdate = async (values) => {
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/neo4j/connect", {
+      const response = await fetch(`${BACKEND_URL}/api/neo4j/connect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
@@ -452,7 +453,7 @@ const GraphVisualization = () => {
 
     try {
       const endpoint = isGraphQuery ? "/api/neo4j/graph" : "/api/neo4j/query";
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
+      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-User-ID": userId },
         body: JSON.stringify({ query: finalQuery }),
